@@ -9,12 +9,6 @@ _Work In Progress_
 - [ ] Add tests for Suspense and useTransition with async stores or stores of promises
 - [ ] Add docs site with interactive examples
 
-## Installation
-
-```bash
-npm install react-use-store
-```
-
 ## Usage
 
 This package implements the same API as the experimental React concurrent stores feature, based on the [React Labs announcement](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores) and the [initial implementation](https://github.com/facebook/react/pull/33215). You can use this package as a ponyfill, without using an experimental version of React.
