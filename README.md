@@ -1,10 +1,13 @@
 # react-use-store
 
 Ponyfill of experimental React concurrent stores.
-_WIP: store without reducer_
-
 > [!WARNING]
 > **This package uses React internals** that could be removed in any future version at any time. Specifically, we use `getCacheForType` and `useCacheRefresh` from React's internal APIs. These internals have been available in both React 19.0 and React 19.1 releases, but there is no guarantee they will remain available in future versions.
+
+_Work In Progress_  
+- [ ] Update types and add support for stores without a reducer
+- [ ] Add tests for Suspense and useTransition with async stores or stores of promises
+- [ ] Add docs site with interactive examples
 
 ## Installation
 
