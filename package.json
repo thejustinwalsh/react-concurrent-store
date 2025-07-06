@@ -1,7 +1,7 @@
 {
   "name": "react-use-store",
   "version": "1.0.0",
-  "description": "",
+  "description": "Ponyfill of experimental React concurrent stores",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -30,7 +30,17 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage"
   },
-  "keywords": [],
+  "keywords": [
+    "react",
+    "hooks",
+    "store",
+    "concurrent",
+    "concurrent-store",
+    "ponyfill",
+    "useStore",
+    "react19",
+    "typescript"
+  ],
   "author": "Justin Walsh",
   "license": "MIT",
   "packageManager": "pnpm@8.15.4+sha1.c85a4305534f76d461407b59277b954bac97b5c4",
