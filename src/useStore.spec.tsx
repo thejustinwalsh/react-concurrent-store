@@ -584,7 +584,7 @@ describe("store integration with reducer", () => {
 });
 
 describe("store without reducer", () => {
-  // TODO: This test is not desired behavior, but currently the store does not support updates without a reducer.`
+  // TODO: This test is not desired behavior, but currently the store does not support updates without a reducer
   it.skip("should not change value when updated without reducer", async () => {
     const initialValue = { count: 0 };
     const store = createStore(initialValue);
