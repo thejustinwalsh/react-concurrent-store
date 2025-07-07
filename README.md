@@ -8,15 +8,15 @@ Ponyfill of experimental React concurrent stores.
 _Work In Progress_
 
 - [x] Update types and add support for stores without a reducer
-- [ ] Add tests for Suspense and useTransition with async stores or stores of promises (in-progress)
+- [ ] Add tests for ~Suspense and~ useTransition with async stores or stores of promises `(in-progress)` 
 - [ ] Add docs site with interactive examples
 - [ ] Investigate SSR and streaming of promises and store values
 
 ## Why
 
-Managing async resources with `useSyncExternalStore` breaks concurrency when [mutating the store during a non-blocking Transition](https://react.dev/reference/react/useSyncExternalStore#caveats). The React team has acknowledge and announced a new [concurrent store API](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores) to resolve this issue.
+Managing async resources with `useSyncExternalStore` breaks concurrency when [mutating the store during a non-blocking Transition](https://react.dev/reference/react/useSyncExternalStore#caveats). The React team has announced a new [concurrent store API](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores) to resolve this issue.
 
-This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API which uses existing react internals to implement a fully compatible API that allows for mutating during a non-blocking transition and does not de-opt to a synchronous update. In turn, this will not trigger the nearest suspense boundary in this case, and resolves the issue present in `useSyncExternalStore`.
+This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API as the `useStore` hook. The hook uses existing React internals to implement a fully compatible API that allows for mutating during a non-blocking transition and does not de-opt to a synchronous update, avoiding the issue present in `useSyncExternalStore`.
 
 **You can use this package today as a ponyfill without using an experimental version of React.**
 
@@ -35,7 +35,7 @@ const fetchUser = async (id) => {
 const userStore = createStore(fetchUser(1));
 
 function UserProfile() {
-  // useStore resolves and caches the value from any calls to update between renders including transitions.
+  // useStore resolves and caches the value from calls to update between renders/transitions.
   // This behavior makes it trivial to work with promises and integrate with suspense.
   const userPromise = useStore(userStore);
   const user = use(userPromise);
@@ -99,7 +99,7 @@ The implementation ensures that:
 
 - State updates are concurrent-safe
 - Components re-render when store values change
-- Store values are properly cached and life-cycled by react making it trivial to manage async resources wth suspense.
+- Store values are properly cached and life-cycled by React making it trivial to manage async resources optimaly wth suspense.
 - The API matches the planned React concurrent stores feature
 - TypeScript types are properly inferred
 
