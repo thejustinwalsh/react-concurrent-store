@@ -152,7 +152,7 @@ describe("useStore", () => {
   });
 });
 
-describe("useStore(reducer)", () => {
+describe("useStore", () => {
   afterEach(() => cleanup());
 
   it("should update store value with reducer", async () => {
@@ -589,41 +589,58 @@ describe("useStore(reducer)", () => {
 
     expect(result1).toEqual({ count: 1 });
     expect(result2).toEqual({ count: 1 });
-  }, 5000);
-});
+  });
 
-describe("useStore(state)", () => {
-  afterEach(() => cleanup());
-
-  // TODO: This test is not desired behavior, but currently the store does not support updates without a reducer
-  it.skip("should not change value when updated without reducer", async () => {
+  it("should change value when updated without reducer", async () => {
     const initialValue = { count: 0 };
     const store = createStore(initialValue);
+
     let result: any;
 
     const TestComponent = () => {
       result = useStore(store);
-      return <div data-testid="no-reducer-counter">{result.count}</div>;
+      return <div>{result.count}</div>;
     };
 
-    const { getByTestId } = await act(async () => {
+    await act(async () => {
       return render(<TestComponent />);
     });
 
     expect(result).toEqual({ count: 0 });
-    expect(getByTestId("no-reducer-counter").textContent).toBe("0");
 
     await act(async () => {
-      store.update({ type: "INCREMENT" });
+      store.update({ count: 1 });
     });
 
-    // Wait a bit to ensure no re-render happens (value should remain unchanged)
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(result).toEqual({ count: 1 });
+  });
 
-    // Without reducer, value should remain unchanged
+  it("should change value when updated with setter", async () => {
+    const initialValue = { count: 0 };
+    const increment = (state: typeof initialValue) => {
+      return { count: state.count + 1 };
+    };
+    const store = createStore(initialValue, increment);
+
+    let result: any;
+
+    const TestComponent = () => {
+      result = useStore(store);
+      return <div data-testid="counter">{result.count}</div>;
+    };
+
+    await act(async () => {
+      return render(<TestComponent />);
+    });
+
     expect(result).toEqual({ count: 0 });
-    expect(getByTestId("no-reducer-counter").textContent).toBe("0");
-  }, 5000);
+
+    await act(async () => {
+      store.update();
+    });
+
+    expect(result).toEqual({ count: 1 });
+  });
 });
 
 describe("useStore(suspense)", () => {
@@ -635,7 +652,10 @@ describe("useStore(suspense)", () => {
 
     const increment = () =>
       new Promise<number>((res) => {
-        resolve = () => res(count ? count + 1 : 0);
+        resolve = () => {
+          count = count !== undefined ? count + 1 : 0;
+          res(count);
+        };
       });
 
     const store = createStore(increment());
@@ -674,14 +694,16 @@ describe("useStore(suspense)", () => {
     });
   });
 
-  // TODO: Add simple value update support (non-reducer store)
-  it.skip("should re-suspend on subsequent updates", async () => {
+  it("should re-suspend on subsequent updates", async () => {
     let count: number | undefined = undefined;
     let resolve = () => {};
 
     const increment = () =>
       new Promise<number>((res) => {
-        resolve = () => res(count ? count + 1 : 0);
+        resolve = () => {
+          count = count !== undefined ? count + 1 : 0;
+          res(count);
+        };
       });
 
     const store = createStore(increment());
@@ -732,5 +754,5 @@ describe("useStore(suspense)", () => {
     await waitFor(() => {
       expect(getByTestId("counter").textContent).toBe("1");
     });
-  }, 200);
+  });
 });
