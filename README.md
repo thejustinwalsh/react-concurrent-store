@@ -35,7 +35,8 @@ const fetchUser = async (id) => {
 const userStore = createStore(fetchUser(1));
 
 function UserProfile() {
-  // useStore resolves and caches the value from any calls to update between renders including transitions. This behavior makes it trivial to work with promises and integrate with suspense.
+  // useStore resolves and caches the value from any calls to update between renders including transitions.
+  // This behavior makes it trivial to work with promises and integrate with suspense.
   const userPromise = useStore(userStore);
   const user = use(userPromise);
 
@@ -87,6 +88,21 @@ function Counter() {
 }
 ```
 
+## How It Works
+
+This ponyfill uses React's internal cache system to provide concurrent-safe state management, particularly useful in managing async resources. It leverages:
+
+- `getCacheForType` - React's internal caching mechanism
+- `useCacheRefresh` - React's cache invalidation system
+
+The implementation ensures that:
+
+- State updates are concurrent-safe
+- Components re-render when store values change
+- Store values are properly cached and life-cycled by react making it trivial to manage async resources wth suspense.
+- The API matches the planned React concurrent stores feature
+- TypeScript types are properly inferred
+
 ## API Reference
 
 ### `createStore(initialValue, reducer?)`
@@ -119,21 +135,6 @@ Updates the store with the given action. If a reducer was provided to `createSto
 **Parameters:**
 
 - `action?: Action` - The action to dispatch, new value to set, or omitted for reducers without actions
-
-## How It Works
-
-This ponyfill uses React's internal cache system to provide concurrent-safe state management, particularly useful managing async resources. It leverages:
-
-- `getCacheForType` - React's internal caching mechanism
-- `useCacheRefresh` - React's cache invalidation system
-
-The implementation ensures that:
-
-- State updates are concurrent-safe
-- Components re-render when store values change
-- Store values are properly cached and life-cycled by react making it trivial to manage async resources wth suspense.
-- The API matches the planned React concurrent stores feature
-- TypeScript types are properly inferred
 
 ## Migration Path
 
