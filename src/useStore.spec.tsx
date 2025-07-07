@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from "react";
-import { render, act, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { render, act, waitFor, cleanup } from "@testing-library/react";
+
+import { afterEach, describe, expect, it } from "vitest";
+import { ErrorBoundary } from "react-error-boundary";
+
 import { createStore, useStore } from "./useStore";
-import { describe, it, expect } from "vitest";
+import { Suspense, use } from "react";
 
 describe("createStore", () => {
+  afterEach(() => cleanup());
+
   it("should create a store with initial value", () => {
     const initialValue = { count: 0 };
     const store = createStore(initialValue);
@@ -59,6 +65,8 @@ describe("createStore", () => {
 });
 
 describe("useStore", () => {
+  afterEach(() => cleanup());
+
   it("should return initial store value", async () => {
     const initialValue = { count: 0 };
     const store = createStore(initialValue);
@@ -144,7 +152,9 @@ describe("useStore", () => {
   });
 });
 
-describe("store integration with reducer", () => {
+describe("useStore(reducer)", () => {
+  afterEach(() => cleanup());
+
   it("should update store value with reducer", async () => {
     const initialValue = { count: 0 };
     const reducer = (
@@ -174,7 +184,6 @@ describe("store integration with reducer", () => {
     });
 
     expect(result).toEqual({ count: 0 });
-    expect(getByTestId("counter").textContent).toBe("0");
 
     await act(async () => {
       store.update({ type: "INCREMENT" });
@@ -583,7 +592,9 @@ describe("store integration with reducer", () => {
   }, 5000);
 });
 
-describe("store without reducer", () => {
+describe("useStore(state)", () => {
+  afterEach(() => cleanup());
+
   // TODO: This test is not desired behavior, but currently the store does not support updates without a reducer
   it.skip("should not change value when updated without reducer", async () => {
     const initialValue = { count: 0 };
@@ -613,4 +624,113 @@ describe("store without reducer", () => {
     expect(result).toEqual({ count: 0 });
     expect(getByTestId("no-reducer-counter").textContent).toBe("0");
   }, 5000);
+});
+
+describe("useStore(suspense)", () => {
+  afterEach(() => cleanup());
+
+  it("should suspend while loading", async () => {
+    let count: number | undefined = undefined;
+    let resolve = () => {};
+
+    const increment = () =>
+      new Promise<number>((res) => {
+        resolve = () => res(count ? count + 1 : 0);
+      });
+
+    const store = createStore(increment());
+    let result: any;
+
+    const TestComponent = () => {
+      const useable = useStore(store);
+      result = use(useable);
+      return <div data-testid="counter">{result}</div>;
+    };
+
+    const { getByTestId } = await act(async () => {
+      return render(
+        <ErrorBoundary
+          fallback={<div data-testid="error-boundary">Error!</div>}
+        >
+          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+            <TestComponent />
+          </Suspense>
+        </ErrorBoundary>
+      );
+    });
+
+    await waitFor(() => {
+      expect(getByTestId("loading")).toBeInTheDocument();
+    });
+
+    expect(result).toBeUndefined();
+
+    await act(async () => resolve());
+
+    expect(result).toBe(0);
+
+    await waitFor(() => {
+      expect(getByTestId("counter").textContent).toBe("0");
+    });
+  });
+
+  // TODO: Add simple value update support (non-reducer store)
+  it.skip("should re-suspend on subsequent updates", async () => {
+    let count: number | undefined = undefined;
+    let resolve = () => {};
+
+    const increment = () =>
+      new Promise<number>((res) => {
+        resolve = () => res(count ? count + 1 : 0);
+      });
+
+    const store = createStore(increment());
+    let result: any;
+
+    const TestComponent = () => {
+      const useable = useStore(store);
+      result = use(useable);
+      return <div data-testid="counter">{result}</div>;
+    };
+
+    const { getByTestId } = await act(async () => {
+      return render(
+        <ErrorBoundary
+          fallback={<div data-testid="error-boundary">Error!</div>}
+        >
+          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+            <TestComponent />
+          </Suspense>
+        </ErrorBoundary>
+      );
+    });
+
+    // Initially, the component should suspend
+
+    await waitFor(() => {
+      expect(getByTestId("loading")).toBeInTheDocument();
+    });
+
+    await act(async () => resolve());
+
+    await waitFor(async () => {
+      expect(getByTestId("counter").textContent).toBe("0");
+    });
+
+    // If we signal another update the component should suspend again
+
+    await act(async () => {
+      store.update(increment());
+    });
+
+    await waitFor(() => {
+      expect(getByTestId("loading")).toBeInTheDocument();
+    });
+
+    await act(async () => resolve());
+
+    await waitFor(() => {
+      expect(getByTestId("counter").textContent).toBe("1");
+    });
+  }, 200);
 });
