@@ -35,8 +35,8 @@ const fetchUser = async (id) => {
 const userStore = createStore(fetchUser(1));
 
 function UserProfile() {
-  // useStore resolves and caches the value from calls to update between renders/transitions.
-  // This behavior makes it trivial to work with promises and integrate with suspense.
+  // useStore resolves and caches the value from calls to update between renders/transitions
+  // This behavior makes it trivial to work with promises and integrate with suspense
   const userPromise = useStore(userStore);
   const user = use(userPromise);
 
