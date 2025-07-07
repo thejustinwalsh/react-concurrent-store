@@ -19,6 +19,10 @@ type Store<Value, Action> = ReactStore<Value, Action> & {
   _transition: Value;
 };
 
+const isStore = <Value, Action>(value: any): value is Store<Value, Action> => {
+  return value && "$$typeof" in value && value.$$typeof === REACT_STORE_TYPE;
+};
+
 const getCacheForType = <T>(resourceType: () => T) =>
   React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.A.getCacheForType(
     resourceType
@@ -54,24 +58,23 @@ export function createStore<Value, Action>(
 export function useStore<Value, Action>(
   store: ReactStore<Value, Action>
 ): Value {
-  const _store = store as Store<Value, Action>;
   // If the store is not a valid React store, throw an error
-  if (_store.$$typeof !== REACT_STORE_TYPE) {
+  if (!isStore<Value, Action>(store)) {
     throw new Error(
       "Invalid store type. Ensure you are using a valid React store."
     );
   }
 
   // Use this fiber's cache refresh function for the store
-  _store._refresh = useCacheRefresh();
+  store._refresh = useCacheRefresh();
 
   // If we updated the store, we need to hydrate it with the updated transition value
-  const cache = getCacheForType(_store._cache);
-  if (_store._transition !== _store._sync) {
-    _store._sync = _store._transition;
+  const cache = getCacheForType(store._cache);
+  if (store._transition !== store._sync) {
+    store._sync = store._transition;
   }
-  if (cache._current !== _store._sync) {
-    cache._current = _store._sync;
+  if (cache._current !== store._sync) {
+    cache._current = store._sync;
   }
 
   return cache._current;
