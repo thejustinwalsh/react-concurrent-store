@@ -41,7 +41,7 @@ export default defineConfig({
       lastUpdated: true,
     }),
   ],
-  site: "https://thejustinwalsh.com/react-concurrent-store",
-  base: "/react-concurrent-store",
+  site: "https://thejustinwalsh.com",
+  base: "react-concurrent-store",
   trailingSlash: "always",
 });
