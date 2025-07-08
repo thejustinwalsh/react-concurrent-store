@@ -19,11 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - shell: bash
-        run: echo "commit_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
+      - id: vars
+        run: |
+          short_sha=$(git rev-parse --short ${{ github.sha }})
+          echo "COMMIT_HASH=$short_sha" >> $GITHUB_ENV
       - uses: withastro/action@v3
         env:
-          PUBLIC_COMMIT_HASH: "${{ github.commit_hash }}"
+          PUBLIC_COMMIT_HASH: "${{ github.COMMIT_HASH }}"
         with:
           path: ./packages/docs
           node-version: 22
