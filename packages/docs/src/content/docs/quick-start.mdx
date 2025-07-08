@@ -1,0 +1,155 @@
+---
+title: Quick Start
+description: Get started with React Concurrent Store in minutes
+---
+
+import {
+  Aside,
+  Steps,
+  Code,
+  Tabs,
+  TabItem,
+} from "@astrojs/starlight/components";
+
+React Concurrent Store is a ponyfill that brings the experimental React concurrent store API to React 19+.
+It allows you to manage async resources with proper handling for non-blocking updates.
+
+## Installation
+
+<Steps>
+
+1. **Install the package**
+
+   <Tabs syncKey="package-manager">
+     <TabItem label="npm">
+       <Code code={`npm install react-concurrent-store`} lang="sh" />
+     </TabItem>
+     <TabItem label="yarn">
+       <Code code={`yarn add react-concurrent-store`} lang="sh" />
+     </TabItem>
+     <TabItem label="pnpm">
+       <Code code={`pnpm add react-concurrent-store`} lang="sh" />
+     </TabItem>
+     <TabItem label="bun">
+       <Code code={`bun add react-concurrent-store`} lang="sh" />
+     </TabItem>
+   </Tabs>
+
+2. **Import the hooks**
+
+   ```tsx
+   import { createStore, useStore } from "react-concurrent-store";
+   ```
+
+3. **Create your first store**
+
+   ```tsx
+   // Create a simple store with initial data
+   const counterStore = createStore(0);
+
+   // Or create a store with async data
+   const fetchUser = async (id: number) => {
+     const response = await fetch(`/api/users/${id}`);
+     return response.json();
+   };
+
+   const userStore = createStore(fetchUser(1));
+   ```
+
+4. **Use the store in your components**
+
+   ```tsx
+   import { Suspense, use } from "react";
+
+   function Counter() {
+     const count = useStore(counterStore);
+
+     return (
+       <div>
+         <p>Count: {count}</p>
+         <button onClick={() => counterStore.update(count + 1)}>
+           Increment
+         </button>
+       </div>
+     );
+   }
+
+   function UserProfile() {
+     const userPromise = useStore(userStore);
+     const user = use(userPromise); // Suspend until resolved
+
+     return (
+       <div>
+         <h1>{user.name}</h1>
+         <p>{user.email}</p>
+       </div>
+     );
+   }
+
+   function App() {
+     return (
+       <div>
+         <Counter />
+         <Suspense fallback={<div>Loading user...</div>}>
+           <UserProfile />
+         </Suspense>
+       </div>
+     );
+   }
+   ```
+
+</Steps>
+
+## Key Concepts
+
+### Stores
+
+Stores are containers that hold values or promises. They can be updated reactively and integrate seamlessly with React's concurrent features.
+
+### Transitions
+
+Use `useTransition` to update stores without blocking the UI:
+
+```tsx
+import { useTransition } from "react";
+
+function UserProfile() {
+  const userPromise = useStore(userStore);
+  const user = use(userPromise);
+  const [isPending, startTransition] = useTransition();
+
+  const loadNextUser = () => {
+    startTransition(() => {
+      userStore.update(fetchUser(user.id + 1));
+    });
+  };
+
+  return (
+    <div style={{ opacity: isPending ? 0.5 : 1 }}>
+      <h1>{user.name}</h1>
+      <button onClick={loadNextUser}>Next User</button>
+    </div>
+  );
+}
+```
+
+### Suspense Integration
+
+Stores containing promises automatically integrate with React Suspense by passing the store result to the `use` hook.
+When the store is updated as an Action within a [non-blocking Transition](https://react.dev/reference/react/useTransition), the store will properly update the state without de-opting to a synchronous update.
+
+### Can I use this in Production
+
+Yes, you can use this package in production.
+However, keep in mind that it relies on React internals that may change in future releases.
+It's recommended to keep an eye on the React release notes and test your application thoroughly when upgrading React versions.
+
+Once the concurrent store API stabilizes in React, this package will be deprecated in favor of the official API.
+
+<br />
+
+<Aside type="caution" title="Uses React Internals">
+  The `getCacheForType` and `useCacheRefresh` internal api methods have been
+  available since React 19.0 and are still present in React 19.1. There is no
+  guarantee they'll remain in future releases.
+</Aside>

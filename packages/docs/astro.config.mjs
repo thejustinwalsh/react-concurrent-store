@@ -18,23 +18,22 @@ export default defineConfig({
           label: "GitHub",
           href: "https://github.com/thejustinwalsh/react-concurrent-store",
         },
+        /*
         {
           icon: "npm",
           label: "npm",
           href: "https://www.npmjs.com/package/react-concurrent-store",
         },
+        */
       ],
       sidebar: [
         {
-          label: "Guides",
-          items: [
-            // Each item here is one entry in the navigation menu.
-            { label: "Example Guide", slug: "guides/example" },
-          ],
+          label: "Getting Started",
+          items: [{ label: "Quick Start", slug: "quick-start" }],
         },
         {
           label: "Reference",
-          autogenerate: { directory: "reference" },
+          items: [{ label: "API Reference", slug: "api" }],
         },
       ],
       plugins: [catppuccin()],
@@ -42,4 +41,7 @@ export default defineConfig({
       lastUpdated: true,
     }),
   ],
+  site: "https://thejustinwalsh.com/react-concurrent-store",
+  base: "/react-concurrent-store",
+  trailingSlash: "always",
 });

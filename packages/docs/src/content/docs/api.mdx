@@ -1,0 +1,300 @@
+---
+title: API Reference
+description: Complete API reference for React Concurrent Store
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+## createStore
+
+Creates a new concurrent store that can hold values or promises.
+
+### Signatures
+
+<Tabs>
+  <TabItem label="Simple Store">
+    ```tsx
+    function createStore<Value>(
+      initialValue: Value
+    ): ReactStore<Value, Value>
+    ```
+    
+    Creates a store where updates replace the current value directly.
+    
+    **Example:**
+    ```tsx
+    const counterStore = createStore(0);
+    counterStore.update(5); // Sets value to 5
+    ```
+  </TabItem>
+  
+  <TabItem label="With Reducer (No Action)">
+    ```tsx
+    function createStore<Value>(
+      initialValue: Value,
+      reducer: (currentValue: Value) => Value
+    ): ReactStore<Value, void>
+    ```
+    
+    Creates a store with a reducer function that doesn't accept actions.
+    
+    **Example:**
+    ```tsx
+    const incrementStore = createStore(0, (current) => current + 1);
+    incrementStore.update(); // Increments by 1
+    ```
+  </TabItem>
+  
+  <TabItem label="With Reducer and Actions">
+    ```tsx
+    function createStore<Value, Action>(
+      initialValue: Value,
+      reducer: (currentValue: Value, action: Action) => Value
+    ): ReactStore<Value, Action>
+    ```
+    
+    Creates a store with a reducer function that accepts actions.
+    
+    **Example:**
+    ```tsx
+    type CounterAction = { type: 'increment' } | { type: 'decrement' } | { type: 'set'; value: number };
+    
+    const counterStore = createStore(0, (current, action: CounterAction) => {
+      switch (action.type) {
+        case 'increment': return current + 1;
+        case 'decrement': return current - 1;
+        case 'set': return action.value;
+      }
+    });
+    
+    counterStore.update({ type: 'increment' });
+    counterStore.update({ type: 'set', value: 10 });
+    ```
+  </TabItem>
+</Tabs>
+
+### Parameters
+
+- **`initialValue`**: The initial value or promise for the store
+- **`reducer`** _(optional)_: A function that determines how the store value should be updated
+
+### Returns
+
+A `ReactStore` object with an `update` method for modifying the store's value.
+
+---
+
+## useStore
+
+A React hook that subscribes to a store and returns its current value.
+
+### Signature
+
+```tsx
+function useStore<Value>(store: ReactStore<Value, any>): Value;
+```
+
+### Parameters
+
+- **`store`**: A store created with `createStore`
+
+### Returns
+
+The current value of the store. If the store contains a promise, the component will suspend until the promise resolves.
+
+### Example
+
+```tsx
+function UserProfile() {
+  const userPromise = useStore(userStore);
+  const user = use(userPromise); // Will suspend if promise is pending
+
+  return <h1>{user.name}</h1>;
+}
+```
+
+---
+
+## ReactStore
+
+The store object returned by `createStore`.
+
+### Type Definition
+
+```tsx
+type ReactStore<Value, Action = Value> = {
+  update: (action: Action) => void;
+};
+```
+
+### Methods
+
+#### `update(action)`
+
+Updates the store's value. The behavior depends on how the store was created:
+
+- **Simple store**: Replaces the current value with the action
+- **Store with reducer**: Calls the reducer function with the current value and action
+
+**Parameters:**
+
+- **`action`**: The new value or action to apply to the store
+
+**Example:**
+
+```tsx
+// Simple store
+const simpleStore = createStore("hello");
+simpleStore.update("world"); // Value becomes "world"
+
+// Store with reducer
+const counterStore = createStore(
+  0,
+  (current, action: number) => current + action
+);
+counterStore.update(5); // Adds 5 to current value
+```
+
+---
+
+## Working with Promises
+
+Stores can hold promises, making them perfect for async data management:
+
+```tsx
+// Create a store with a promise
+const fetchUser = async (id: number) => {
+  const response = await fetch(`/api/users/${id}`);
+  return response.json();
+};
+
+const userStore = createStore(fetchUser(1));
+
+function UserProfile() {
+  const userPromise = useStore(userStore);
+  const user = use(userPromise); // Suspends until resolved
+
+  const loadUser = (id: number) => {
+    userStore.update(fetchUser(id)); // Update with new promise
+  };
+
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <button onClick={() => loadUser(user.id + 1)}>Next User</button>
+    </div>
+  );
+}
+
+// Wrap in Suspense to handle loading states
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UserProfile />
+    </Suspense>
+  );
+}
+```
+
+---
+
+## Integration with React Concurrent Features
+
+### Transitions
+
+Use `useTransition` to update stores without blocking the UI:
+
+```tsx
+import { useTransition } from "react";
+
+function UserProfile() {
+  const userPromise = useStore(userStore);
+  const user = use(userPromise);
+  const [isPending, startTransition] = useTransition();
+
+  const handleUpdate = () => {
+    startTransition(() => {
+      userStore.update(fetchUser(user.id + 1));
+    });
+  };
+
+  return (
+    <div style={{ opacity: isPending ? 0.5 : 1 }}>
+      <h1>{user.name}</h1>
+      <button onClick={handleUpdate}>Next User</button>
+    </div>
+  );
+}
+```
+
+### Error Boundaries
+
+Stores work seamlessly with Error Boundaries for error handling:
+
+```tsx
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <h1>Something went wrong.</h1>;
+    }
+    return this.props.children;
+  }
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div>Loading...</div>}>
+        <UserProfile />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+```
+
+---
+
+## TypeScript Support
+
+React Concurrent Store is written in TypeScript and provides full type safety:
+
+```tsx
+// Typed store
+type User = { id: number; name: string; email: string };
+const userStore = createStore<Promise<User>>(fetchUser(1));
+
+// Typed actions
+type Action =
+  | { type: "increment" }
+  | { type: "decrement" }
+  | { type: "set"; value: number };
+
+const counterStore = createStore(0, (state: number, action: Action): number => {
+  switch (action.type) {
+    case "increment":
+      return state + 1;
+    case "decrement":
+      return state - 1;
+    case "set":
+      return action.value;
+  }
+});
+```
+
+---
+
+## Requirements
+
+- **React**: ^19.0.0
+- **TypeScript**: ^4.5.0 (optional, but recommended)
+
+The package is designed specifically for React 19+ and takes advantage of the concurrent features introduced in this version.

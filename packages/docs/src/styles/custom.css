@@ -32,9 +32,9 @@
   );
   background-size: 400% 400%;
   animation: gradientShift 8s ease-in-out infinite;
-  mask: url("./src/assets/react.svg") no-repeat center center;
+  mask: url("/react.svg") no-repeat center center;
   mask-size: auto;
-  -webkit-mask: url("./src/assets/react.svg") no-repeat center center;
+  -webkit-mask: url("/react.svg") no-repeat center center;
   -webkit-mask-size: contain;
 }
 
