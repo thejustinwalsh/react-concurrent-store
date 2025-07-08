@@ -25,7 +25,7 @@ jobs:
           echo "COMMIT_HASH=$short_sha" >> $GITHUB_ENV
       - uses: withastro/action@v3
         env:
-          PUBLIC_COMMIT_HASH: "${{ github.COMMIT_HASH }}"
+          PUBLIC_COMMIT_HASH: "${{ env.COMMIT_HASH }}"
         with:
           path: ./packages/docs
           node-version: 22
@@ -38,9 +38,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Get Commit Hash
-        shell: bash
-        run: echo "COMMIT_HASH=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
