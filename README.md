@@ -108,7 +108,7 @@ The implementation ensures that:
 
 ## Docs
 
-Visit [https://justinwalsh.github.io/react-use-store](https://justinwalsh.github.io/react-use-store) for comprehensive documentation, API reference, and interactive examples.
+Visit [https://thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store) for comprehensive documentation, API reference, and interactive examples.
 
 ## API Reference
 
