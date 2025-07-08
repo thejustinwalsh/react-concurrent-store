@@ -8,8 +8,8 @@ Ponyfill of experimental React concurrent stores.
 _Work In Progress_
 
 - [x] Update types and add support for stores without a reducer
-- [ ] Add tests for ~Suspense and~ useTransition with async stores or stores of promises `(in-progress)`
-- [x] Add docs site with interactive examples
+- [x] Add tests for Suspense and useTransition with async stores or stores of promises
+- [ ] Add docs site with interactive examples `(in-progress)`
 - [ ] Investigate SSR and streaming of promises and store values
 
 ## Why
