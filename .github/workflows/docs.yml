@@ -19,7 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - shell: bash
+        run: echo "commit_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
       - uses: withastro/action@v3
+        env:
+          PUBLIC_COMMIT_HASH: "${{ github.commit_hash }}"
         with:
           path: ./packages/docs
           node-version: 22
@@ -32,6 +36,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Get Commit Hash
+        shell: bash
+        run: echo "COMMIT_HASH=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_ENV"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

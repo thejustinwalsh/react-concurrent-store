@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from "astro/config";
+import { defineConfig, envField } from "astro/config";
 import starlight from "@astrojs/starlight";
 import catppuccin from "@catppuccin/starlight";
 import react from "@astrojs/react";
@@ -44,4 +44,13 @@ export default defineConfig({
   site: "https://thejustinwalsh.com",
   base: "react-concurrent-store",
   trailingSlash: "always",
+  env: {
+    schema: {
+      PUBLIC_COMMIT_HASH: envField.string({
+        context: "client",
+        access: "public",
+        optional: true,
+      }),
+    },
+  },
 });
