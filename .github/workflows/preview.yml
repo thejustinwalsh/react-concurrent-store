@@ -15,5 +15,6 @@ jobs:
         with:
           version: 8
       - run: pnpm install
-      - run: pnpm --filter use-store build
+      - run: pnpm --filter use-concurrent-store build
       - run: npx pkg-pr-new publish --no-template
+        working-directory: ./packages/use-store
