@@ -1,15 +1,14 @@
-# react-use-store
+# react-concurrent-store
 
 Ponyfill of experimental React concurrent stores.
 
-> [!WARNING]
-> **This package uses React internals** that could be removed in any future version at any time. Specifically `getCacheForType` and `useCacheRefresh` from React's internal APIs. These internals have been available in both React 19.0 and React 19.1 releases, but there is no guarantee they will remain available in future versions.
+> [!WARNING] > **This package uses React internals** that could be removed in any future version at any time. Specifically `getCacheForType` and `useCacheRefresh` from React's internal APIs. These internals have been available in both React 19.0 and React 19.1 releases, but there is no guarantee they will remain available in future versions.
 
 _Work In Progress_
 
 - [x] Update types and add support for stores without a reducer
-- [ ] Add tests for ~Suspense and~ useTransition with async stores or stores of promises `(in-progress)` 
-- [ ] Add docs site with interactive examples
+- [ ] Add tests for ~Suspense and~ useTransition with async stores or stores of promises `(in-progress)`
+- [x] Add docs site with interactive examples
 - [ ] Investigate SSR and streaming of promises and store values
 
 ## Why
@@ -103,6 +102,10 @@ The implementation ensures that:
 - The API matches the planned React concurrent stores feature
 - TypeScript types are properly inferred
 
+## Docs
+
+Visit [https://justinwalsh.github.io/react-use-store](https://justinwalsh.github.io/react-use-store) for comprehensive documentation, API reference, and interactive examples.
+
 ## API Reference
 
 ### `createStore(initialValue, reducer?)`
@@ -125,8 +128,6 @@ Hook that subscribes to a store and returns its current value. For stores managi
 - `store: ReactStore<T, Action>` - The store to subscribe to
 
 **Returns:** `T` - The current value of the store (or Promise for async stores)
-
-### Store Methods
 
 #### `store.update(action?)`
 

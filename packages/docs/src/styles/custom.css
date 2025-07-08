@@ -1,0 +1,96 @@
+:root {
+  --sl-text-6xl: 3.5rem;
+}
+
+/* Animated Gradient Logo */
+.animated-gradient-logo {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 977 / 1096;
+  position: relative;
+  filter: drop-shadow(
+    0 0 10px color-mix(in srgb, var(--sl-color-red) 40%, transparent)
+  );
+  animation: pulse 10s ease-in-out infinite alternate;
+}
+
+.gradient-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    45deg,
+    var(--sl-color-red),
+    var(--sl-color-blue),
+    var(--sl-color-purple),
+    var(--sl-color-green),
+    var(--sl-color-orange),
+    var(--sl-color-red-high),
+    var(--sl-color-red)
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease-in-out infinite;
+  mask: url("./src/assets/react.svg") no-repeat center center;
+  mask-size: auto;
+  -webkit-mask: url("./src/assets/react.svg") no-repeat center center;
+  -webkit-mask-size: contain;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes pulse {
+  0% {
+    filter: drop-shadow(
+      0 0 20px color-mix(in srgb, var(--sl-color-red) 40%, transparent)
+    );
+  }
+  25% {
+    filter: drop-shadow(
+      0 0 30px color-mix(in srgb, var(--sl-color-blue) 50%, transparent)
+    );
+  }
+  50% {
+    filter: drop-shadow(
+      0 0 25px color-mix(in srgb, var(--sl-color-purple) 40%, transparent)
+    );
+  }
+  75% {
+    filter: drop-shadow(
+      0 0 35px color-mix(in srgb, var(--sl-color-green) 50%, transparent)
+    );
+  }
+  100% {
+    filter: drop-shadow(
+      0 0 25px color-mix(in srgb, var(--sl-color-orange) 40%, transparent)
+    );
+  }
+}
+
+/* Sandpack Demo Styling */
+.sandpack-container {
+  margin: 2rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-gray-5);
+}
+
+@media (max-width: 768px) {
+  .sandpack-container {
+    margin: 1rem -1rem;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}

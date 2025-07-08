@@ -11,6 +11,9 @@ jobs:
         with:
           node-version: "22.x"
           registry-url: "https://registry.npmjs.org"
-      - run: npm install
-      - run: npm run build
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - run: pnpm install
+      - run: pnpm --filter use-store build
       - run: npx pkg-pr-new publish --no-template

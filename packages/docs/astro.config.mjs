@@ -1,0 +1,45 @@
+// @ts-check
+import { defineConfig } from "astro/config";
+import starlight from "@astrojs/starlight";
+import catppuccin from "@catppuccin/starlight";
+import react from "@astrojs/react";
+
+// https://astro.build/config
+export default defineConfig({
+  integrations: [
+    react(),
+    starlight({
+      title: "react-concurrent-store",
+      description:
+        "A ponyfill of the experimental React concurrent stores feature.",
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/thejustinwalsh/react-concurrent-store",
+        },
+        {
+          icon: "npm",
+          label: "npm",
+          href: "https://www.npmjs.com/package/react-concurrent-store",
+        },
+      ],
+      sidebar: [
+        {
+          label: "Guides",
+          items: [
+            // Each item here is one entry in the navigation menu.
+            { label: "Example Guide", slug: "guides/example" },
+          ],
+        },
+        {
+          label: "Reference",
+          autogenerate: { directory: "reference" },
+        },
+      ],
+      plugins: [catppuccin()],
+      customCss: ["./src/styles/custom.css"],
+      lastUpdated: true,
+    }),
+  ],
+});

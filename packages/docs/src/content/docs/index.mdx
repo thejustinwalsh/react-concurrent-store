@@ -1,0 +1,61 @@
+---
+title: React Concurrent Store
+description: A ponyfill of the React concurrent store API
+template: splash
+hero:
+  tagline: A ponyfill of the React concurrent store API
+  image:
+    html: |
+      <div class="animated-gradient-logo">
+        <div class="gradient-background"></div>
+      </div>
+  actions:
+    - text: Let's Go
+      link: /guides/example/
+      icon: right-arrow
+    - text: Inspired by React Labs
+      link: https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores
+      icon: external
+      variant: minimal
+---
+
+```tsx
+import { createStore, useStore } from "react-use-store";
+import { Suspense, use, useCallback, useTransition } from "react";
+
+// Create a store that manages an async resource
+const fetchUser = async (id) => {
+  const response = await fetch(`/api/users/${id}`);
+  return response.json();
+};
+
+const userStore = createStore(fetchUser(1));
+
+function UserProfile() {
+  const userPromise = useStore(userStore);
+  const user = use(userPromise);
+
+  const [isPending, startTransition] = useTransition();
+  const handleLoadNextUser = useCallback(() => {
+    startTransition(() => {
+      userStore.update(fetchUser(user.id + 1));
+    });
+  }, [user.id]);
+
+  return (
+    <div style={{ opacity: isPending ? 0.5 : 1 }}>
+      <h1>{user.name}</h1>
+      <p>Email: {user.email}</p>
+      <button onClick={handleLoadNextUser}>Load Next User</button>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading user...</div>}>
+      <UserProfile />
+    </Suspense>
+  );
+}
+```
