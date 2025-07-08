@@ -16,7 +16,10 @@ _Work In Progress_
 
 Managing async resources with `useSyncExternalStore` breaks concurrency when [mutating the store during a non-blocking Transition](https://react.dev/reference/react/useSyncExternalStore#caveats). The React team has announced a new [concurrent store API](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores) to resolve this issue.
 
-This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API as the `useStore` hook. The hook uses existing React internals to implement a fully compatible API that allows for mutating during a non-blocking transition and does not de-opt to a synchronous update, avoiding the issue present in `useSyncExternalStore`.
+This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API as the `useStore` hook. The hook uses existing React internals to implement the API which allows for mutating during a non-blocking transition and does not de-opt to a synchronous update, avoiding the issue present in `useSyncExternalStore`.
+
+This ponyfill exists to generate feedback and to get a feel for the upcoming concurrent store API.
+This package will be deprecated once the concurrent store feature is released in the core React library.
 
 **You can use this package today as a ponyfill without using an experimental version of React.**
 
