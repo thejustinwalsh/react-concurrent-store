@@ -9,13 +9,13 @@ export type ReactStore<Value, Action = Value> = {
 
 type StoreCache<Value> = {
   _current: Value;
+  _sync?: Value;
 };
 
 type Store<Value, Action> = ReactStore<Value, Action> & {
   $$typeof: typeof REACT_STORE_TYPE;
   _cache: () => StoreCache<Value>;
   _refresh: () => void;
-  _sync: Value;
   _transition: Value;
 };
 
@@ -54,13 +54,12 @@ export function createStore<Value, Action>(
     _cache: () => ({
       _current: initialValue,
     }),
-    _sync: initialValue,
     _transition: initialValue,
     _refresh: () => {},
     update: (action: Action) => {
       store._refresh();
       store._transition = reducer
-        ? reducer(store._transition ?? store._sync, action)
+        ? reducer(store._transition, action)
         : (action as unknown as Value);
     },
   };
@@ -81,11 +80,8 @@ export function useStore<Value>(store: ReactStore<Value, any>): Value {
 
   // If we updated the store, we need to hydrate it with the updated transition value
   const cache = getCacheForType(store._cache);
-  if (store._transition !== store._sync) {
-    store._sync = store._transition;
-  }
-  if (cache._current !== store._sync) {
-    cache._current = store._sync;
+  if (cache._current !== cache._sync || "_sync" in cache === false) {
+    cache._current = cache._sync = store._transition;
   }
 
   return cache._current;

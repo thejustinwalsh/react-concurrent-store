@@ -1,11 +1,11 @@
 import "@testing-library/jest-dom/vitest";
-import { render, act, cleanup } from "@testing-library/react";
+import { render, act, cleanup, fireEvent } from "@testing-library/react";
 
 import { afterEach, describe, expect, it } from "vitest";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { createStore, useStore } from "./useStore";
-import { Suspense, use } from "react";
+import { Suspense, use, useCallback, useState, useTransition } from "react";
 
 describe("createStore", () => {
   afterEach(() => cleanup());
@@ -424,6 +424,28 @@ describe("useStore", () => {
 
     expect(result).toEqual({ count: 1 });
   });
+
+  it("should handle an initial value of undefined", async () => {
+    const store = createStore<number | undefined>(undefined);
+    let result: any;
+
+    const TestComponent = () => {
+      result = useStore(store);
+      return <div>{result ?? "undefined"}</div>;
+    };
+
+    await act(async () => {
+      return render(<TestComponent />);
+    });
+
+    expect(result).toBeUndefined();
+
+    await act(async () => {
+      store.update(42);
+    });
+
+    expect(result).toBe(42);
+  });
 });
 
 describe("useStore(suspense)", () => {
@@ -527,5 +549,195 @@ describe("useStore(suspense)", () => {
 
     expect(queryByTestId("loading")).toBeNull();
     expect(getByTestId("counter").textContent).toBe("1");
+  });
+
+  it("should skip suspense fallback when in a transition", async () => {
+    let count: number | undefined = undefined;
+    let resolve = () => {};
+
+    const increment = () =>
+      new Promise<number>((res) => {
+        resolve = () => {
+          count = count !== undefined ? count + 1 : 0;
+          res(count);
+        };
+      });
+
+    const store = createStore(increment());
+
+    const TestComponent = ({
+      useable,
+      isPending,
+    }: {
+      useable: ReturnType<typeof increment>;
+      isPending: boolean;
+    }) => {
+      const result = use(useable);
+      return (
+        <div data-testid="counter" data-pending={isPending}>
+          {result}
+        </div>
+      );
+    };
+
+    const TestFixture = () => {
+      const useable = useStore(store);
+      const [isPending, startTransition] = useTransition();
+      const updateStore = useCallback(() => {
+        startTransition(() => {
+          store.update(increment());
+        });
+      }, [startTransition]);
+
+      return (
+        <ErrorBoundary
+          fallback={<div data-testid="error-boundary">Error!</div>}
+        >
+          <button onClick={updateStore}>Increment</button>
+          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+            <TestComponent useable={useable} isPending={isPending} />
+          </Suspense>
+        </ErrorBoundary>
+      );
+    };
+
+    const { getByRole, getByTestId, queryByTestId } = await act(async () => {
+      return render(<TestFixture />);
+    });
+
+    // 1. Initially the component should suspend
+
+    expect(queryByTestId("error-boundary")).toBeNull();
+    expect(getByTestId("loading")).toBeInTheDocument();
+
+    await act(async () => resolve());
+
+    expect(queryByTestId("loading")).toBeNull();
+    expect(getByTestId("counter").textContent).toBe("0");
+
+    // 2. A second update within a transition should not suspend
+
+    const incrementButton = getByRole("button", { name: "Increment" });
+    await act(async () => {
+      fireEvent.click(incrementButton);
+    });
+
+    expect(queryByTestId("error-boundary")).toBeNull();
+    expect(queryByTestId("loading")).toBeNull();
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
+
+    await act(async () => resolve());
+
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("false");
+    expect(getByTestId("counter").textContent).toBe("1");
+  });
+
+  it("should handle transition interruption and resolve to the final state", async () => {
+    let resolve = () => {};
+
+    const asyncCounter = (count: number) =>
+      new Promise<number>((res) => {
+        resolve = () => {
+          res(count);
+        };
+      });
+
+    const store = createStore(asyncCounter(0));
+
+    const TestComponent = ({
+      useable,
+      isPending,
+    }: {
+      useable: ReturnType<typeof asyncCounter>;
+      isPending: boolean;
+    }) => {
+      const result = use(useable);
+      return (
+        <div data-testid="counter" data-pending={isPending}>
+          {result}
+        </div>
+      );
+    };
+
+    const TestFixture = () => {
+      const useable = useStore(store);
+      const [isPending, startTransition] = useTransition();
+      const [currentCount, setCurrentCount] = useState(0);
+      const updateStore = useCallback(
+        (count: number) => {
+          setCurrentCount(count);
+          startTransition(() => {
+            store.update(asyncCounter(count));
+          });
+        },
+        [startTransition]
+      );
+
+      return (
+        <ErrorBoundary
+          fallback={<div data-testid="error-boundary">Error!</div>}
+        >
+          <button onClick={() => updateStore(currentCount + 1)}>
+            Increment
+          </button>
+          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+            <TestComponent useable={useable} isPending={isPending} />
+          </Suspense>
+        </ErrorBoundary>
+      );
+    };
+
+    const { getByRole, getByTestId, queryByTestId } = await act(async () => {
+      return render(<TestFixture />);
+    });
+
+    // 1. Initially the component should suspend
+
+    expect(queryByTestId("error-boundary")).toBeNull();
+    expect(getByTestId("loading")).toBeInTheDocument();
+
+    await act(async () => resolve());
+
+    expect(queryByTestId("loading")).toBeNull();
+    expect(getByTestId("counter").textContent).toBe("0");
+
+    // 2. A second update within a transition should not suspend
+
+    const incrementButton = getByRole("button", { name: "Increment" });
+    await act(async () => {
+      fireEvent.click(incrementButton);
+    });
+
+    expect(queryByTestId("error-boundary")).toBeNull();
+    expect(queryByTestId("loading")).toBeNull();
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
+
+    await act(async () => resolve());
+
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("false");
+    expect(getByTestId("counter").textContent).toBe("1");
+
+    // 3. If we update multiple times before the transition resolves, we should see the final state
+
+    await act(async () => {
+      fireEvent.click(incrementButton);
+    });
+
+    expect(queryByTestId("error-boundary")).toBeNull();
+    expect(queryByTestId("loading")).toBeNull();
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
+
+    await act(async () => {
+      fireEvent.click(incrementButton);
+    });
+
+    expect(queryByTestId("error-boundary")).toBeNull();
+    expect(queryByTestId("loading")).toBeNull();
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
+
+    await act(async () => resolve());
+
+    expect(getByTestId("counter").getAttribute("data-pending")).toBe("false");
+    expect(getByTestId("counter").textContent).toBe("3");
   });
 });
