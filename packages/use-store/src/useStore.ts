@@ -7,20 +7,32 @@ export type ReactStore<Value, Action = Value> = {
   update: (action: Action) => void;
 };
 
-type StoreCache<Value> = {
-  _current: Value;
-  _sync?: Value;
+type StoreVersionInfo = {
+  _uuid: string;
+  _version: number;
 };
 
-type Store<Value, Action> = ReactStore<Value, Action> & {
-  $$typeof: typeof REACT_STORE_TYPE;
-  _cache: () => StoreCache<Value>;
-  _refresh: () => void;
+type StoreCache<Value> = StoreVersionInfo & {
+  _current: Value;
+  _sync?: Value;
   _transition: Value;
 };
 
+type Store<Value, Action> = ReactStore<Value, Action> &
+  StoreCache<Value> & {
+    $$typeof: typeof REACT_STORE_TYPE;
+    _cache: () => StoreCache<Value>;
+    _refresh: () => void;
+  };
+
 const isStore = <Value>(value: any): value is Store<Value, any> => {
   return value && "$$typeof" in value && value.$$typeof === REACT_STORE_TYPE;
+};
+
+const CACHE_VERSION = new Map<string, number>();
+const getNextVersion = (store: StoreVersionInfo): number => {
+  const current = CACHE_VERSION.get(store._uuid) ?? 0;
+  return CACHE_VERSION.set(store._uuid, current + 1).get(store._uuid)!;
 };
 
 const getCacheForType = <T>(resourceType: () => T) =>
@@ -51,9 +63,15 @@ export function createStore<Value, Action>(
 ): ReactStore<Value, Action> {
   const store: Store<Value, Action> = {
     $$typeof: REACT_STORE_TYPE,
+    _uuid: crypto.randomUUID(),
+    _version: 0,
     _cache: () => ({
-      _current: initialValue,
+      _uuid: store._uuid,
+      _version: getNextVersion(store),
+      _current: store._current,
+      _transition: store._transition,
     }),
+    _current: initialValue,
     _transition: initialValue,
     _refresh: () => {},
     update: (action: Action) => {
@@ -80,8 +98,14 @@ export function useStore<Value>(store: ReactStore<Value, any>): Value {
 
   // If we updated the store, we need to hydrate it with the updated transition value
   const cache = getCacheForType(store._cache);
-  if (cache._current !== cache._sync || "_sync" in cache === false) {
-    cache._current = cache._sync = store._transition;
+
+  // Hydrate the cache with the most recent transition value when needed
+  // If _sync is not present, we have triggered a refresh
+  if ("_sync" in cache === false) {
+    store._current = cache._current = store._transition;
+    store._version = cache._version;
+    cache._transition = store._transition;
+    cache._sync = store._transition;
   }
 
   return cache._current;
