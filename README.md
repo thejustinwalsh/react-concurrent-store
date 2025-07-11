@@ -91,6 +91,11 @@ function Counter() {
 }
 ```
 
+## Example
+
+https://codesandbox.io/p/sandbox/react-concurrent-store-demo-hyqhws
+
+
 ## How It Works
 
 This ponyfill uses React's internal cache system to provide concurrent-safe state management, particularly useful in managing async resources. It leverages:
