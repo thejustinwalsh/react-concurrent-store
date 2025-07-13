@@ -15,15 +15,6 @@ const isStore = <Value>(value: any): value is Store<Value, any> => {
   return value && "$$typeof" in value && value.$$typeof === REACT_STORE_TYPE;
 };
 
-const isPromiseLike = <Value>(value: any): value is PromiseLike<Value> => {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "then" in value &&
-    typeof value.then === "function"
-  );
-};
-
 export function createStore<Value>(
   initialValue: Value
 ): ReactStore<Value, Value>;
