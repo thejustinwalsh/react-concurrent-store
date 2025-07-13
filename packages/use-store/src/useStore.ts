@@ -1,7 +1,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { REACT_STORE_TYPE, ReactStore } from "./types";
 
-export type Store<Value, Action = Value> = ReactStore<Value, Action> & {
+type Store<Value, Action = Value> = ReactStore<Value, Action> & {
   $$typeof: typeof REACT_STORE_TYPE;
   _listeners: Set<() => void>;
   _current: Value;
