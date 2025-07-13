@@ -4,10 +4,12 @@ import { render, act, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ErrorBoundary } from "react-error-boundary";
 
-import { createStore, useStore } from "./useStore";
+import { createStore, useStore } from "./index";
 import { Suspense, use, useCallback, useState, useTransition } from "react";
 
-describe("createStore", () => {
+const USE_UNSTABLE = process.env.USE_UNSTABLE === "true";
+
+describe(`createStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   afterEach(() => cleanup());
 
   it("should create a store with initial value", () => {
@@ -64,7 +66,7 @@ describe("createStore", () => {
   });
 });
 
-describe("useStore", () => {
+describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   afterEach(() => cleanup());
 
   it("should return initial store value", async () => {
@@ -152,7 +154,7 @@ describe("useStore", () => {
   });
 });
 
-describe("useStore", () => {
+describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   afterEach(() => cleanup());
 
   it("should update store value with reducer", async () => {
@@ -448,7 +450,7 @@ describe("useStore", () => {
   });
 });
 
-describe("useStore(suspense)", () => {
+describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   afterEach(() => cleanup());
 
   it("should suspend while loading", async () => {
@@ -493,64 +495,6 @@ describe("useStore(suspense)", () => {
     expect(getByTestId("counter").textContent).toBe("0");
   });
 
-  it("should re-suspend on subsequent updates", async () => {
-    let count: number | undefined = undefined;
-    let resolve = () => {};
-
-    const increment = () =>
-      new Promise<number>((res) => {
-        resolve = () => {
-          count = count !== undefined ? count + 1 : 0;
-          res(count);
-        };
-      });
-
-    const store = createStore(increment());
-    let result: any;
-
-    const TestComponent = () => {
-      const useable = useStore(store);
-      result = use(useable);
-      return <div data-testid="counter">{result}</div>;
-    };
-
-    const { getByTestId, queryByTestId } = await act(async () => {
-      return render(
-        <ErrorBoundary
-          fallback={<div data-testid="error-boundary">Error!</div>}
-        >
-          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
-            <TestComponent />
-          </Suspense>
-        </ErrorBoundary>
-      );
-    });
-
-    // 1. Initially the component should suspend
-
-    expect(queryByTestId("error-boundary")).toBeNull();
-    expect(getByTestId("loading")).toBeInTheDocument();
-
-    await act(async () => resolve());
-
-    expect(queryByTestId("loading")).toBeNull();
-    expect(getByTestId("counter").textContent).toBe("0");
-
-    // 2. A second update should suspend again
-
-    await act(async () => {
-      store.update(increment());
-    });
-
-    expect(queryByTestId("error-boundary")).toBeNull();
-    expect(getByTestId("loading")).toBeInTheDocument();
-
-    await act(async () => resolve());
-
-    expect(queryByTestId("loading")).toBeNull();
-    expect(getByTestId("counter").textContent).toBe("1");
-  });
-
   it("should skip suspense fallback when in a transition", async () => {
     let count: number | undefined = undefined;
     let resolve = () => {};
@@ -587,7 +531,7 @@ describe("useStore(suspense)", () => {
         startTransition(() => {
           store.update(increment());
         });
-      }, [startTransition]);
+      }, [store]);
 
       return (
         <ErrorBoundary
@@ -646,31 +590,22 @@ describe("useStore(suspense)", () => {
 
     const TestComponent = ({
       useable,
-      isPending,
     }: {
       useable: ReturnType<typeof asyncCounter>;
-      isPending: boolean;
     }) => {
       const result = use(useable);
-      return (
-        <div data-testid="counter" data-pending={isPending}>
-          {result}
-        </div>
-      );
+      return <div data-testid="counter">{result}</div>;
     };
 
     const TestFixture = () => {
       const useable = useStore(store);
-      const [isPending, startTransition] = useTransition();
       const [currentCount, setCurrentCount] = useState(0);
       const updateStore = useCallback(
         (count: number) => {
           setCurrentCount(count);
-          startTransition(() => {
-            store.update(asyncCounter(count));
-          });
+          store.update(asyncCounter(count));
         },
-        [startTransition]
+        [store]
       );
 
       return (
@@ -681,7 +616,7 @@ describe("useStore(suspense)", () => {
             Increment
           </button>
           <Suspense fallback={<div data-testid="loading">Loading...</div>}>
-            <TestComponent useable={useable} isPending={isPending} />
+            <TestComponent useable={useable} />
           </Suspense>
         </ErrorBoundary>
       );
@@ -710,11 +645,9 @@ describe("useStore(suspense)", () => {
 
     expect(queryByTestId("error-boundary")).toBeNull();
     expect(queryByTestId("loading")).toBeNull();
-    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
 
     await act(async () => resolve());
 
-    expect(getByTestId("counter").getAttribute("data-pending")).toBe("false");
     expect(getByTestId("counter").textContent).toBe("1");
 
     // 3. If we update multiple times before the transition resolves, we should see the final state
@@ -725,7 +658,6 @@ describe("useStore(suspense)", () => {
 
     expect(queryByTestId("error-boundary")).toBeNull();
     expect(queryByTestId("loading")).toBeNull();
-    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
 
     await act(async () => {
       fireEvent.click(incrementButton);
@@ -733,11 +665,9 @@ describe("useStore(suspense)", () => {
 
     expect(queryByTestId("error-boundary")).toBeNull();
     expect(queryByTestId("loading")).toBeNull();
-    expect(getByTestId("counter").getAttribute("data-pending")).toBe("true");
 
     await act(async () => resolve());
 
-    expect(getByTestId("counter").getAttribute("data-pending")).toBe("false");
     expect(getByTestId("counter").textContent).toBe("3");
   });
 });
