@@ -7,7 +7,4 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  env: {
-    USE_UNSTABLE: process.env.USE_UNSTABLE || "false",
-  },
 });
