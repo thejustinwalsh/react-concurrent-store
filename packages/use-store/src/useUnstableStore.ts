@@ -19,6 +19,7 @@ type Store<Value, Action> = ReactStore<Value, Action> &
     _refresh: () => void;
   };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const isStore = <Value>(value: any): value is Store<Value, any> => {
   return value && "$$typeof" in value && value.$$typeof === REACT_STORE_TYPE;
 };
@@ -42,6 +43,7 @@ export function createUnstableStore<Value>(
   initialValue: Value
 ): ReactStore<Value, Value>;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function createUnstableStore<Value, Action>(
   initialValue: Value,
   reducer: (currentValue: Value) => Value
@@ -80,6 +82,7 @@ export function createUnstableStore<Value, Action>(
   return store;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useUnstableStore<Value>(store: ReactStore<Value, any>): Value {
   // If the store is not a valid React store, throw an error
   if (!isStore<Value>(store)) {
@@ -96,7 +99,7 @@ export function useUnstableStore<Value>(store: ReactStore<Value, any>): Value {
 
   const [_, startTransition] = useTransition();
   const _update = store.update;
-  store.update = (action: any) => {
+  store.update = (action: unknown) => {
     startTransition(() => {
       _update(action);
     });

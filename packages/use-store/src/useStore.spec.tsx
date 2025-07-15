@@ -1,10 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { render, act, cleanup, fireEvent } from "@testing-library/react";
-
 import { afterEach, describe, expect, it } from "vitest";
-import { ErrorBoundary } from "react-error-boundary";
 
-import { createStore, useStore } from "./index";
 import React, {
   Suspense,
   use,
@@ -12,16 +9,23 @@ import React, {
   useState,
   useTransition,
 } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+import type { UpdateInfo } from "@welldone-software/why-did-you-render";
+
+import { createStore, useStore } from "./index";
+
+declare global {
+  var WDYR: { notifications: UpdateInfo[] };
+}
+
+declare module "react" {
+  export const __IS_WDYR__: boolean;
+}
 
 const USE_UNSTABLE = process.env.USE_UNSTABLE === "true";
 
-declare global {
-  var WDYR: { notifications: any[] };
-}
-
 describe("wdyr", () => {
   it("react should be monkey patched by WDYR", () => {
-    // @ts-expect-error -- Property __IS_WDYR__ is added by WDYR
     expect(React.__IS_WDYR__).toBe(true);
   });
 });
@@ -89,7 +93,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   it("should return initial store value", async () => {
     const initialValue = { count: 0 };
     const store = createStore(initialValue);
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -106,7 +110,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   it("should return initial primitive value", async () => {
     const initialValue = 42;
     const store = createStore(initialValue);
-    let result: any;
+    let result: number | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -123,7 +127,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   it("should return initial string value", async () => {
     const initialValue = "hello world";
     const store = createStore(initialValue);
-    let result: any;
+    let result: string | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -140,7 +144,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   it("should return initial array value", async () => {
     const initialValue = [1, 2, 3];
     const store = createStore(initialValue);
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -158,7 +162,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     const invalidStore = {
       $$typeof: Symbol.for("invalid"),
       update: () => {},
-    } as any;
+    };
 
     const TestComponent = () => {
       useStore(invalidStore);
@@ -191,7 +195,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     };
 
     const store = createStore(initialValue, reducer);
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -246,7 +250,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     };
 
     const store = createStore(initialValue, reducer);
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -289,7 +293,10 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
       settings: { theme: "light", notifications: true },
     };
 
-    const reducer = (state: State, action: { type: string; payload: any }) => {
+    const reducer = (
+      state: State,
+      action: { type: string; payload: Partial<State[keyof State]> }
+    ) => {
       switch (action.type) {
         case "UPDATE_USER":
           return {
@@ -307,7 +314,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     };
 
     const store = createStore(initialValue, reducer);
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -354,8 +361,8 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     };
 
     const store = createStore(initialValue, reducer);
-    let result1: any;
-    let result2: any;
+    let result1: typeof initialValue | undefined;
+    let result2: typeof initialValue | undefined;
 
     const TestComponent1 = () => {
       result1 = useStore(store);
@@ -397,7 +404,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     const initialValue = { count: 0 };
     const store = createStore(initialValue);
 
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -424,7 +431,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     };
     const store = createStore(initialValue, increment);
 
-    let result: any;
+    let result: typeof initialValue | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -446,7 +453,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
 
   it("should handle an initial value of undefined", async () => {
     const store = createStore<number | undefined>(undefined);
-    let result: any;
+    let result: number | undefined;
 
     const TestComponent = () => {
       result = useStore(store);
@@ -483,7 +490,7 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
       });
 
     const store = createStore(increment());
-    let result: any;
+    let result: number | undefined;
 
     const TestComponent = () => {
       const useable = useStore(store);
@@ -548,7 +555,7 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
         startTransition(() => {
           store.update(increment());
         });
-      }, [store]);
+      }, []);
 
       return (
         <ErrorBoundary
@@ -617,13 +624,10 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     const TestFixture = () => {
       const useable = useStore(store);
       const [currentCount, setCurrentCount] = useState(0);
-      const updateStore = useCallback(
-        (count: number) => {
-          setCurrentCount(count);
-          store.update(asyncCounter(count));
-        },
-        [store]
-      );
+      const updateStore = useCallback((count: number) => {
+        setCurrentCount(count);
+        store.update(asyncCounter(count));
+      }, []);
 
       return (
         <ErrorBoundary

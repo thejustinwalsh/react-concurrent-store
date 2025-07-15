@@ -21,7 +21,7 @@ vi.mock("react", async () => {
     "useCallback",
     "__REVERT_WHY_DID_YOU_RENDER__",
   ]);
-  const proxyState = new WeakMap<typeof React, Map<string, any>>();
+  const proxyState = new WeakMap<typeof React, Map<string, unknown>>();
   const handler: ProxyHandler<typeof React> = {
     get(target, prop, receiver) {
       proxyState.has(target) || proxyState.set(target, new Map());
@@ -32,7 +32,7 @@ vi.mock("react", async () => {
       return Reflect.get(target, prop, receiver);
     },
 
-    set(target, prop, value, receiver) {
+    set(target, prop, value) {
       proxyState.has(target) || proxyState.set(target, new Map());
       const state = proxyState.get(target);
       if (state && typeof prop === "string" && proxyProperties.has(prop)) {

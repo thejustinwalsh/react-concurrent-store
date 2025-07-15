@@ -11,6 +11,7 @@ type Store<Value, Action = Value> = ReactStore<Value, Action> & {
   refresh: () => void;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isStore = <Value>(value: any): value is Store<Value, any> => {
   return value && "$$typeof" in value && value.$$typeof === REACT_STORE_TYPE;
 };
@@ -19,6 +20,7 @@ export function createStore<Value>(
   initialValue: Value
 ): ReactStore<Value, Value>;
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function createStore<Value, Action>(
   initialValue: Value,
   reducer: (currentValue: Value) => Value
@@ -59,6 +61,7 @@ export function createStore<Value, Action>(
   return store;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useStore<Value>(store: ReactStore<Value, any>): Value {
   if (!isStore<Value>(store)) {
     throw new Error(
@@ -80,7 +83,7 @@ export function useStore<Value>(store: ReactStore<Value, any>): Value {
         });
       }
     });
-  }, [store._transition]);
+  }, [store]);
 
   return cache;
 }

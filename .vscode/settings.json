@@ -3,5 +3,7 @@
     "source.fixAll.eslint": "always"
   },
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode"
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "eslint.useFlatConfig": true,
+  "cSpell.words": ["Ponyfill", "WDYR", "welldone"]
 }
