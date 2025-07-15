@@ -5,9 +5,26 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { createStore, useStore } from "./index";
-import { Suspense, use, useCallback, useState, useTransition } from "react";
+import React, {
+  Suspense,
+  use,
+  useCallback,
+  useState,
+  useTransition,
+} from "react";
 
 const USE_UNSTABLE = process.env.USE_UNSTABLE === "true";
+
+declare global {
+  var WDYR: { notifications: any[] };
+}
+
+describe("wdyr", () => {
+  it("react should monkey patched", () => {
+    // @ts-expect-error -- Property __IS_WDYR__ is added by WDYR
+    expect(React.__IS_WDYR__).toBe(true);
+  });
+});
 
 describe(`createStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
   afterEach(() => cleanup());
