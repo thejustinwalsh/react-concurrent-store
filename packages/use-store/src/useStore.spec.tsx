@@ -122,6 +122,8 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toBe(initialValue);
+
+    expect(globalThis.WDYR.notifications).toHaveLength(0);
   });
 
   it("should return initial string value", async () => {
@@ -139,6 +141,8 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toBe(initialValue);
+
+    expect(globalThis.WDYR.notifications).toHaveLength(0);
   });
 
   it("should return initial array value", async () => {
@@ -156,6 +160,8 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toEqual(initialValue);
+
+    expect(globalThis.WDYR.notifications).toHaveLength(0);
   });
 
   it("should throw error for invalid store type", async () => {
@@ -172,6 +178,8 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(() => {
       render(<TestComponent />);
     }).toThrow("Invalid store type. Ensure you are using a valid React store.");
+
+    expect(globalThis.WDYR.notifications).toHaveLength(0);
   });
 });
 
@@ -231,6 +239,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toEqual({ count: 1 });
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 4);
   });
 
   it("should work with array values", async () => {
@@ -274,6 +285,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toEqual([1, 2, 3]);
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 2);
   });
 
   it("should handle complex state updates", async () => {
@@ -347,6 +361,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
       user: { name: "John", age: 31 },
       settings: { theme: "dark", notifications: true },
     });
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 2);
   });
 
   it("should work with multiple components using same store", async () => {
@@ -398,6 +415,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result2).toEqual({ count: 1 });
     expect(getByTestId("counter-1").textContent).toBe("1");
     expect(getByTestId("counter-2").textContent).toBe("1");
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 2);
   });
 
   it("should change value when updated without reducer", async () => {
@@ -422,6 +442,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toEqual({ count: 100 });
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 
   it("should change value when updated with setter", async () => {
@@ -449,6 +472,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toEqual({ count: 1 });
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 
   it("should handle an initial value of undefined", async () => {
@@ -471,6 +497,9 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toBe(42);
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 });
 
@@ -517,6 +546,8 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
 
     expect(result).toBe(0);
     expect(getByTestId("counter").textContent).toBe("0");
+
+    expect(globalThis.WDYR.notifications).toHaveLength(0);
   });
 
   it("should skip suspense fallback when in a transition", async () => {
@@ -598,6 +629,9 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
 
     expect(getByTestId("counter").getAttribute("data-pending")).toBe("false");
     expect(getByTestId("counter").textContent).toBe("1");
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 
   it("should handle transition interruption and resolve to the final state", async () => {
@@ -690,5 +724,8 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     await act(async () => resolve());
 
     expect(getByTestId("counter").textContent).toBe("3");
+
+    // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 3 : 7);
   });
 });
