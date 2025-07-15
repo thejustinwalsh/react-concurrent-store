@@ -95,7 +95,7 @@ https://codesandbox.io/p/sandbox/react-concurrent-store-demo-hyqhws
 ## How It Works
 
 This ponyfill uses the pattern of caching the initial state in a state initializer and registers
-for an update callback to update the cache within a transition when the state is updated. If the state that is stored is a promise that promise will be passed to the `use` hook and will interop with concurrent rendering features.
+for an update callback to update the cache within a transition when the state is updated. If the store value is a promise, passing that promise to the `use` hook will return the resolved value and integrate with concurrent react features and suspend.
 
 The implementation ensures that:
 
