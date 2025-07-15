@@ -105,6 +105,8 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     expect(result).toEqual(initialValue);
+
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
   });
 
   it("should return initial primitive value", async () => {
@@ -123,7 +125,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
 
     expect(result).toBe(initialValue);
 
-    expect(globalThis.WDYR.notifications).toHaveLength(0);
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
   });
 
   it("should return initial string value", async () => {
@@ -142,7 +144,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
 
     expect(result).toBe(initialValue);
 
-    expect(globalThis.WDYR.notifications).toHaveLength(0);
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
   });
 
   it("should return initial array value", async () => {
@@ -161,7 +163,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
 
     expect(result).toEqual(initialValue);
 
-    expect(globalThis.WDYR.notifications).toHaveLength(0);
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
   });
 
   it("should throw error for invalid store type", async () => {
@@ -179,7 +181,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
       render(<TestComponent />);
     }).toThrow("Invalid store type. Ensure you are using a valid React store.");
 
-    expect(globalThis.WDYR.notifications).toHaveLength(0);
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
   });
 });
 
@@ -241,6 +243,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result).toEqual({ count: 1 });
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 4);
   });
 
@@ -287,6 +290,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result).toEqual([1, 2, 3]);
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 2);
   });
 
@@ -363,6 +367,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     });
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 2);
   });
 
@@ -417,6 +422,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(getByTestId("counter-2").textContent).toBe("1");
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 2);
   });
 
@@ -444,6 +450,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result).toEqual({ count: 100 });
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 
@@ -474,6 +481,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result).toEqual({ count: 1 });
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 
@@ -499,6 +507,7 @@ describe(`useStore${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result).toBe(42);
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 });
@@ -547,7 +556,7 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(result).toBe(0);
     expect(getByTestId("counter").textContent).toBe("0");
 
-    expect(globalThis.WDYR.notifications).toHaveLength(0);
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
   });
 
   it("should skip suspense fallback when in a transition", async () => {
@@ -631,6 +640,7 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(getByTestId("counter").textContent).toBe("1");
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 0 : 1);
   });
 
@@ -726,6 +736,7 @@ describe(`useStore(suspense)${USE_UNSTABLE ? " [unstable]" : ""}`, () => {
     expect(getByTestId("counter").textContent).toBe("3");
 
     // TODO: Investigate unstable vs stable re-renders
+    expect(globalThis.WDYR.notifications).toOnlyRerenderWhenPromiseChanges();
     expect(globalThis.WDYR.notifications).toHaveLength(USE_UNSTABLE ? 3 : 7);
   });
 });

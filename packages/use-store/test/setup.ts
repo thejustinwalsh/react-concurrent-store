@@ -1,9 +1,16 @@
 import React from "react";
 import "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, vi } from "vitest";
+import { beforeEach, expect, vi } from "vitest";
+import wdyr, {
+  HookDifference,
+  type UpdateInfo,
+} from "@welldone-software/why-did-you-render";
 
 // Add WDYR support to React for assertions in tests
+declare global {
+  var WDYR: { notifications: UpdateInfo[] };
+}
 globalThis.WDYR = { notifications: [] };
 vi.mock("react", async () => {
   const react = await vi.importActual("react");
@@ -65,9 +72,6 @@ vi.mock("react", async () => {
   };
 
   const proxiedReact = new Proxy(react as typeof React, handler);
-  const { default: wdyr } = await import(
-    "@welldone-software/why-did-you-render"
-  );
   wdyr(proxiedReact, {
     include: [/.*/],
     collapseGroups: false,
@@ -100,6 +104,52 @@ vi.mock("../src/index.ts", async () => {
       useStore,
     };
   }
+});
+
+// Add matchers for WDYR notification assertions
+expect.extend({
+  /**
+   * Custom matcher to check if WDYR notifications only re-render when a promise changes.
+   * @param {UpdateInfo[]} received - The received WDYR notifications.
+   */
+  toOnlyRerenderWhenPromiseChanges(received: UpdateInfo[]) {
+    const wasPromiseUpdate = (hookDiff: HookDifference) => {
+      return (
+        hookDiff.diffType === "different" &&
+        (hookDiff.prevValue !== hookDiff.nextValue ||
+          hookDiff.prevValue.value !== hookDiff.nextValue.value ||
+          hookDiff.prevValue.status !== hookDiff.nextValue.status)
+      );
+    };
+
+    const failingNotifications = received.filter((notification) => {
+      return (
+        notification.hookName !== "useState" ||
+        notification.reason.propsDifferences === true ||
+        notification.reason.stateDifferences === true ||
+        notification.reason.hookDifferences.reduce(
+          (acc, diff) => acc || !wasPromiseUpdate(diff),
+          false
+        )
+      );
+    });
+
+    if (failingNotifications.length) {
+      return {
+        pass: false,
+        message: () =>
+          "Expected promise to only re-render when it changes, but found re-renders for other reasons",
+        actual: failingNotifications,
+        expected: [], // TODO: diff all notifications
+      };
+    }
+
+    return {
+      pass: true,
+      message: () =>
+        "All notifications are valid, promise only re-renders when it changes.",
+    };
+  },
 });
 
 beforeEach(() => {
