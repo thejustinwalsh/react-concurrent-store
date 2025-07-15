@@ -20,7 +20,7 @@ declare global {
 }
 
 describe("wdyr", () => {
-  it("react should monkey patched", () => {
+  it("react should be monkey patched by WDYR", () => {
     // @ts-expect-error -- Property __IS_WDYR__ is added by WDYR
     expect(React.__IS_WDYR__).toBe(true);
   });
