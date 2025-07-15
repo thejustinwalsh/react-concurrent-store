@@ -2,9 +2,6 @@
 
 Ponyfill of experimental React concurrent stores.
 
-> [!WARNING]
-> **This package uses React internals** that could be removed in any future version at any time. Specifically `getCacheForType` and `useCacheRefresh` from React's internal APIs. These internals have been available in both React 19.0 and React 19.1 releases, but there is no guarantee they will remain available in future versions.
-
 _Work In Progress_
 
 - [x] Update types and add support for stores without a reducer
@@ -16,7 +13,7 @@ _Work In Progress_
 
 Managing async resources with `useSyncExternalStore` breaks concurrency when [mutating the store during a non-blocking Transition](https://react.dev/reference/react/useSyncExternalStore#caveats). The React team has announced a new [concurrent store API](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores) to resolve this issue.
 
-This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API as the `useStore` hook. The hook uses existing React internals to implement the API which allows for mutating during a non-blocking transition and does not de-opt to a synchronous update, avoiding the issue present in `useSyncExternalStore`.
+This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API as the `useStore` hook. The hook aims to implement this API in user land which allows for mutating during a non-blocking transition and does not de-opt to a synchronous update, avoiding the issue present in `useSyncExternalStore`.
 
 This ponyfill exists to generate feedback and to get a feel for the upcoming concurrent store API.
 This package will be deprecated once the concurrent store feature is released in the core React library.
@@ -95,19 +92,16 @@ function Counter() {
 
 https://codesandbox.io/p/sandbox/react-concurrent-store-demo-hyqhws
 
-
 ## How It Works
 
-This ponyfill uses React's internal cache system to provide concurrent-safe state management, particularly useful in managing async resources. It leverages:
-
-- `getCacheForType` - React's internal caching mechanism
-- `useCacheRefresh` - React's cache invalidation system
+This ponyfill uses the pattern of caching the initial state in a state initializer and registers
+for an update callback to update the cache within a transition when the state is updated. If the state that is stored is a promise that promise will be passed to the `use` hook and will interop with concurrent rendering features.
 
 The implementation ensures that:
 
 - State updates are concurrent-safe
 - Components re-render when store values change
-- Store values are properly cached and life-cycled by React making it trivial to manage async resources optimaly wth suspense.
+- Store values are properly cached and life-cycled by React making it trivial to manage async resources optimally wth suspense.
 - The API matches the planned React concurrent stores feature
 - TypeScript types are properly inferred
 

@@ -119,9 +119,10 @@ It allows you to manage async resources with proper handling for non-blocking up
 
 Stores are containers that hold values or promises. They can be updated reactively and integrate seamlessly with React's concurrent features.
 
-### Transitions
+### Updates
 
-Use `useTransition` to update stores without blocking the UI:
+Use `useTransition` to wrap the update action in a transition and track the action's isPending state.
+The store will always execute the update in an action, even if the update is not wrapped in a transition.
 
 ```tsx
 import { useTransition } from "react";
@@ -150,19 +151,3 @@ function UserProfile() {
 
 Stores containing promises automatically integrate with React Suspense by passing the store result to the `use` hook.
 When the store is updated as an Action within a [non-blocking Transition](https://react.dev/reference/react/useTransition), the store will properly update the state without de-opting to a synchronous update.
-
-### Can I use this in Production
-
-Yes, you can use this package in production.
-However, keep in mind that it relies on React internals that may change in future releases.
-It's recommended to keep an eye on the React release notes and test your application thoroughly when upgrading React versions.
-
-Once the concurrent store API stabilizes in React, this package will be deprecated in favor of the official API.
-
-<br />
-
-<Aside type="caution" title="Uses React Internals">
-  The `getCacheForType` and `useCacheRefresh` internal api methods have been
-  available since React 19.0 and are still present in React 19.1. There is no
-  guarantee they'll remain in future releases.
-</Aside>
