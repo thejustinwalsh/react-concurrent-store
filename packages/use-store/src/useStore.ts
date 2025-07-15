@@ -74,14 +74,10 @@ export function useStore<Value>(store: ReactStore<Value, any>): Value {
 
   useEffect(() => {
     return store.subscribe(() => {
-      if (store._current === store._transition) {
-        setCache(store._current);
-      } else {
-        store._sync = store._transition;
-        startTransition(() => {
-          setCache((store._current = store._sync));
-        });
-      }
+      store._sync = store._transition;
+      startTransition(() => {
+        setCache((store._current = store._sync));
+      });
     });
   }, [store]);
 
