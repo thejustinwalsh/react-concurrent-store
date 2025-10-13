@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, act } from "@testing-library/react";
 import { makeExperimentalStoreHooks as makeStoreHooks } from "./useStoreNew";
-import { useState, startTransition } from "react";
+import { useState, startTransition, useEffect, useLayoutEffect } from "react";
+import { flushSync } from "react-dom";
 
 type State = number;
 
@@ -50,37 +51,8 @@ afterEach(() => {
   logger.assertLog([]);
 });
 
-// let React;
-// let ReactNoop;
-// let Scheduler;
-// let act;
-// let useEffect;
-// let startTransition;
-// let logger.assertLog;
-// let useLayoutEffect;
-// let useState;
-// let makeStoreHooks;
-// let flushSync;
 
 describe("Experimental Userland Store", () => {
-  //   beforeEach(() => {
-  //     jest.resetModules();
-
-  //     React = require("react");
-
-  //     ReactNoop = require("react-noop-renderer");
-  //     Scheduler = require("scheduler");
-  //     act = require("internal-test-utils").act;
-  //     useEffect = React.useEffect;
-  //     startTransition = React.startTransition;
-  //     useLayoutEffect = React.useLayoutEffect;
-  //     useState = React.useState;
-  //     makeStoreHooks = require("../ExperimentalStore").makeExperimentalStoreHooks;
-  //     flushSync = require("react-dom").flushSync;
-
-  //     const InternalTestUtils = require("internal-test-utils");
-  //     logger.assertLog = InternalTestUtils.logger.assertLog;
-  //   });
 
   it("Does not tear when new component mounts mid transition", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
@@ -108,10 +80,6 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    // const root = ReactNoop.createRoot();
-    // await act(async () => {
-    //   root.render(<App />);
-    // });
     const { asFragment } = await act(async () => {
       return render(<App />);
     });
@@ -119,7 +87,6 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([{ testid: "count", count: 1 }]);
 
     // Check that we mount correctly
-    // expect(root).toMatchRenderedOutput(<div>1</div>);
     expect(asFragment()).toMatchInlineSnapshot(`
       <DocumentFragment>
         <div>
@@ -143,7 +110,6 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([]);
 
     // Check that the update has not flushed yet
-    // expect(root).toMatchRenderedOutput(<div>1</div>);
     expect(asFragment()).toMatchInlineSnapshot(`
       <DocumentFragment>
         <div>
@@ -166,12 +132,6 @@ describe("Experimental Userland Store", () => {
       { testid: "otherCount", count: 1 },
     ]);
     // Check we mount with the pre-transition state
-    // expect(root).toMatchRenderedOutput(
-    //   <>
-    //     <div>1</div>
-    //     <div>1</div>
-    //   </>
-    // );
     expect(asFragment()).toMatchInlineSnapshot(`
       <DocumentFragment>
         <div>
@@ -195,12 +155,6 @@ describe("Experimental Userland Store", () => {
 
     // Check the original count component updated
     // Check the newly mounted count component updated
-    // expect(root).toMatchRenderedOutput(
-    //   <>
-    //     <div>2</div>
-    //     <div>2</div>
-    //   </>
-    // );
     expect(asFragment()).toMatchInlineSnapshot(`
       <DocumentFragment>
         <div>
@@ -213,7 +167,7 @@ describe("Experimental Userland Store", () => {
     `);
   });
 
-  it.skip("Does not tear when new component mounts in its own transition mid transition", async () => {
+  it("Does not tear when new component mounts in its own transition mid transition", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       1
@@ -239,14 +193,19 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 1 }]);
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(<div>1</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
 
     let resolve: () => void;
 
@@ -261,7 +220,13 @@ describe("Experimental Userland Store", () => {
     });
 
     // Check that the update has not flushed yet
-    expect(root).toMatchRenderedOutput(<div>1</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
 
     // Reveal a new component which must read state on mount
     await act(async () => {
@@ -284,15 +249,19 @@ describe("Experimental Userland Store", () => {
 
     // Check the original count component updated
     // Check the newly mounted count component updated
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>2</div>
-        <div>2</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("Does not miss updates triggered in useEffect or useLayoutEffect", async () => {
+  it("Does not miss updates triggered in useEffect or useLayoutEffect", async () => {
     const { useStoreSelector, StoreProvider, useStoreDispatch } =
       makeStoreHooks(reducer, 1);
 
@@ -322,9 +291,8 @@ describe("Experimental Userland Store", () => {
       return null;
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(
+    const { rerender, asFragment } = await act(async () => {
+      return render(
         <StoreProvider>
           <IncrementOnMount />
           <Count testid="count" />
@@ -338,10 +306,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
-      root.render(
+      rerender(
         <StoreProvider>
           <Count testid="count" />
           <IncrementOnMount />
@@ -358,15 +332,19 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>3</div>
-        <div>3</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          3
+        </div>
+        <div>
+          3
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
-      root.render(
+      rerender(
         <StoreProvider>
           <IncrementOnLayout />
           <Count testid="count" />
@@ -380,10 +358,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(<div>4</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
-      root.render(
+      rerender(
         <StoreProvider>
           <Count testid="count" />
           <IncrementOnLayout />
@@ -397,16 +381,20 @@ describe("Experimental Userland Store", () => {
       { testid: "count", count: 5 }, // Fixup render triggered by increment on mount
       { testid: "otherCount", count: 5 }, // Fixup render triggered by increment on mount
     ]);
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>5</div>
-        <div>5</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          5
+        </div>
+        <div>
+          5
+        </div>
+      </DocumentFragment>
+    `);
   });
 
   // This should catch the case where fixups accidentally could get entangled with a transition when they should flush sync.
-  it.skip("Does not miss sync updates triggered in useEffect or useLayoutEffect during a long-running transition", async () => {
+  it("Does not miss sync updates triggered in useEffect or useLayoutEffect during a long-running transition", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       2
@@ -435,17 +423,16 @@ describe("Experimental Userland Store", () => {
     // Start a long running transition that will run for the whole test. This
     // should catch cases where fixups get
 
-    let resolve;
+    let resolve: () => void;
     startTransition(async () => {
       dispatch({ type: "DOUBLE" });
-      await new Promise((_resolve) => {
+      await new Promise<void>((_resolve) => {
         resolve = _resolve;
       });
     });
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(
+    const { rerender, asFragment } = await act(async () => {
+      return render(
         <StoreProvider>
           <IncrementOnMount />
           <Count testid="count" />
@@ -461,10 +448,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(<div>3</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          3
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
-      root.render(
+      rerender(
         <StoreProvider>
           <Count testid="count" />
           <IncrementOnMount />
@@ -483,15 +476,19 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>4</div>
-        <div>4</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
+        </div>
+        <div>
+          4
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
-      root.render(
+      rerender(
         <StoreProvider>
           <IncrementOnLayout />
           <Count testid="count" />
@@ -506,10 +503,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount correctly
-    expect(root).toMatchRenderedOutput(<div>5</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          5
+        </div>
+      </DocumentFragment>
+    `);
 
-    await act(async () => {
-      root.render(
+      await act(async () => {
+      rerender(
         <StoreProvider>
           <Count testid="count" />
           <IncrementOnLayout />
@@ -525,12 +528,16 @@ describe("Experimental Userland Store", () => {
       { testid: "count", count: 6 }, // Fixup render triggered by increment on mount
       { testid: "otherCount", count: 6 }, // Fixup render triggered by increment on mount
     ]);
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>6</div>
-        <div>6</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          6
+        </div>
+        <div>
+          6
+        </div>
+      </DocumentFragment>
+    `);
 
     // Not technically part of the test, but just for completeness, let's
     // confirm we get the right thing when the transition completes.
@@ -541,15 +548,19 @@ describe("Experimental Userland Store", () => {
       { testid: "count", count: 8 },
       { testid: "otherCount", count: 8 },
     ]);
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>8</div>
-        <div>8</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          8
+        </div>
+        <div>
+          8
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("Sync update interrupting transition correctly tracks committed state", async () => {
+  it("Sync update interrupting transition correctly tracks committed state", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       2
@@ -575,14 +586,19 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 2 }]);
 
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     let resolve: () => void;
 
@@ -599,7 +615,13 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([]);
 
     // Ensure no update is made yet
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     // Interrupt with a sync update
     await act(() => {
@@ -610,7 +632,13 @@ describe("Experimental Userland Store", () => {
 
     // Check that we flushed the sync update on top of the currently committed
     // state.
-    expect(root).toMatchRenderedOutput(<div>3</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          3
+        </div>
+      </DocumentFragment>
+    `);
 
     // Now mount a new component
     await act(async () => {
@@ -626,12 +654,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount with the post-sync-update value
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>3</div>
-        <div>3</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          3
+        </div>
+        <div>
+          3
+        </div>
+      </DocumentFragment>
+    `);
 
     // Resolving the transition should flush the transition update...
     await act(async () => {
@@ -649,15 +681,19 @@ describe("Experimental Userland Store", () => {
     // INCREMENT (sync): 5
 
     // (2 * 2) + 1 = 5
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>5</div>
-        <div>5</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          5
+        </div>
+        <div>
+          5
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("Multiple sync updates interrupting transition correctly tracks committed state", async () => {
+  it("Multiple sync updates interrupting transition correctly tracks committed state", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       2
@@ -683,14 +719,19 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 2 }]);
 
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     let resolve: () => void;
 
@@ -707,7 +748,13 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([]);
 
     // Ensure no update is made yet
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     // Interrupt with a sync update
     await act(() => {
@@ -719,7 +766,13 @@ describe("Experimental Userland Store", () => {
 
     // Check that we flushed the sync update on top of the currently comitted
     // state.
-    expect(root).toMatchRenderedOutput(<div>4</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
+        </div>
+      </DocumentFragment>
+    `);
 
     // Now mount a new component
     await act(async () => {
@@ -735,12 +788,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount with the post-sync-update value
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>4</div>
-        <div>4</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
+        </div>
+        <div>
+          4
+        </div>
+      </DocumentFragment>
+    `);
 
     // Resolving the transition should flush the transition update...
     await act(async () => {
@@ -759,15 +816,19 @@ describe("Experimental Userland Store", () => {
     // INCREMENT (sync): 6
 
     // (2 * 2) + 1 + 1 = 6
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>6</div>
-        <div>6</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          6
+        </div>
+        <div>
+          6
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("flushSync update interrupting transition correctly tracks committed state", async () => {
+  it("flushSync update interrupting transition correctly tracks committed state", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       2
@@ -793,14 +854,19 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 2 }]);
 
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     let resolve: () => void;
 
@@ -816,21 +882,31 @@ describe("Experimental Userland Store", () => {
 
     logger.assertLog([]);
 
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
 
     // Interrupt with a flushSync update
-    await act(() => {
-      startTransition(() => {
-        flushSync(() => {
-          dispatch({ type: "DOUBLE" });
-        });
+    await act(async () => {
+      flushSync(() => {
+        dispatch({ type: "DOUBLE" });
       });
     });
 
     logger.assertLog([{ testid: "count", count: 4 }]);
 
     // Check that we flushed the sync update only
-    expect(root).toMatchRenderedOutput(<div>4</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
+        </div>
+      </DocumentFragment>
+    `);
 
     // Now mount a new component
     await act(async () => {
@@ -846,12 +922,16 @@ describe("Experimental Userland Store", () => {
     ]);
 
     // Check that we mount with the post-sync-update value
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>4</div>
-        <div>4</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
+        </div>
+        <div>
+          4
+        </div>
+      </DocumentFragment>
+    `);
 
     // Resolving the transition should flush the transition update...
     await act(async () => {
@@ -865,15 +945,19 @@ describe("Experimental Userland Store", () => {
 
     // Now we see the state as if the state has updated in the order of
     // transition then sync.
-    expect(root).toMatchRenderedOutput(
-      <>
-        <div>6</div>
-        <div>6</div>
-      </>
-    );
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          6
+        </div>
+        <div>
+          6
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("correctly handles consecutive sync updates", async () => {
+  it("correctly handles consecutive sync updates", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       1
@@ -893,13 +977,18 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 1 }]);
-    expect(root).toMatchRenderedOutput(<div>1</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
       dispatch({ type: "INCREMENT" });
@@ -909,10 +998,16 @@ describe("Experimental Userland Store", () => {
     // Autobatching means these flush together
     logger.assertLog([{ testid: "count", count: 3 }]);
 
-    expect(root).toMatchRenderedOutput(<div>3</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          3
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("useDispatch provides a bound dispatch function", async () => {
+  it("useDispatch provides a bound dispatch function", async () => {
     const { useStoreSelector, StoreProvider, useStoreDispatch } =
       makeStoreHooks(reducer, 1);
 
@@ -922,7 +1017,7 @@ describe("Experimental Userland Store", () => {
       return <div>{count}</div>;
     }
 
-    let dispatch;
+    let dispatch: any;
 
     function Increment() {
       dispatch = useStoreDispatch();
@@ -938,14 +1033,19 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 1 }]);
 
-    expect(root).toMatchRenderedOutput(<div>1</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
 
     await act(async () => {
       dispatch({ type: "INCREMENT" });
@@ -953,13 +1053,19 @@ describe("Experimental Userland Store", () => {
 
     logger.assertLog([{ testid: "count", count: 2 }]);
 
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
   });
 
-  it.skip("dynamic selectors are not yet supported", async () => {
+  it("dynamic selectors are not yet supported", async () => {
     const { useStoreSelector, StoreProvider } = makeStoreHooks(reducer, 1);
 
-    let setSelector;
+    let setSelector: any;
     function Count({ testid }: { testid: string }) {
       const [selector, _setSelector] = useState(() => identity);
       setSelector = _setSelector;
@@ -976,19 +1082,24 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ testid: "count", count: 1 }]);
 
-    expect(root).toMatchRenderedOutput(<div>1</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
 
-    let error;
+    let error: any;
     try {
       await act(async () => {
-        setSelector((s) => s * 2);
+        setSelector((s: number) => s * 2);
       });
     } catch (e) {
       error = e;
@@ -1001,7 +1112,7 @@ describe("Experimental Userland Store", () => {
     );
   });
 
-  it.skip("transition store update causes new store reader to mount", async () => {
+  it("transition store update causes new store reader to mount", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
       1
@@ -1029,14 +1140,13 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const root = ReactNoop.createRoot();
-    await act(async () => {
-      root.render(<App />);
+    const { asFragment } = await act(async () => {
+      return render(<App />);
     });
 
     logger.assertLog([{ action: "render", testid: "countIfEven", count: 1 }]);
 
-    expect(root).toMatchRenderedOutput(null);
+    expect(asFragment()).toMatchInlineSnapshot(`<DocumentFragment />`);
 
     await act(async () => {
       startTransition(() => {
@@ -1049,6 +1159,12 @@ describe("Experimental Userland Store", () => {
       { action: "mount", testid: "count", count: 2 },
     ]);
 
-    expect(root).toMatchRenderedOutput(<div>2</div>);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
   });
 });
