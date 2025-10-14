@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, act } from "@testing-library/react";
-import { makeExperimentalStoreHooks as makeStoreHooks } from "./useStoreNew";
 import {
   useState,
   startTransition,
@@ -10,6 +9,7 @@ import {
   use,
 } from "react";
 import { flushSync } from "react-dom";
+import { createStore, StoreProvider, useStoreSelector } from "./useStoreNew";
 
 type State = number;
 
@@ -63,13 +63,10 @@ afterEach(() => {
 
 describe("Experimental Userland Store", () => {
   it("Does not tear when new component mounts mid transition", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      1
-    );
+    const store = createStore(reducer, 1);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
@@ -81,7 +78,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -108,7 +105,7 @@ describe("Experimental Userland Store", () => {
     // Start, but don't complete, a transition update
     await act(async () => {
       startTransition(async () => {
-        dispatch({ type: "INCREMENT" });
+        store.dispatch({ type: "INCREMENT" });
         await new Promise<void>((_resolve) => {
           resolve = _resolve;
         });
@@ -176,13 +173,10 @@ describe("Experimental Userland Store", () => {
   });
 
   it("Does not tear when new component mounts in its own transition mid transition", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      1
-    );
+    const store = createStore(reducer, 1);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
@@ -194,7 +188,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -220,7 +214,7 @@ describe("Experimental Userland Store", () => {
     // Start, but don't complete, a transition update
     await act(async () => {
       startTransition(async () => {
-        dispatch({ type: "INCREMENT" });
+        store.dispatch({ type: "INCREMENT" });
         await new Promise<void>((_resolve) => {
           resolve = _resolve;
         });
@@ -270,38 +264,35 @@ describe("Experimental Userland Store", () => {
   });
 
   it("Does not miss updates triggered in useEffect or useLayoutEffect", async () => {
-    const { useStoreSelector, StoreProvider, useStoreDispatch } =
-      makeStoreHooks(reducer, 1);
+    const store = createStore(reducer, 1);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
 
     function IncrementOnMount() {
-      const dispatch = useStoreDispatch();
       useEffect(() => {
         startTransition(() => {
-          dispatch({ type: "INCREMENT" });
+          store.dispatch({ type: "INCREMENT" });
         });
-      }, [dispatch]);
+      }, []);
       return null;
     }
 
     function IncrementOnLayout() {
-      const dispatch = useStoreDispatch();
       useLayoutEffect(() => {
         startTransition(() => {
-          dispatch({ type: "INCREMENT" });
+          store.dispatch({ type: "INCREMENT" });
         });
-      }, [dispatch]);
+      }, []);
       return null;
     }
 
     const { rerender, asFragment } = await act(async () => {
       return render(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <IncrementOnMount />
           <Count testid="count" />
         </StoreProvider>
@@ -324,7 +315,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           <IncrementOnMount />
           <Count testid="otherCount" />
@@ -353,7 +344,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <IncrementOnLayout />
           <Count testid="count" />
         </StoreProvider>
@@ -376,7 +367,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           <IncrementOnLayout />
           <Count testid="otherCount" />
@@ -403,28 +394,25 @@ describe("Experimental Userland Store", () => {
 
   // This should catch the case where fixups accidentally could get entangled with a transition when they should flush sync.
   it("Does not miss sync updates triggered in useEffect or useLayoutEffect during a long-running transition", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      2
-    );
+    const store = createStore(reducer, 2);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
 
     function IncrementOnMount() {
       useEffect(() => {
-        dispatch({ type: "INCREMENT" });
-      }, [dispatch]);
+        store.dispatch({ type: "INCREMENT" });
+      }, []);
       return null;
     }
 
     function IncrementOnLayout() {
       useLayoutEffect(() => {
-        dispatch({ type: "INCREMENT" });
-      }, [dispatch]);
+        store.dispatch({ type: "INCREMENT" });
+      }, []);
       return null;
     }
 
@@ -433,7 +421,7 @@ describe("Experimental Userland Store", () => {
 
     let resolve: () => void;
     startTransition(async () => {
-      dispatch({ type: "DOUBLE" });
+      store.dispatch({ type: "DOUBLE" });
       await new Promise<void>((_resolve) => {
         resolve = _resolve;
       });
@@ -441,7 +429,7 @@ describe("Experimental Userland Store", () => {
 
     const { rerender, asFragment } = await act(async () => {
       return render(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <IncrementOnMount />
           <Count testid="count" />
         </StoreProvider>
@@ -466,7 +454,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           <IncrementOnMount />
           <Count testid="otherCount" />
@@ -497,7 +485,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <IncrementOnLayout />
           <Count testid="count" />
         </StoreProvider>
@@ -521,7 +509,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           <IncrementOnLayout />
           <Count testid="otherCount" />
@@ -569,13 +557,10 @@ describe("Experimental Userland Store", () => {
   });
 
   it("Sync update interrupting transition correctly tracks committed state", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      2
-    );
+    const store = createStore(reducer, 2);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
@@ -587,7 +572,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -613,7 +598,7 @@ describe("Experimental Userland Store", () => {
     // Start, but don't complete, a transition update
     await act(async () => {
       startTransition(async () => {
-        dispatch({ type: "DOUBLE" });
+        store.dispatch({ type: "DOUBLE" });
         await new Promise<void>((_resolve) => {
           resolve = _resolve;
         });
@@ -633,7 +618,7 @@ describe("Experimental Userland Store", () => {
 
     // Interrupt with a sync update
     await act(() => {
-      dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
     });
 
     logger.assertLog([{ testid: "count", count: 3 }]);
@@ -702,13 +687,10 @@ describe("Experimental Userland Store", () => {
   });
 
   it("Multiple sync updates interrupting transition correctly tracks committed state", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      2
-    );
+    const store = createStore(reducer, 2);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
@@ -720,7 +702,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -746,7 +728,7 @@ describe("Experimental Userland Store", () => {
     // Start, but don't complete, a transition update
     await act(async () => {
       startTransition(async () => {
-        dispatch({ type: "DOUBLE" });
+        store.dispatch({ type: "DOUBLE" });
         await new Promise<void>((_resolve) => {
           resolve = _resolve;
         });
@@ -766,8 +748,8 @@ describe("Experimental Userland Store", () => {
 
     // Interrupt with a sync update
     await act(() => {
-      dispatch({ type: "INCREMENT" });
-      dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
     });
 
     logger.assertLog([{ testid: "count", count: 4 }]);
@@ -837,13 +819,10 @@ describe("Experimental Userland Store", () => {
   });
 
   it("flushSync update interrupting transition correctly tracks committed state", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      2
-    );
+    const store = createStore(reducer, 2);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
@@ -855,7 +834,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -881,7 +860,7 @@ describe("Experimental Userland Store", () => {
     // Start, but don't complete, a transition update
     await act(async () => {
       startTransition(async () => {
-        dispatch({ type: "INCREMENT" });
+        store.dispatch({ type: "INCREMENT" });
         await new Promise<void>((_resolve) => {
           resolve = _resolve;
         });
@@ -901,7 +880,7 @@ describe("Experimental Userland Store", () => {
     // Interrupt with a flushSync update
     await act(async () => {
       flushSync(() => {
-        dispatch({ type: "DOUBLE" });
+        store.dispatch({ type: "DOUBLE" });
       });
     });
 
@@ -966,20 +945,17 @@ describe("Experimental Userland Store", () => {
   });
 
   it("correctly handles consecutive sync updates", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      1
-    );
+    const store = createStore(reducer, 1);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
 
     function App() {
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
         </StoreProvider>
       );
@@ -999,8 +975,8 @@ describe("Experimental Userland Store", () => {
     `);
 
     await act(async () => {
-      dispatch({ type: "INCREMENT" });
-      dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
     });
 
     // Autobatching means these flush together
@@ -1015,76 +991,21 @@ describe("Experimental Userland Store", () => {
     `);
   });
 
-  it("useDispatch provides a bound dispatch function", async () => {
-    const { useStoreSelector, StoreProvider, useStoreDispatch } =
-      makeStoreHooks(reducer, 1);
-
-    function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
-      logger.log({ testid, count });
-      return <div>{count}</div>;
-    }
-
-    let dispatch: any;
-
-    function Increment() {
-      dispatch = useStoreDispatch();
-      return null;
-    }
-
-    function App() {
-      return (
-        <StoreProvider>
-          <Count testid="count" />
-          <Increment />
-        </StoreProvider>
-      );
-    }
-
-    const { asFragment } = await act(async () => {
-      return render(<App />);
-    });
-
-    logger.assertLog([{ testid: "count", count: 1 }]);
-
-    expect(asFragment()).toMatchInlineSnapshot(`
-      <DocumentFragment>
-        <div>
-          1
-        </div>
-      </DocumentFragment>
-    `);
-
-    await act(async () => {
-      dispatch({ type: "INCREMENT" });
-    });
-
-    logger.assertLog([{ testid: "count", count: 2 }]);
-
-    expect(asFragment()).toMatchInlineSnapshot(`
-      <DocumentFragment>
-        <div>
-          2
-        </div>
-      </DocumentFragment>
-    `);
-  });
-
   it("dynamic selectors are not yet supported", async () => {
-    const { useStoreSelector, StoreProvider } = makeStoreHooks(reducer, 1);
+    const store = createStore(reducer, 1);
 
     let setSelector: any;
     function Count({ testid }: { testid: string }) {
       const [selector, _setSelector] = useState(() => identity);
       setSelector = _setSelector;
-      const count = useStoreSelector(selector);
+      const count = useStoreSelector(store, selector);
       logger.log({ testid, count });
       return <div>{count}</div>;
     }
 
     function App() {
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Count testid="count" />
         </StoreProvider>
       );
@@ -1120,14 +1041,62 @@ describe("Experimental Userland Store", () => {
     );
   });
 
-  it("transition store update causes new store reader to mount", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      1
+  it("dynamic stores are not yet supported", async () => {
+    const store1 = createStore(reducer, 1);
+    const store2 = createStore(reducer, 10);
+
+    let setStore: any;
+    function Count({ testid }: { testid: string }) {
+      const [store, _setStore] = useState(() => store1);
+      setStore = _setStore;
+      const count = useStoreSelector(store, identity);
+      logger.log({ testid, count });
+      return <div>{count}</div>;
+    }
+
+    function App() {
+      return (
+        <StoreProvider store={store1}>
+          <Count testid="count" />
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ testid: "count", count: 1 }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    let error: any;
+    try {
+      await act(async () => {
+        setStore(store2);
+      });
+    } catch (e) {
+      error = e;
+    }
+
+    logger.assertLog([]);
+
+    expect(error.message).toMatch(
+      "useStoreSelector does not currently support dynamic stores"
     );
+  });
+
+  it("transition store update causes new store reader to mount", async () => {
+    const store = createStore(reducer, 1);
 
     function Count({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ action: "render", testid, count });
       useEffect(() => {
         logger.log({ action: "mount", testid, count });
@@ -1135,14 +1104,14 @@ describe("Experimental Userland Store", () => {
       return <div>{count}</div>;
     }
     function CountIfEven() {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       logger.log({ action: "render", testid: "countIfEven", count });
       return <>{count % 2 === 0 ? <Count testid="count" /> : null}</>;
     }
 
     function App() {
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <CountIfEven />
         </StoreProvider>
       );
@@ -1158,7 +1127,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       startTransition(() => {
-        dispatch({ type: "INCREMENT" });
+        store.dispatch({ type: "INCREMENT" });
       });
     });
     logger.assertLog([
@@ -1182,10 +1151,7 @@ describe("Experimental Userland Store", () => {
   // stuck rendering the transition state (and showing a suspense fallback)
   // instead of showing the sync store state.
   it("gets stuck in suspense when transition state suspends on mount", async () => {
-    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
-      reducer,
-      1
-    );
+    const store = createStore(reducer, 1);
 
     // Create a thenable that can be used for suspense but won't cause unhandled rejection
     let resolveSuspense: () => void;
@@ -1195,7 +1161,7 @@ describe("Experimental Userland Store", () => {
       });
 
     function SuspendOnEven({ testid }: { testid: string }) {
-      const count = useStoreSelector(identity);
+      const count = useStoreSelector(store, identity);
       if (count % 2 === 0) {
         // React sets this
         if (suspensePromise.status !== "fulfilled") {
@@ -1213,7 +1179,7 @@ describe("Experimental Userland Store", () => {
       const [showOther, _setShowOther] = useState(false);
       setShowOther = _setShowOther;
       return (
-        <StoreProvider>
+        <StoreProvider store={store}>
           <Suspense fallback={<div>Loading...</div>}>
             <SuspendOnEven testid="count" />
             {showOther && <SuspendOnEven testid="otherCount" />}
@@ -1240,7 +1206,7 @@ describe("Experimental Userland Store", () => {
     // suspend delaying the transition update.
     await act(async () => {
       startTransition(() => {
-        dispatch({ type: "INCREMENT" });
+        store.dispatch({ type: "INCREMENT" });
       });
     });
 
