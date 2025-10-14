@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, act } from "@testing-library/react";
 import { makeExperimentalStoreHooks as makeStoreHooks } from "./useStoreNew";
-import { useState, startTransition, useEffect, useLayoutEffect } from "react";
+import {
+  useState,
+  startTransition,
+  useEffect,
+  useLayoutEffect,
+  Suspense,
+  use,
+} from "react";
 import { flushSync } from "react-dom";
 
 type State = number;
@@ -36,8 +43,11 @@ class Logger {
     this._logs.push(value);
   }
   assertLog(expected: Array<unknown>) {
-    expect(this._logs).toEqual(expected);
+    const previous = this._logs;
+    // Reset logs before assertings so that if we fail the assertion we don't
+    // also fail the `afterEach` check.
     this._logs = [];
+    expect(previous).toEqual(expected);
   }
 }
 
@@ -51,9 +61,7 @@ afterEach(() => {
   logger.assertLog([]);
 });
 
-
 describe("Experimental Userland Store", () => {
-
   it("Does not tear when new component mounts mid transition", async () => {
     const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
       reducer,
@@ -511,7 +519,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
 
-      await act(async () => {
+    await act(async () => {
       rerender(
         <StoreProvider>
           <Count testid="count" />
@@ -1166,5 +1174,146 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+  });
+
+  // Describes a limitation of our fixup logic: If a component mounts sync
+  // mid-transition and observes store state such that it will suspend in the
+  // _transition_ state but not in the _sync_ state, we will incorrectly get
+  // stuck rendering the transition state (and showing a suspense fallback)
+  // instead of showing the sync store state.
+  it("gets stuck in suspense when transition state suspends on mount", async () => {
+    const { useStoreSelector, StoreProvider, dispatch } = makeStoreHooks(
+      reducer,
+      1
+    );
+
+    // Create a thenable that can be used for suspense but won't cause unhandled rejection
+    let resolveSuspense: () => void;
+    const suspensePromise: Promise<void> & { status?: string; value?: any } =
+      new Promise((resolve) => {
+        resolveSuspense = resolve;
+      });
+
+    function SuspendOnEven({ testid }: { testid: string }) {
+      const count = useStoreSelector(identity);
+      if (count % 2 === 0) {
+        // React sets this
+        if (suspensePromise.status !== "fulfilled") {
+          logger.log({ action: "suspend", testid, count });
+        }
+        use(suspensePromise);
+      }
+      logger.log({ action: "render", testid, count });
+      return <div>{count}</div>;
+    }
+
+    let setShowOther: (value: boolean) => void;
+
+    function App() {
+      const [showOther, _setShowOther] = useState(false);
+      setShowOther = _setShowOther;
+      return (
+        <StoreProvider>
+          <Suspense fallback={<div>Loading...</div>}>
+            <SuspendOnEven testid="count" />
+            {showOther && <SuspendOnEven testid="otherCount" />}
+          </Suspense>
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment } = await act(async () => {
+      return render(<App />);
+    });
+
+    // Initial render is fine
+    logger.assertLog([{ action: "render", testid: "count", count: 1 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    // We increment the state in a transtion and the currently mounted component should
+    // suspend delaying the transition update.
+    await act(async () => {
+      startTransition(() => {
+        dispatch({ type: "INCREMENT" });
+      });
+    });
+
+    // We try to render the new state, and suspend...
+    logger.assertLog([{ action: "suspend", testid: "count", count: 2 }]);
+
+    // ...and keep showing the old state due to the transition.
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Now a sync update _should_ reveal the new component in the pre-transition
+    // state.
+    await act(async () => {
+      setShowOther(true);
+    });
+
+    logger.assertLog([
+      // The parent rerenders with the new `showOther` state
+      { action: "render", testid: "count", count: 1 },
+      // But, due to the tricks we play, the new component initially renders
+      // with the transition state. Normally we'll be able to fixup in the
+      // useLayoutEffect, but we suspend this time and thus never mount.
+      { action: "suspend", testid: "otherCount", count: 2 },
+
+      // Our transition was interupted so React had to throw away the transition
+      // work. Now it tries again to render the transition state for "count".
+      { action: "suspend", testid: "count", count: 2 },
+    ]);
+
+    // The resuls it that, OOPS! we show the fallback instead of the
+    // pre-transition state. We should have rendered with the non-suspense
+    // value "1". This is a bug related to limitations in our fixup logic.
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div
+          style="display: none;"
+        >
+          1
+        </div>
+        <div>
+          Loading...
+        </div>
+      </DocumentFragment>
+    `);
+
+    // We now resolve the suspense
+    await act(async () => {
+      resolveSuspense();
+    });
+
+    // We are now able to render cleanly with the new transition state
+    logger.assertLog([
+      { action: "render", testid: "count", count: 2 },
+      { action: "render", testid: "otherCount", count: 2 },
+    ]);
+
+    // The transition is now complete and we do end up in the right place.
+    expect(asFragment()).toMatchInlineSnapshot(`
+         <DocumentFragment>
+           <div
+             style=""
+           >
+             2
+           </div>
+           <div>
+             2
+           </div>
+         </DocumentFragment>
+       `);
   });
 });
