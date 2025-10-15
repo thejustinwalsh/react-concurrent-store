@@ -287,7 +287,7 @@ describe("Experimental Userland Store", () => {
         <StoreProvider>
           <IncrementOnMount />
           <Count testid="count" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -311,7 +311,7 @@ describe("Experimental Userland Store", () => {
           <Count testid="count" />
           <IncrementOnMount />
           <Count testid="otherCount" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -339,7 +339,7 @@ describe("Experimental Userland Store", () => {
         <StoreProvider>
           <IncrementTransitionOnLayout />
           <Count testid="count" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -365,7 +365,7 @@ describe("Experimental Userland Store", () => {
           <Count testid="count" />
           <IncrementTransitionOnLayout />
           <Count testid="otherCount" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -429,7 +429,7 @@ describe("Experimental Userland Store", () => {
         <StoreProvider>
           <IncrementOnMount />
           <Count testid="count" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -455,7 +455,7 @@ describe("Experimental Userland Store", () => {
           <Count testid="count" />
           <IncrementOnMount />
           <Count testid="otherCount" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -485,7 +485,7 @@ describe("Experimental Userland Store", () => {
         <StoreProvider>
           <IncrementOnLayout />
           <Count testid="count" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
 
@@ -510,7 +510,7 @@ describe("Experimental Userland Store", () => {
           <Count testid="count" />
           <IncrementOnLayout />
           <Count testid="otherCount" />
-        </StoreProvider>
+        </StoreProvider>,
       );
     });
     logger.assertLog([
@@ -1044,7 +1044,7 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([]);
 
     expect(error.message).toMatch(
-      "useStoreSelector does not currently support dynamic selectors"
+      "useStoreSelector does not currently support dynamic selectors",
     );
     unmount();
     expect(store._listeners.length).toBe(0);
@@ -1097,7 +1097,7 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([]);
 
     expect(error.message).toMatch(
-      "useStoreSelector does not currently support dynamic stores"
+      "useStoreSelector does not currently support dynamic stores",
     );
     unmount();
     expect(store1._listeners.length).toBe(0);

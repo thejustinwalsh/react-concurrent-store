@@ -36,8 +36,8 @@ import { StoreManager } from "./StoreManager";
  */
 export function createStore<S, A>(
   reducer: Reducer<S, A>,
-  initialState: S
-): Store<S, A> & {dispatch: (action: A) => void} {
+  initialState: S,
+): Store<S, A> & { dispatch: (action: A) => void } {
   let state = initialState;
   const store = new Store<S, A>({
     getState: () => state,
@@ -48,13 +48,13 @@ export function createStore<S, A>(
   store.dispatch = (action: A) => {
     state = reducer(state, action);
     store.handleUpdate(action);
-  }
+  };
   // @ts-expect-error TODO: Fix typing
   return store;
 }
 
 export function createStoreFromSource<S, A>(
-  source: ISource<S, A>
+  source: ISource<S, A>,
 ): Store<S, A> {
   return new Store<S, A>(source);
 }
@@ -68,7 +68,7 @@ const storeManagerContext = createContext<StoreManager | null>(null);
 const CommitTracker = memo(
   ({ storeManager }: { storeManager: StoreManager }) => {
     const [allStates, setAllStates] = useState(
-      storeManager.getAllCommittedStates()
+      storeManager.getAllCommittedStates(),
     );
     useEffect(() => {
       const unsubscribe = storeManager.subscribe(() => {
@@ -85,7 +85,7 @@ const CommitTracker = memo(
       storeManager.commitAllStates(allStates);
     }, [storeManager, allStates]);
     return null;
-  }
+  },
 );
 
 /**
@@ -133,24 +133,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
  */
 export function useStoreSelector<S, T>(
   store: Store<S, any>,
-  selector: (state: S) => T
+  selector: (state: S) => T,
 ): T {
   const storeManager = useContext(storeManagerContext);
   if (storeManager == null) {
     throw new Error(
-      "Expected useStoreSelector to be rendered within a StoreProvider."
+      "Expected useStoreSelector to be rendered within a StoreProvider.",
     );
   }
   const previousStoreRef = useRef(store);
   if (store !== previousStoreRef.current) {
     throw new Error(
-      "useStoreSelector does not currently support dynamic stores"
+      "useStoreSelector does not currently support dynamic stores",
     );
   }
   const previousSelectorRef = useRef(selector);
   if (selector !== previousSelectorRef.current) {
     throw new Error(
-      "useStoreSelector does not currently support dynamic selectors"
+      "useStoreSelector does not currently support dynamic selectors",
     );
   }
 

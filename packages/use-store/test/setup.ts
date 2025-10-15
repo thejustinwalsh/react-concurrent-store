@@ -108,7 +108,7 @@ expect.extend({
         notification.reason.stateDifferences === true ||
         notification.reason.hookDifferences.reduce(
           (acc, diff) => acc || !wasPromiseUpdate(diff),
-          false
+          false,
         )
       );
     });

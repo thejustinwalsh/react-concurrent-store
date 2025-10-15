@@ -23,7 +23,7 @@ export class StoreManager extends Emitter<[]> {
       Array.from(this._storeRefCounts.keys()).map((store) => [
         store,
         store.getCommittedState(),
-      ])
+      ]),
     );
   }
 
@@ -32,7 +32,7 @@ export class StoreManager extends Emitter<[]> {
       Array.from(this._storeRefCounts.keys()).map((store) => [
         store,
         store.getState(),
-      ])
+      ]),
     );
   }
 
@@ -61,7 +61,7 @@ export class StoreManager extends Emitter<[]> {
     const prev = this._storeRefCounts.get(store);
     if (prev == null) {
       throw new Error(
-        "Imblance in concurrent-safe store reference counting. This is a bug in react-use-store, please report it."
+        "Imblance in concurrent-safe store reference counting. This is a bug in react-use-store, please report it.",
       );
     }
     // We decrement the count here, but don't actually do the cleanup.  This is

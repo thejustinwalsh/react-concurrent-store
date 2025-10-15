@@ -83,10 +83,10 @@ describe("createStore for a Relay-like state solution", () => {
   it("Minimal example of MiniRelay", async () => {
     const store = new RelayStore();
     store.publishAndNotify(initialize);
-    store.reactStore.commit(store.reactStore.getState())
+    store.reactStore.commit(store.reactStore.getState());
 
     function FragmentComponent() {
-      logger.log({type: "render"});
+      logger.log({ type: "render" });
       const data = useFragment<FragmentType>(FRAGMENT);
       return (
         <div>
@@ -130,7 +130,7 @@ describe("createStore for a Relay-like state solution", () => {
     await act(async () => {
       store.publishAndNotify((prev) => {
         const next = new RecordSource();
-        for(const [key, value] of prev._records.entries()) {
+        for (const [key, value] of prev._records.entries()) {
           next.set(key, value);
         }
         next.set("1", { id: "1", name: "MALICE", friend: "1" });

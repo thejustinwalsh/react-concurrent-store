@@ -44,7 +44,7 @@ describe("createStore", () => {
     const initialValue = { count: 0 };
     const reducer = (
       state: typeof initialValue,
-      action: { type: string; payload?: number }
+      action: { type: string; payload?: number },
     ) => {
       switch (action.type) {
         case "INCREMENT":
@@ -186,7 +186,7 @@ describe("useStore", () => {
     const initialValue = { count: 0 };
     const reducer = (
       state: typeof initialValue,
-      action: { type: string; payload?: number }
+      action: { type: string; payload?: number },
     ) => {
       switch (action.type) {
         case "INCREMENT":
@@ -243,7 +243,7 @@ describe("useStore", () => {
     const initialValue = [1, 2, 3];
     const reducer = (
       state: number[],
-      action: { type: string; payload?: number }
+      action: { type: string; payload?: number },
     ) => {
       switch (action.type) {
         case "PUSH":
@@ -303,7 +303,7 @@ describe("useStore", () => {
 
     const reducer = (
       state: State,
-      action: { type: string; payload: Partial<State[keyof State]> }
+      action: { type: string; payload: Partial<State[keyof State]> },
     ) => {
       switch (action.type) {
         case "UPDATE_USER":
@@ -524,7 +524,7 @@ describe("useStore(suspense)", () => {
           <Suspense fallback={<div data-testid="loading">Loading...</div>}>
             <TestComponent />
           </Suspense>
-        </ErrorBoundary>
+        </ErrorBoundary>,
       );
     });
 

@@ -17,23 +17,23 @@ const isStore = <Value>(value: any): value is Store<Value, any> => {
 };
 
 export function createStore<Value>(
-  initialValue: Value
+  initialValue: Value,
 ): ReactStore<Value, Value>;
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function createStore<Value, Action>(
   initialValue: Value,
-  reducer: (currentValue: Value) => Value
+  reducer: (currentValue: Value) => Value,
 ): ReactStore<Value, void>;
 
 export function createStore<Value, Action>(
   initialValue: Value,
-  reducer: (currentValue: Value, action: Action) => Value
+  reducer: (currentValue: Value, action: Action) => Value,
 ): ReactStore<Value, Action>;
 
 export function createStore<Value, Action>(
   initialValue: Value,
-  reducer?: (currentValue: Value, action: Action) => Value
+  reducer?: (currentValue: Value, action: Action) => Value,
 ): ReactStore<Value, Action> {
   const store: Store<Value, Action> = {
     $$typeof: REACT_STORE_TYPE,
@@ -65,7 +65,7 @@ export function createStore<Value, Action>(
 export function useStore<Value>(store: ReactStore<Value, any>): Value {
   if (!isStore<Value>(store)) {
     throw new Error(
-      "Invalid store type. Ensure you are using a valid React store."
+      "Invalid store type. Ensure you are using a valid React store.",
     );
   }
 
