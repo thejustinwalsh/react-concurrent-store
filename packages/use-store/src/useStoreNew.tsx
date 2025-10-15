@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { Store } from "./Store";
-import { Reducer } from "./types";
+import { ISource, Reducer } from "./types";
 import { StoreManager } from "./StoreManager";
 
 /**
@@ -37,8 +37,26 @@ import { StoreManager } from "./StoreManager";
 export function createStore<S, A>(
   reducer: Reducer<S, A>,
   initialState: S
+): Store<S, A> & {dispatch: (action: A) => void} {
+  let state = initialState;
+  const store = new Store<S, A>({
+    getState: () => state,
+    reducer,
+  });
+
+  // @ts-expect-error TODO: Fix typing
+  store.dispatch = (action: A) => {
+    state = reducer(state, action);
+    store.handleUpdate(action);
+  }
+  // @ts-expect-error TODO: Fix typing
+  return store;
+}
+
+export function createStoreFromSource<S, A>(
+  source: ISource<S, A>
 ): Store<S, A> {
-  return new Store<S, A>(reducer, initialState);
+  return new Store<S, A>(source);
 }
 
 const storeManagerContext = createContext<StoreManager | null>(null);
@@ -198,4 +216,12 @@ export function useStoreSelector<S, T>(
   }, []);
 
   return state;
+}
+
+function identity<T>(x: T): T {
+  return x;
+}
+
+export function useStore<S>(store: Store<S, any>): S {
+  return useStoreSelector(store, identity);
 }

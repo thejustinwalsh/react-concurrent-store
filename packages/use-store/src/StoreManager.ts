@@ -14,7 +14,7 @@ type StoresSnapshot = Map<Store<unknown, unknown>, unknown>;
  * component to observe every state update and record each store's committed
  * state.
  */
-export class StoreManager extends Emitter {
+export class StoreManager extends Emitter<[]> {
   _storeRefCounts: Map<Store<unknown, unknown>, RefCountedSubscription> =
     new Map();
 

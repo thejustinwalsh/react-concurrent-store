@@ -3,7 +3,7 @@ import {
   startTransition,
 
 } from "react";
-import { Reducer } from "./types";
+import { ISource } from "./types";
 import Emitter from "./Emitter";
 
 /**
@@ -35,15 +35,15 @@ function reactTransitionIsActive() {
   return !!sharedReactInternals.T;
 }
 
-export class Store<S, A> extends Emitter {
-  reducer: Reducer<S, A>;
-  state: S;
-  committedState: S;
-  constructor(reducer: Reducer<S, A>, initialValue: S) {
+export class Store<S, A> extends Emitter<[]> {
+  private source: ISource<S, A>;
+  private state: S;
+  private committedState: S;
+  constructor(source: ISource<S, A>) {
     super();
-    this.reducer = reducer;
-    this.state = initialValue;
-    this.committedState = initialValue;
+    this.source = source;
+    this.state = source.getState();
+    this.committedState = source.getState();
   }
 
   commit(state: S) {
@@ -55,9 +55,10 @@ export class Store<S, A> extends Emitter {
   getState(): S {
     return this.state;
   }
-  dispatch = (action: A) => {
+  handleUpdate(action: A) {
     const noPendingTransitions = this.committedState === this.state;
-    this.state = this.reducer(this.state, action);
+
+    this.state = this.source.getState();
 
     if (reactTransitionIsActive()) {
       // For transition updates, everything is simple. Just notify all readers
@@ -82,7 +83,7 @@ export class Store<S, A> extends Emitter {
 
         // React's rebasing semantics mean readers will expect to see this
         // update applied on top of the currently committed state sync.
-        this.committedState = this.reducer(this.committedState, action);
+        this.committedState = this.source.reducer(this.committedState, action);
         // Temporarily set the state so that readers during this notify read the
         // new committed state.
         this.state = this.committedState;
