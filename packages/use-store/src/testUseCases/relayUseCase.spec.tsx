@@ -128,6 +128,9 @@ describe("createStore for a Relay-like state solution", () => {
     await act(async () => {
       store.publishAndNotify((prev) => {
         const next = new RecordSource();
+        for(const [key, value] of prev._records.entries()) {
+          next.set(key, value);
+        }
         next.set("1", { id: "1", name: "MALICE", friend: "1" });
         return next;
       });

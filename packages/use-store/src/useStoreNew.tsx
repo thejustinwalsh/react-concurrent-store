@@ -12,6 +12,8 @@ import {
 import { Store } from "./Store";
 import { ISource, Reducer } from "./types";
 import { StoreManager } from "./StoreManager";
+import Emitter from "./Emitter";
+
 
 /**
  * Concurrent-Safe Store
@@ -39,13 +41,20 @@ export function createStore<S, A>(
   initialState: S
 ): Store<S, A> {
   let state = initialState;
-  return new Store<S, A>({
+  const emitter = new Emitter<[A]>();
+  const store = new Store<S, A>({
     getState: () => state,
-    dispatch: (action) => {
-      state = reducer(state, action);
-    },
     reducer,
   });
+
+  emitter.subscribe((action) => {
+    store.handleUpdate(action);
+  });
+  store.dispatch = (action) => {
+    state = reducer(state, action);
+    emitter.notify(action);
+  }
+  return store;
 }
 
 export function createStoreFromSource<S, A>(

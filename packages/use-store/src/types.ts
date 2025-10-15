@@ -23,14 +23,6 @@ export interface ISource<S, A> {
    * See: https://jordaneldredge.com/notes/react-rebasing/
    */
   reducer: Reducer<S, A>;
-  /**
-   * A function which takes an updater/action, syncronously updates the state
-   * returned by `getState` and optinonally synchronously notifies non-React
-   * consumers.
-   *
-   * TODO(captbaritone): I think this can be improved.
-   */
-  dispatch(action: A): void;
 }
 
 export type Reducer<S, A> = (state: S, action: A) => S;

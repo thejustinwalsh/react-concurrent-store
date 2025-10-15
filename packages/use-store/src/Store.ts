@@ -35,7 +35,7 @@ function reactTransitionIsActive() {
   return !!sharedReactInternals.T;
 }
 
-export class Store<S, A> extends Emitter {
+export class Store<S, A> extends Emitter<[]> {
   private source: ISource<S, A>;
   private state: S;
   private committedState: S;
@@ -55,12 +55,9 @@ export class Store<S, A> extends Emitter {
   getState(): S {
     return this.state;
   }
-  dispatch = (action: A) => {
+  handleUpdate(action: A) {
     const noPendingTransitions = this.committedState === this.state;
 
-    // The underlying store might notify non-React subscribers at this point.
-    // Non-React subscribers will always see state updats synchronously.
-    this.source.dispatch(action);
     this.state = this.source.getState();
 
     if (reactTransitionIsActive()) {

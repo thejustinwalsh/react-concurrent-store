@@ -15,12 +15,12 @@ type RelayRecord = {
 
 export class RecordSource {
   _records: Map<string, RelayRecord> = new Map();
-  _previous: RecordSource | null = null;
+  _newer: RecordSource | null = null;
 
   get(id: string): RelayRecord | undefined {
     const value = this._records.get(id);
-    if (value === undefined && this._previous != null) {
-      return this._previous.get(id);
+    if (value === undefined && this._newer != null) {
+      return this._newer.get(id);
     }
     return value;
   }
@@ -60,9 +60,6 @@ export class RelayStore {
   constructor() {
     const source: ISource<RecordSource, Updater> = {
       getState: () => this._source,
-      dispatch: (updater) => {
-        this._publishAndNotify(updater);
-      },
       reducer: (recordSource: RecordSource, updater: Updater): RecordSource => {
         return updater(recordSource);
       },
@@ -75,21 +72,13 @@ export class RelayStore {
   }
 
   publishAndNotify(updater: Updater) {
-    return this.reactStore.dispatch(updater);
+    this._source = updater(this._source);
+    this.reactStore.handleUpdate(updater);
   }
 
   _publishAndNotify(updater: Updater) {
-    const next = updater(this._source);
-    const current = this._source;
-    const previous = new RecordSource();
-    for (const [id, record] of next._records) {
-      const currentRecord = current.get(id);
-      if (currentRecord != null) {
-        previous.set(id, currentRecord);
-      }
-      current.set(id, record);
-    }
-    current._previous = previous;
+    this._source = updater(this._source);
+    this.reactStore.dispatch(updater);
   }
 }
 

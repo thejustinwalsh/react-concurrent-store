@@ -57,11 +57,15 @@ const addReactStore: StoreEnhancer<any> = (createReduxStore) => {
     // reordering.
     const reactStore = createStoreFromSource({
       getState: store.getState,
-      dispatch: store.dispatch,
       reducer: reducer,
     });
 
-    return { ...store, dispatch: reactStore.dispatch, reactStore };
+    function dispatch(action: any) {
+      store.dispatch(action);
+      reactStore.handleUpdate(action);
+    }
+
+    return { ...store, dispatch, reactStore };
   };
 };
 
