@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { experimental } from "../index";
 import type { Store } from "../Store";
 import { ISource } from "../types";
@@ -146,12 +146,19 @@ export function useRelayStore(): Store<RecordSource, Updater> {
   return store.reactStore;
 }
 
+
+
 export function useFragment<T>(ref: FragmentRef): T {
   const store = useRelayStore();
-  const selector = useCallback(
-    (state: RecordSource): T => {
-      return read(state, ref);
-    },
+  const selector = useMemo(() => {
+    const cache = new WeakMap<RecordSource, T>();
+    return (state: RecordSource): T => {
+      if(!cache.has(state)) {
+        cache.set(state, read(state, ref));
+      }
+      return cache.get(state)!;
+    }
+  },
     [ref, store]
   );
   return useStoreSelector(store, selector);

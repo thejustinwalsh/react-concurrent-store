@@ -83,8 +83,10 @@ describe("createStore for a Relay-like state solution", () => {
   it("Minimal example of MiniRelay", async () => {
     const store = new RelayStore();
     store.publishAndNotify(initialize);
+    store.reactStore.commit(store.reactStore.getState())
 
     function FragmentComponent() {
+      logger.log({type: "render"});
       const data = useFragment<FragmentType>(FRAGMENT);
       return (
         <div>
@@ -112,7 +114,7 @@ describe("createStore for a Relay-like state solution", () => {
       return render(<App />);
     });
 
-    // logger.assertLog([{ type: "render" }]);
+    logger.assertLog([{ type: "render" }]);
     expect(asFragment()).toMatchInlineSnapshot(`
       <DocumentFragment>
         <div>
@@ -135,6 +137,7 @@ describe("createStore for a Relay-like state solution", () => {
         return next;
       });
     });
+    logger.assertLog([{ type: "render" }]);
 
     expect(asFragment()).toMatchInlineSnapshot(`
       <DocumentFragment>
