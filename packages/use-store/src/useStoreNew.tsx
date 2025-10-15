@@ -9,6 +9,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { Store } from "./Store";
+import { Reducer } from "./types";
+import { StoreManager } from "./StoreManager";
 
 /**
  * Concurrent-Safe Store
@@ -31,16 +34,6 @@ import {
  *
  * A more standard context based solution should also be possible.
  */
-
-const sharedReactInternals: { T: unknown } =
-  React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE as any;
-
-function reactTransitionIsActive() {
-  return !!sharedReactInternals.T;
-}
-
-type Reducer<S, A> = (state: S, action: A) => S;
-
 export function createStore<S, A>(
   reducer: Reducer<S, A>,
   initialState: S
@@ -54,32 +47,28 @@ const storeManagerContext = createContext<StoreManager | null>(null);
  * An awkward kludge which attempts to signal back to the stores when a
  * transition containing store updates has been committed to the React tree.
  */
-const CommitTracker = memo(() => {
-  const storeManager = useContext(storeManagerContext);
-  if (storeManager == null) {
-    throw new Error(
-      "Expected CommitTracker to be rendered within a StoreProvider"
+const CommitTracker = memo(
+  ({ storeManager }: { storeManager: StoreManager }) => {
+    const [allStates, setAllStates] = useState(
+      storeManager.getAllCommittedStates()
     );
-  }
-  const [allStates, setAllStates] = useState(
-    storeManager.getAllCommittedStates()
-  );
-  useEffect(() => {
-    const unsubscribe = storeManager.subscribe(() => {
-      const allStates = storeManager.getAllStates();
-      setAllStates(allStates);
-    });
-    return () => {
-      unsubscribe();
-      storeManager.sweep();
-    };
-  }, [storeManager]);
+    useEffect(() => {
+      const unsubscribe = storeManager.subscribe(() => {
+        const allStates = storeManager.getAllStates();
+        setAllStates(allStates);
+      });
+      return () => {
+        unsubscribe();
+        storeManager.sweep();
+      };
+    }, [storeManager]);
 
-  useLayoutEffect(() => {
-    storeManager.commitAllStates(allStates);
-  }, [storeManager, allStates]);
-  return null;
-});
+    useLayoutEffect(() => {
+      storeManager.commitAllStates(allStates);
+    }, [storeManager, allStates]);
+    return null;
+  }
+);
 
 /**
  * A single provider which tracks commits for all stores being read in the tree.
@@ -88,7 +77,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [storeManager] = useState(() => new StoreManager());
   return (
     <storeManagerContext.Provider value={storeManager}>
-      <CommitTracker />
+      <CommitTracker storeManager={storeManager} />
       {children}
     </storeManagerContext.Provider>
   );
@@ -209,177 +198,4 @@ export function useStoreSelector<S, T>(
   }, []);
 
   return state;
-}
-
-class Emitter {
-  _listeners: Array<() => void> = [];
-  subscribe(cb: () => void): () => void {
-    const wrapped = () => cb();
-    this._listeners.push(wrapped);
-    return () => {
-      this._listeners = this._listeners.filter((s) => s !== wrapped);
-    };
-  }
-  notify() {
-    this._listeners.forEach((cb) => {
-      cb();
-    });
-  }
-}
-
-class Store<S, A> extends Emitter {
-  reducer: Reducer<S, A>;
-  state: S;
-  committedState: S;
-  constructor(reducer: Reducer<S, A>, initialValue: S) {
-    super();
-    this.reducer = reducer;
-    this.state = initialValue;
-    this.committedState = initialValue;
-  }
-
-  commit(state: S) {
-    this.committedState = state;
-  }
-  getCommittedState(): S {
-    return this.committedState;
-  }
-  getState(): S {
-    return this.state;
-  }
-  dispatch = (action: A) => {
-    const noPendingTransitions = this.committedState === this.state;
-    this.state = this.reducer(this.state, action);
-
-    if (reactTransitionIsActive()) {
-      // For transition updates, everything is simple. Just notify all readers
-      // of the new state.
-      this.notify();
-    } else {
-      // For sync updates, we must consider if we need to juggle multiple state
-      // updates.
-
-      // If there are no pending transition updates, things are very similar to
-      // a transition update except that we can proactively mark the new state
-      // as committed.
-      if (noPendingTransitions) {
-        this.committedState = this.state;
-        this.notify();
-      } else {
-        // If there are pending transition updates, we must ensure we compute
-        // an additional new states: This update applied on top of the current
-        // committed state.
-
-        const newState = this.state;
-
-        // React's rebasing semantics mean readers will expect to see this
-        // update applied on top of the currently committed state sync.
-        this.committedState = this.reducer(this.committedState, action);
-        // Temporarily set the state so that readers during this notify read the
-        // new committed state.
-        this.state = this.committedState;
-        this.notify();
-
-        // Now that we've triggered the sync updates, we need to ensure the
-        // pending transition update now goes to the correct new state. We reset
-        // the state to point to the new transition state and trigger a set of
-        // updates inside a transition.
-
-        // With existing transition semantics this should result in these
-        // updates entangling with the previous transition and that transition
-        // will now include this state instead of the previously pending state.
-        this.state = newState;
-        startTransition(() => {
-          this.notify();
-        });
-      }
-    }
-  };
-}
-
-type RefCountedSubscription = {
-  count: number;
-  unsubscribe: () => void;
-};
-
-type StoresSnapshot = Map<Store<unknown, unknown>, unknown>;
-
-/**
- * StoreManager tracks all actively rendered stores in the tree and maintains a
- * reference-counted subscription to each one. This allows the <CommitTracker />
- * component to observe every state update and record each store's committed
- * state.
- */
-class StoreManager extends Emitter {
-  _storeRefCounts: Map<Store<unknown, unknown>, RefCountedSubscription> =
-    new Map();
-
-  getAllCommittedStates(): StoresSnapshot {
-    return new Map(
-      Array.from(this._storeRefCounts.keys()).map((store) => [
-        store,
-        store.getCommittedState(),
-      ])
-    );
-  }
-
-  getAllStates(): StoresSnapshot {
-    return new Map(
-      Array.from(this._storeRefCounts.keys()).map((store) => [
-        store,
-        store.getState(),
-      ])
-    );
-  }
-
-  addStore(store: Store<any, any>) {
-    const prev = this._storeRefCounts.get(store);
-    if (prev == null) {
-      this._storeRefCounts.set(store, {
-        unsubscribe: store.subscribe(() => {
-          this.notify();
-        }),
-        count: 1,
-      });
-    } else {
-      this._storeRefCounts.set(store, { ...prev, count: prev.count + 1 });
-    }
-  }
-
-  commitAllStates(state: StoresSnapshot) {
-    for (const [store, committedState] of state) {
-      store.commit(committedState);
-    }
-    this.sweep();
-  }
-
-  removeStore(store: Store<any, any>) {
-    const prev = this._storeRefCounts.get(store);
-    if (prev == null) {
-      throw new Error(
-        "Imblance in concurrent-safe store reference counting. This is a bug in react-use-store, please report it."
-      );
-    }
-    // We decrement the count here, but don't actually do the cleanup.  This is
-    // because a state update could cause the last store subscriber to unmount
-    // while also mounting a new subscriber. In this case we need to ensure we
-    // don't lose the currently commited state in the moment between when the
-    // clean-up of the unmounting component is run and the useLayoutEffect of
-    // the mounting component is run.
-
-    // So, we cleanup unreferenced stores after each commit.
-    this._storeRefCounts.set(store, {
-      unsubscribe: prev.unsubscribe,
-      count: prev.count - 1,
-    });
-  }
-
-  sweep() {
-    for (const [store, refs] of this._storeRefCounts) {
-      if (refs.count < 1) {
-        refs.unsubscribe();
-        this._storeRefCounts.delete(store);
-      }
-    }
-  }
 }
