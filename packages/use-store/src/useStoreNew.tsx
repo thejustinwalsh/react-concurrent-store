@@ -12,8 +12,6 @@ import {
 import { Store } from "./Store";
 import { ISource, Reducer } from "./types";
 import { StoreManager } from "./StoreManager";
-import Emitter from "./Emitter";
-
 
 /**
  * Concurrent-Safe Store
@@ -39,21 +37,19 @@ import Emitter from "./Emitter";
 export function createStore<S, A>(
   reducer: Reducer<S, A>,
   initialState: S
-): Store<S, A> {
+): Store<S, A> & {dispatch: (action: A) => void} {
   let state = initialState;
-  const emitter = new Emitter<[A]>();
   const store = new Store<S, A>({
     getState: () => state,
     reducer,
   });
 
-  emitter.subscribe((action) => {
-    store.handleUpdate(action);
-  });
-  store.dispatch = (action) => {
+  // @ts-expect-error TODO: Fix typing
+  store.dispatch = (action: A) => {
     state = reducer(state, action);
-    emitter.notify(action);
+    store.handleUpdate(action);
   }
+  // @ts-expect-error TODO: Fix typing
   return store;
 }
 

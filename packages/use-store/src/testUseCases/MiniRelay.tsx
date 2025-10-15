@@ -6,7 +6,7 @@ const { createStoreFromSource, useStoreSelector } = experimental;
 
 /**
  * A minimal implementation of a key value store that works similarly to Relay's
- * store API.
+ * store API, but adapted to be compatible with the useStoreSelector hook.
  */
 type RelayRecord = {
   id: string;
@@ -74,11 +74,6 @@ export class RelayStore {
   publishAndNotify(updater: Updater) {
     this._source = updater(this._source);
     this.reactStore.handleUpdate(updater);
-  }
-
-  _publishAndNotify(updater: Updater) {
-    this._source = updater(this._source);
-    this.reactStore.dispatch(updater);
   }
 }
 
