@@ -1,8 +1,5 @@
 import * as React from "react";
-import {
-  startTransition,
-
-} from "react";
+import { startTransition } from "react";
 import { ISource } from "./types";
 import Emitter from "./Emitter";
 
@@ -103,5 +100,5 @@ export class Store<S, A> extends Emitter<[]> {
         });
       }
     }
-  };
+  }
 }

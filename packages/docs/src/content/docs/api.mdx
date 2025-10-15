@@ -150,7 +150,7 @@ simpleStore.update("world"); // Value becomes "world"
 // Store with reducer
 const counterStore = createStore(
   0,
-  (current, action: number) => current + action
+  (current, action: number) => current + action,
 );
 counterStore.update(5); // Adds 5 to current value
 ```

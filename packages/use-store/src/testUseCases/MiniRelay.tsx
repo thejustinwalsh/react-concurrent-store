@@ -91,7 +91,7 @@ function readNode(
   source: RecordSource,
   record: RelayRecord,
   node: FragmentAstNode,
-  data: { [key: string]: any }
+  data: { [key: string]: any },
 ): any {
   switch (node.kind) {
     case "scalar":
@@ -141,20 +141,16 @@ export function useRelayStore(): Store<RecordSource, Updater> {
   return store.reactStore;
 }
 
-
-
 export function useFragment<T>(ref: FragmentRef): T {
   const store = useRelayStore();
   const selector = useMemo(() => {
     const cache = new WeakMap<RecordSource, T>();
     return (state: RecordSource): T => {
-      if(!cache.has(state)) {
+      if (!cache.has(state)) {
         cache.set(state, read(state, ref));
       }
       return cache.get(state)!;
-    }
-  },
-    [ref, store]
-  );
+    };
+  }, [ref, store]);
   return useStoreSelector(store, selector);
 }

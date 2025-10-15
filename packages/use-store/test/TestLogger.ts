@@ -1,4 +1,4 @@
-import {expect} from 'vitest';
+import { expect } from "vitest";
 
 // Emulate the Scheduler.log/assertLog pattern from React internal tests
 export default class Logger {
