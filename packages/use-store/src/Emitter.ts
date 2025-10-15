@@ -7,7 +7,7 @@ export default class Emitter {
       this._listeners = this._listeners.filter((s) => s !== wrapped);
     };
   }
-  notify() {
+  protected notify() {
     this._listeners.forEach((cb) => {
       cb();
     });

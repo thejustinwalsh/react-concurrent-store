@@ -9,7 +9,10 @@ import {
   use,
 } from "react";
 import { flushSync } from "react-dom";
-import { createStore, StoreProvider, useStoreSelector } from "./useStoreNew";
+import { experimental } from "./index";
+import Logger from "../test/TestLogger";
+
+const { createStore, StoreProvider, useStoreSelector } = experimental;
 
 type State = number;
 
@@ -34,21 +37,6 @@ function reducer(state: State, action: Action): State {
 
 function identity<T>(v: T): T {
   return v;
-}
-
-// Emulate the Scheduler.log/assertLog pattern from React internal tests
-class Logger {
-  _logs: Array<unknown> = [];
-  log(value: unknown) {
-    this._logs.push(value);
-  }
-  assertLog(expected: Array<unknown>) {
-    const previous = this._logs;
-    // Reset logs before assertings so that if we fail the assertion we don't
-    // also fail the `afterEach` check.
-    this._logs = [];
-    expect(previous).toEqual(expected);
-  }
 }
 
 let logger: Logger;
@@ -369,7 +357,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
 
-    expect(store.committedState).toBe(4);
+    expect(store.getCommittedState()).toBe(4);
 
     await act(async () => {
       rerender(
