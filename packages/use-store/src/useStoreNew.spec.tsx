@@ -384,10 +384,6 @@ describe("Experimental Userland Store", () => {
     logger.assertLog([
       { testid: "count", count: 4 },
       { testid: "otherCount", count: 4 },
-      // // TODO FIXME
-      // { testid: "count", count: 3 },
-      // { testid: "otherCount", count: 3 },
-      // // END TODO FIXME
       { testid: "count", count: 5 }, // Fixup render triggered by increment on mount
       { testid: "otherCount", count: 5 }, // Fixup render triggered by increment on mount
     ]);
