@@ -594,7 +594,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -699,6 +699,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("Multiple sync updates interrupting transition correctly tracks committed state", async () => {
@@ -724,7 +726,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -831,6 +833,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("flushSync update interrupting transition correctly tracks committed state", async () => {
@@ -856,7 +860,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -957,6 +961,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("correctly handles consecutive sync updates", async () => {
@@ -976,7 +982,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -1004,6 +1010,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("dynamic selectors are not yet supported", async () => {
@@ -1026,7 +1034,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -1054,6 +1062,8 @@ describe("Experimental Userland Store", () => {
     expect(error.message).toMatch(
       "useStoreSelector does not currently support dynamic selectors"
     );
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("dynamic stores are not yet supported", async () => {
@@ -1077,7 +1087,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -1105,6 +1115,9 @@ describe("Experimental Userland Store", () => {
     expect(error.message).toMatch(
       "useStoreSelector does not currently support dynamic stores"
     );
+    unmount();
+    expect(store1._listeners.length).toBe(0);
+    expect(store2._listeners.length).toBe(0);
   });
 
   it("transition store update causes new store reader to mount", async () => {
@@ -1132,7 +1145,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -1158,6 +1171,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   // Describes a limitation of our fixup logic: If a component mounts sync
@@ -1203,7 +1218,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -1296,6 +1311,8 @@ describe("Experimental Userland Store", () => {
            </div>
          </DocumentFragment>
        `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("can read from multiple different stores updating independently", async () => {
