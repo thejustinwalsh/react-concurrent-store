@@ -65,12 +65,12 @@ const CommitTracker = memo(() => {
     storeManager.getAllCommittedStates()
   );
   useEffect(() => {
-    const unsub = storeManager.subscribe(() => {
+    const unsubscribe = storeManager.subscribe(() => {
       const allStates = storeManager.getAllStates();
       setAllStates(allStates);
     });
     return () => {
-      unsub();
+      unsubscribe();
       storeManager.sweep();
     };
   }, [storeManager]);
@@ -304,6 +304,12 @@ type RefCountedSubscription = {
 
 type StoresSnapshot = Map<Store<unknown, unknown>, unknown>;
 
+/**
+ * StoreManager tracks all actively rendered stores in the tree and maintains a
+ * reference-counted subscription to each one. This allows the <CommitTracker />
+ * component to observe every state update and record each store's committed
+ * state.
+ */
 class StoreManager extends Emitter {
   _storeRefCounts: Map<Store<unknown, unknown>, RefCountedSubscription> =
     new Map();
@@ -357,12 +363,13 @@ class StoreManager extends Emitter {
     // We decrement the count here, but don't actually do the cleanup.  This is
     // because a state update could cause the last store subscriber to unmount
     // while also mounting a new subscriber. In this case we need to ensure we
-    // don't lose the currently commited state.
-    //
-    // So, the cleanup of unreferenced stores is done in <CommitTracker /> after
-    // each commit.
+    // don't lose the currently commited state in the moment between when the
+    // clean-up of the unmounting component is run and the useLayoutEffect of
+    // the mounting component is run.
+
+    // So, we cleanup unreferenced stores after each commit.
     this._storeRefCounts.set(store, {
-      ...prev,
+      unsubscribe: prev.unsubscribe,
       count: prev.count - 1,
     });
   }

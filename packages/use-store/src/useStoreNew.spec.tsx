@@ -1298,16 +1298,18 @@ describe("Experimental Userland Store", () => {
        `);
   });
 
-  it("can read from multiple different stores", async () => {
+  it("can read from multiple different stores updating independently", async () => {
     const storeA = createStore(reducer, 1);
     const storeB = createStore(reducer, 50);
 
     function CountA() {
       const count = useStoreSelector(storeA, identity);
+      logger.log({ type: "render", testid: "CountA", count });
       return <div>A: {count}</div>;
     }
     function CountB() {
       const count = useStoreSelector(storeB, identity);
+      logger.log({ type: "render", testid: "CountB", count });
       return <div>B: {count}</div>;
     }
 
@@ -1320,7 +1322,7 @@ describe("Experimental Userland Store", () => {
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -1334,5 +1336,33 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    logger.assertLog([
+      {
+        type: "render",
+        testid: "CountA",
+        count: 1,
+      },
+      {
+        type: "render",
+        testid: "CountB",
+        count: 50,
+      },
+    ]);
+    await act(async () => {
+      storeB.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([
+      {
+        type: "render",
+        testid: "CountB",
+        count: 51,
+      },
+    ]);
+
+    unmount();
+
+    expect(storeA._listeners.length).toBe(0);
+    expect(storeB._listeners.length).toBe(0);
   });
 });
