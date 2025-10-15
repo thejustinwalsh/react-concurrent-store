@@ -44,46 +44,53 @@ type Reducer<S, A> = (state: S, action: A) => S;
 export function createStore<S, A>(
   reducer: Reducer<S, A>,
   initialState: S
-): StoreWrapper<S, A> {
-  return new StoreWrapper<S, A>(reducer, initialState);
+): Store<S, A> {
+  return new Store<S, A>(reducer, initialState);
 }
 
-const storeContext = createContext<StoreWrapper<unknown, unknown> | null>(null);
+const storeManagerContext = createContext<StoreManager | null>(null);
 
 /**
- * An awkward kludge which attempts to signal back to the store when a
+ * An awkward kludge which attempts to signal back to the stores when a
  * transition containing store updates has been committed to the React tree.
  */
 const CommitTracker = memo(() => {
-  const storeWrapper = useContext(storeContext);
-  if (storeWrapper == null) {
+  const storeManager = useContext(storeManagerContext);
+  if (storeManager == null) {
     throw new Error(
       "Expected CommitTracker to be rendered within a StoreProvider"
     );
   }
-  const [state, setState] = useState(storeWrapper.getCommittedState());
+  const [allStates, setAllStates] = useState(
+    storeManager.getAllCommittedStates()
+  );
   useEffect(() => {
-    return storeWrapper.subscribe(() => {
-      setState(storeWrapper.getState());
+    const unsub = storeManager.subscribe(() => {
+      const allStates = storeManager.getAllStates();
+      setAllStates(allStates);
     });
-  }, []);
+    return () => {
+      unsub();
+      storeManager.sweep();
+    };
+  }, [storeManager]);
 
-  useLayoutEffect(() => storeWrapper.commit(state), [state]);
+  useLayoutEffect(() => {
+    storeManager.commitAllStates(allStates);
+  }, [storeManager, allStates]);
   return null;
 });
 
-export function StoreProvider({
-  children,
-  store,
-}: {
-  children: React.ReactNode;
-  store: StoreWrapper<any, any>;
-}) {
+/**
+ * A single provider which tracks commits for all stores being read in the tree.
+ */
+export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const [storeManager] = useState(() => new StoreManager());
   return (
-    <storeContext.Provider value={store}>
+    <storeManagerContext.Provider value={storeManager}>
       <CommitTracker />
       {children}
-    </storeContext.Provider>
+    </storeManagerContext.Provider>
   );
 }
 
@@ -118,9 +125,15 @@ export function StoreProvider({
  * scheduled to catch us up with the rest of the app.
  */
 export function useStoreSelector<S, T>(
-  store: StoreWrapper<S, any>,
+  store: Store<S, any>,
   selector: (state: S) => T
 ): T {
+  const storeManager = useContext(storeManagerContext);
+  if (storeManager == null) {
+    throw new Error(
+      "Expected useStoreSelector to be rendered within a StoreProvider."
+    );
+  }
   const previousStoreRef = useRef(store);
   if (store !== previousStoreRef.current) {
     throw new Error(
@@ -149,6 +162,8 @@ export function useStoreSelector<S, T>(
   const [state, setState] = useState<T>(() => selector(store.getState()));
 
   useLayoutEffect(() => {
+    // Ensure our store is managed by the tracker.
+    storeManager.addStore(store);
     const mountState = selector(store.getState());
     const mountCommittedState = selector(store.getCommittedState());
 
@@ -181,21 +196,43 @@ export function useStoreSelector<S, T>(
         setState(mountState);
       });
     }
-    return store.subscribe(() => {
-      setState(selector(store.getState()));
+    const unsubscribe = store.subscribe(() => {
+      const state = store.getState();
+      setState(selector(state));
     });
+    return () => {
+      unsubscribe();
+      storeManager.removeStore(store);
+    };
     // We intentionally ignore `state` since we only care about its value on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return state;
 }
 
-class StoreWrapper<S, A> {
+class Emitter {
+  _listeners: Array<() => void> = [];
+  subscribe(cb: () => void): () => void {
+    const wrapped = () => cb();
+    this._listeners.push(wrapped);
+    return () => {
+      this._listeners = this._listeners.filter((s) => s !== wrapped);
+    };
+  }
+  notify() {
+    this._listeners.forEach((cb) => {
+      cb();
+    });
+  }
+}
+
+class Store<S, A> extends Emitter {
   reducer: Reducer<S, A>;
   state: S;
   committedState: S;
-  subscriptions: Array<() => void> = [];
   constructor(reducer: Reducer<S, A>, initialValue: S) {
+    super();
     this.reducer = reducer;
     this.state = initialValue;
     this.committedState = initialValue;
@@ -258,18 +295,84 @@ class StoreWrapper<S, A> {
       }
     }
   };
+}
 
-  notify() {
-    this.subscriptions.forEach((cb) => {
-      cb();
+type RefCountedSubscription = {
+  count: number;
+  unsubscribe: () => void;
+};
+
+type StoresSnapshot = Map<Store<unknown, unknown>, unknown>;
+
+class StoreManager extends Emitter {
+  _storeRefCounts: Map<Store<unknown, unknown>, RefCountedSubscription> =
+    new Map();
+
+  getAllCommittedStates(): StoresSnapshot {
+    return new Map(
+      Array.from(this._storeRefCounts.keys()).map((store) => [
+        store,
+        store.getCommittedState(),
+      ])
+    );
+  }
+
+  getAllStates(): StoresSnapshot {
+    return new Map(
+      Array.from(this._storeRefCounts.keys()).map((store) => [
+        store,
+        store.getState(),
+      ])
+    );
+  }
+
+  addStore(store: Store<any, any>) {
+    const prev = this._storeRefCounts.get(store);
+    if (prev == null) {
+      this._storeRefCounts.set(store, {
+        unsubscribe: store.subscribe(() => {
+          this.notify();
+        }),
+        count: 1,
+      });
+    } else {
+      this._storeRefCounts.set(store, { ...prev, count: prev.count + 1 });
+    }
+  }
+
+  commitAllStates(state: StoresSnapshot) {
+    for (const [store, committedState] of state) {
+      store.commit(committedState);
+    }
+    this.sweep();
+  }
+
+  removeStore(store: Store<any, any>) {
+    const prev = this._storeRefCounts.get(store);
+    if (prev == null) {
+      throw new Error(
+        "Imblance in concurrent-safe store reference counting. This is a bug in react-use-store, please report it."
+      );
+    }
+    // We decrement the count here, but don't actually do the cleanup.  This is
+    // because a state update could cause the last store subscriber to unmount
+    // while also mounting a new subscriber. In this case we need to ensure we
+    // don't lose the currently commited state.
+    //
+    // So, the cleanup of unreferenced stores is done in <CommitTracker /> after
+    // each commit.
+    this._storeRefCounts.set(store, {
+      ...prev,
+      count: prev.count - 1,
     });
   }
 
-  subscribe(cb: () => void): () => void {
-    const wrapped = () => cb();
-    this.subscriptions.push(wrapped);
-    return () => {
-      this.subscriptions = this.subscriptions.filter((s) => s !== wrapped);
-    };
+  sweep() {
+    for (const [store, refs] of this._storeRefCounts) {
+      if (refs.count < 1) {
+        refs.unsubscribe();
+        this._storeRefCounts.delete(store);
+      }
+    }
   }
 }

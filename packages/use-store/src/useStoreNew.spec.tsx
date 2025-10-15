@@ -78,14 +78,14 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -170,6 +170,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("Does not tear when new component mounts in its own transition mid transition", async () => {
@@ -188,14 +190,14 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
       );
     }
 
-    const { asFragment } = await act(async () => {
+    const { asFragment, unmount } = await act(async () => {
       return render(<App />);
     });
 
@@ -261,6 +263,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("Does not miss updates triggered in useEffect or useLayoutEffect", async () => {
@@ -281,7 +285,7 @@ describe("Experimental Userland Store", () => {
       return null;
     }
 
-    function IncrementOnLayout() {
+    function IncrementTransitionOnLayout() {
       useLayoutEffect(() => {
         startTransition(() => {
           store.dispatch({ type: "INCREMENT" });
@@ -290,9 +294,9 @@ describe("Experimental Userland Store", () => {
       return null;
     }
 
-    const { rerender, asFragment } = await act(async () => {
+    const { rerender, asFragment, unmount } = await act(async () => {
       return render(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <IncrementOnMount />
           <Count testid="count" />
         </StoreProvider>
@@ -315,7 +319,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           <IncrementOnMount />
           <Count testid="otherCount" />
@@ -344,8 +348,8 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider store={store}>
-          <IncrementOnLayout />
+        <StoreProvider>
+          <IncrementTransitionOnLayout />
           <Count testid="count" />
         </StoreProvider>
       );
@@ -365,18 +369,25 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
 
+    expect(store.committedState).toBe(4);
+
     await act(async () => {
       rerender(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
-          <IncrementOnLayout />
+          <IncrementTransitionOnLayout />
           <Count testid="otherCount" />
         </StoreProvider>
       );
     });
+
     logger.assertLog([
       { testid: "count", count: 4 },
       { testid: "otherCount", count: 4 },
+      // // TODO FIXME
+      // { testid: "count", count: 3 },
+      // { testid: "otherCount", count: 3 },
+      // // END TODO FIXME
       { testid: "count", count: 5 }, // Fixup render triggered by increment on mount
       { testid: "otherCount", count: 5 }, // Fixup render triggered by increment on mount
     ]);
@@ -390,6 +401,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   // This should catch the case where fixups accidentally could get entangled with a transition when they should flush sync.
@@ -427,9 +440,9 @@ describe("Experimental Userland Store", () => {
       });
     });
 
-    const { rerender, asFragment } = await act(async () => {
+    const { rerender, asFragment, unmount } = await act(async () => {
       return render(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <IncrementOnMount />
           <Count testid="count" />
         </StoreProvider>
@@ -454,7 +467,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           <IncrementOnMount />
           <Count testid="otherCount" />
@@ -485,7 +498,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <IncrementOnLayout />
           <Count testid="count" />
         </StoreProvider>
@@ -509,7 +522,7 @@ describe("Experimental Userland Store", () => {
 
     await act(async () => {
       rerender(
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           <IncrementOnLayout />
           <Count testid="otherCount" />
@@ -554,6 +567,8 @@ describe("Experimental Userland Store", () => {
         </div>
       </DocumentFragment>
     `);
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 
   it("Sync update interrupting transition correctly tracks committed state", async () => {
@@ -572,7 +587,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -702,7 +717,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -834,7 +849,7 @@ describe("Experimental Userland Store", () => {
       // It's okay to leak set state in a test.
       setShowOther = _setShowOther;
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
           {showOther && <Count testid="otherCount" />}
         </StoreProvider>
@@ -955,7 +970,7 @@ describe("Experimental Userland Store", () => {
 
     function App() {
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
         </StoreProvider>
       );
@@ -1005,7 +1020,7 @@ describe("Experimental Userland Store", () => {
 
     function App() {
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Count testid="count" />
         </StoreProvider>
       );
@@ -1056,7 +1071,7 @@ describe("Experimental Userland Store", () => {
 
     function App() {
       return (
-        <StoreProvider store={store1}>
+        <StoreProvider>
           <Count testid="count" />
         </StoreProvider>
       );
@@ -1111,7 +1126,7 @@ describe("Experimental Userland Store", () => {
 
     function App() {
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <CountIfEven />
         </StoreProvider>
       );
@@ -1179,7 +1194,7 @@ describe("Experimental Userland Store", () => {
       const [showOther, _setShowOther] = useState(false);
       setShowOther = _setShowOther;
       return (
-        <StoreProvider store={store}>
+        <StoreProvider>
           <Suspense fallback={<div>Loading...</div>}>
             <SuspendOnEven testid="count" />
             {showOther && <SuspendOnEven testid="otherCount" />}
@@ -1281,5 +1296,43 @@ describe("Experimental Userland Store", () => {
            </div>
          </DocumentFragment>
        `);
+  });
+
+  it("can read from multiple different stores", async () => {
+    const storeA = createStore(reducer, 1);
+    const storeB = createStore(reducer, 50);
+
+    function CountA() {
+      const count = useStoreSelector(storeA, identity);
+      return <div>A: {count}</div>;
+    }
+    function CountB() {
+      const count = useStoreSelector(storeB, identity);
+      return <div>B: {count}</div>;
+    }
+
+    function App() {
+      return (
+        <StoreProvider>
+          <CountA />
+          <CountB />
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment } = await act(async () => {
+      return render(<App />);
+    });
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          A: 1
+        </div>
+        <div>
+          B: 50
+        </div>
+      </DocumentFragment>
+    `);
   });
 });
