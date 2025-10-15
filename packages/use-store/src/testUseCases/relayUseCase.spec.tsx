@@ -80,7 +80,7 @@ type FragmentType = {
 };
 
 describe("createStore for a Relay-like state solution", () => {
-  it.only("Minimal example of MiniRelay", async () => {
+  it("Minimal example of MiniRelay", async () => {
     const store = new RelayStore();
     store.publishAndNotify(initialize);
 
