@@ -1,6 +1,6 @@
 {
   "name": "react-concurrent-store",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Ponyfill of experimental React concurrent stores",
   "type": "module",
   "sideEffects": false,
