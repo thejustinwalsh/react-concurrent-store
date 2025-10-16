@@ -29,6 +29,12 @@ In the case of a store-reading component mounting syncronously while the store i
 
 This is sub-optimal from a performance perspective since it means the component must render twice. **It also introduces a potential correctness problem.** If the newly mounted component suspends when attempting to render the transition state it will not mount and thus be unable to apply the fix-up. If that some component would not have suspended in the sync state, this is incorrect behavior and technically a bug.
 
+## Install
+
+```
+npm install react-concurrent-store
+```
+
 ## API
 
 ### `<StoreProvider />`
@@ -36,7 +42,7 @@ This is sub-optimal from a performance perspective since it means the component 
 Your application must have _exactly one_ instance of `<StoreProvider />` at the root of your component such that all components which read from stores are nested within it. This component is an implementation detail of our user-space approach and should not be needed in a first-party implementation of these APIs.
 
 ```ts
-import { experimental } from "<this-library>";
+import { experimental } from "react-concurrent-store";
 import { createRoot } from "react-dom/client";
 const { StoreProvider } = experimental;
 
@@ -58,7 +64,7 @@ root.render(
 Creates a simple store that works similarly to `useReducer`.
 
 ```ts
-import { experimental } from "<this-library>";
+import { experimental } from "react-concurrent-store";
 const { createStore } = experimental;
 
 function reducer(state, action) {
@@ -78,7 +84,7 @@ counterStore.dispatch({ type: "increment" });
 Of course, your actions and reducer can be whatever you want:
 
 ```ts
-import { experimental } from "<this-library>";
+import { experimental } from "react-concurrent-store";
 const { createStore } = experimental;
 
 function reducer(state, action) {
@@ -99,7 +105,7 @@ The `reducer` function _must not_ produce side effects. It may occasionally be i
 Creates a store from some non-React data source. Note that concurrent features places additional requirements on the external state source. Specifically that all updates be expressable as a pure function which can be provided to React such that it can implement update reordering if needed.
 
 ```ts
-import { experimental } from "<this-library>";
+import { experimental } from "react-concurrent-store";
 const { createStoreFromSource } = experimental;
 
 const state = 1;
@@ -134,7 +140,7 @@ increment();
 Use the entire store value in a component:
 
 ```ts
-import { experimental } from "<this-library>";
+import { experimental } from "react-concurrent-store";
 import counterStore from "./MyStore";
 const { useStore } = experimental;
 
@@ -149,7 +155,7 @@ function Counter() {
 Use a value derived from the store in a component.
 
 ```ts
-import { experimental } from "<this-library>";
+import { experimental } from "react-concurrent-store";
 import counterStore from "./MyStore";
 const { useStoreSelector } = experimental;
 
