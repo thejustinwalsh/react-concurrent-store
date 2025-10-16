@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { Store } from "./Store";
-import { ISource, Reducer } from "./types";
+import { ISource, Reducer } from "../types";
 import { StoreManager } from "./StoreManager";
 
 /**

@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo } from "react";
-import { experimental } from "../index";
+import { experimental } from "../../index";
 import type { Store } from "../Store";
-import { ISource } from "../types";
+import { ISource } from "../../types";
 const { createStoreFromSource, useStoreSelector } = experimental;
 
 /**

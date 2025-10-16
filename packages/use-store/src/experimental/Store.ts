@@ -1,29 +1,7 @@
 import * as React from "react";
 import { startTransition } from "react";
-import { ISource } from "./types";
+import { ISource } from "../types";
 import Emitter from "./Emitter";
-
-/**
- * Concurrent-Safe Store
- *
- * The store and a associated hook ensures that when new store readers mount,
- * they will observe the same state as all other components currently mounted,
- * even if the store's state is currently updating within a slow transition.
- *
- * They further ensure that React's rebasing rules apply to state observed via
- * these hooks. Specifically, updates always apply in the order in chronological
- * order. This means that if a sync update to the store is triggered while a
- * transition update to the store is still pending that sync update will apply
- * on top of the pre-transition state (as if the transition update had not yet
- * happened), but when the transition resolves it will reflect the chronological
- * ordering of: initial, transition, sync.
- *
- * Note: Rather than expose generic versions of these hooks/providers and have them
- * read the store via context, we use a factory function which returns pre-bound
- * functions. This has the advantage of producing typed variants of the hooks.
- *
- * A more standard context based solution should also be possible.
- */
 
 const sharedReactInternals: { T: unknown } =
   React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE as any;
