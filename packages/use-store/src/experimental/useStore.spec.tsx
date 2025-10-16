@@ -9,8 +9,8 @@ import {
   use,
 } from "react";
 import { flushSync } from "react-dom";
-import { experimental } from "./index";
-import Logger from "../test/TestLogger";
+import { experimental } from "../index";
+import Logger from "../../test/TestLogger";
 
 const { createStore, StoreProvider, useStoreSelector } = experimental;
 

@@ -5,8 +5,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, act } from "@testing-library/react";
-import { experimental } from "../index";
-import Logger from "../../test/TestLogger";
+import { experimental } from "../../index";
+import Logger from "../../../test/TestLogger";
 import {
   FragmentRef,
   RecordSource,

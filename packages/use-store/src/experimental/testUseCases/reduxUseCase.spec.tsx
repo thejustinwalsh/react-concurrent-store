@@ -12,8 +12,8 @@ import {
   createSlice,
   StoreEnhancer,
 } from "@reduxjs/toolkit";
-import { experimental } from "../index";
-import Logger from "../../test/TestLogger";
+import { experimental } from "../../index";
+import Logger from "../../../test/TestLogger";
 
 const { createStoreFromSource, StoreProvider, useStoreSelector } = experimental;
 
