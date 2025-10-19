@@ -10,7 +10,7 @@ const { createStoreFromSource, useStoreSelector } = experimental;
  */
 type RelayRecord = {
   id: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export class RecordSource {
@@ -70,7 +70,7 @@ export class RelayStore {
     this.reactStore = createStoreFromSource(source);
   }
 
-  lookup(fragment: FragmentAstNode, fragmentRef: FragmentRef): any {
+  lookup(fragment: FragmentAstNode, fragmentRef: FragmentRef): unknown {
     return read(this._source, fragment, fragmentRef);
   }
 
@@ -99,19 +99,19 @@ function readNode(
   source: RecordSource,
   record: RelayRecord,
   node: FragmentAstNode,
-  data: { [key: string]: any },
-): any {
+  data: { [key: string]: unknown },
+): void {
   switch (node.kind) {
     case "scalar":
       data[node.fieldName] = record[node.fieldName];
       return;
     case "object": {
-      const newData = {};
+      const newData: { [key: string]: unknown } = {};
       const id = record[node.fieldName];
       if (id == null) {
         throw new Error("No id found for field: " + node.fieldName);
       }
-      const newRecord = source.get(id);
+      const newRecord = source.get(id as string);
       if (newRecord == null) {
         throw new Error("No record found for id: " + record.id);
       }
@@ -188,7 +188,7 @@ export function useFragment<T>(fragment: FragmentAstNode, ref: FragmentRef): T {
       }
       return cache.get(state)!;
     };
-  }, [fragment, ref, store]);
+  }, [fragment, ref]);
   return useStoreSelector(store, selector);
 }
 
@@ -209,7 +209,7 @@ function recycleNodesInto<T>(prevData: T, nextData: T): T {
   ) {
     return nextData;
   }
-  let canRecycle: boolean = false;
+  let canRecycle = false;
 
   // Assign local variables to preserve Flow type refinement.
   const prevArray: Array<unknown> | null = Array.isArray(prevData)
@@ -220,7 +220,7 @@ function recycleNodesInto<T>(prevData: T, nextData: T): T {
     : null;
   if (prevArray && nextArray) {
     canRecycle =
-      nextArray.reduce((wasEqual, nextItem, ii) => {
+      nextArray.reduce((wasEqual: boolean, nextItem, ii) => {
         const prevValue = prevArray[ii];
         const nextValue = recycleNodesInto(prevValue, nextItem);
         if (nextValue !== nextArray[ii]) {
@@ -230,12 +230,12 @@ function recycleNodesInto<T>(prevData: T, nextData: T): T {
       }, true) && prevArray.length === nextArray.length;
   } else if (!prevArray && !nextArray) {
     // Assign local variables to preserve Flow type refinement.
-    const prevObject = prevData;
-    const nextObject = nextData;
+    const prevObject = prevData as Record<string, unknown>;
+    const nextObject = nextData as Record<string, unknown>;
     const prevKeys = Object.keys(prevObject);
     const nextKeys = Object.keys(nextObject);
     canRecycle =
-      nextKeys.reduce((wasEqual, key) => {
+      nextKeys.reduce((wasEqual: boolean, key) => {
         const prevValue = prevObject[key];
         const nextValue = recycleNodesInto(prevValue, nextObject[key]);
         if (nextValue !== nextObject[key]) {
