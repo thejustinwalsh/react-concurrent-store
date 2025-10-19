@@ -15,12 +15,12 @@ type RelayRecord = {
 
 export class RecordSource {
   _records: Map<string, RelayRecord> = new Map();
-  _newer: RecordSource | null = null;
+  _older: RecordSource | null = null;
 
   get(id: string): RelayRecord | undefined {
     const value = this._records.get(id);
-    if (value === undefined && this._newer != null) {
-      return this._newer.get(id);
+    if (value === undefined && this._older != null) {
+      return this._older.get(id);
     }
     return value;
   }
@@ -36,7 +36,6 @@ export class RecordSource {
 
 export type FragmentRef = {
   startingID: string;
-  fragment: FragmentAstNode;
 };
 
 export type FragmentAstNode =
@@ -48,6 +47,10 @@ export type FragmentAstNode =
       kind: "object";
       fieldName: string;
       selections: FragmentAstNode[];
+    }
+  | {
+      kind: "spread";
+      alias: string;
     };
 
 // Updates in Relay look like functions wich take a current record source and
@@ -67,23 +70,28 @@ export class RelayStore {
     this.reactStore = createStoreFromSource(source);
   }
 
-  lookup(fragmentRef: FragmentRef): any {
-    return read(this._source, fragmentRef);
+  lookup(fragment: FragmentAstNode, fragmentRef: FragmentRef): any {
+    return read(this._source, fragment, fragmentRef);
   }
 
   publishAndNotify(updater: Updater) {
-    this._source = updater(this._source);
-    this.reactStore.handleUpdate(updater);
+    const wrapped = wrapUpdater(updater);
+    this._source = wrapped(this._source);
+    this.reactStore.handleUpdate(wrapped);
   }
 }
 
-function read<T>(source: RecordSource, ref: FragmentRef): T {
+function read<T>(
+  source: RecordSource,
+  fragment: FragmentAstNode,
+  ref: FragmentRef,
+): T {
   const rootRecord = source.get(ref.startingID);
   if (rootRecord == null) {
     throw new Error("No record found for id: " + ref.startingID);
   }
   const rootData = {};
-  readNode(source, rootRecord, ref.fragment, rootData);
+  readNode(source, rootRecord, fragment, rootData);
   return rootData as T;
 }
 
@@ -113,11 +121,29 @@ function readNode(
       data[node.fieldName] = newData;
       return;
     }
+    case "spread":
+      data[node.alias] = {
+        startingID: record.id,
+      };
+      return;
     default: {
       // @ts-expect-error
       throw new Error("Unknown node kind: " + node.kind);
     }
   }
+}
+
+// Turns an `updater` function which returns a sparse RecordSource containing
+// only the changed records into one which chains the new source onto
+// the previous source for lookups of unchanged records.
+export function wrapUpdater(updater: Updater): Updater {
+  return (source: RecordSource) => {
+    const next = updater(source);
+    // NOTE! This creates a memory leak today since we don't have any kind of
+    // compaction/cleanup when new states commit.
+    next._older = source;
+    return next;
+  };
 }
 
 const relayContext = createContext<RelayStore | null>(null);
@@ -141,16 +167,83 @@ export function useRelayStore(): Store<RecordSource, Updater> {
   return store.reactStore;
 }
 
-export function useFragment<T>(ref: FragmentRef): T {
+export function useFragment<T>(fragment: FragmentAstNode, ref: FragmentRef): T {
   const store = useRelayStore();
   const selector = useMemo(() => {
     const cache = new WeakMap<RecordSource, T>();
     return (state: RecordSource): T => {
       if (!cache.has(state)) {
-        cache.set(state, read(state, ref));
+        const newValue = read<T>(state, fragment, ref);
+
+        // If we have a cached value for the immediate older source, we can
+        // attempt to recycle nodes from it to ensure stable object identity and
+        // potentially avoid rerenders.
+        if (state._older != null && cache.has(state._older)) {
+          const previousValue = cache.get(state._older)!;
+          const recycledValue = recycleNodesInto(previousValue, newValue);
+          cache.set(state, recycledValue);
+        } else {
+          cache.set(state, newValue);
+        }
       }
       return cache.get(state)!;
     };
-  }, [ref, store]);
+  }, [fragment, ref, store]);
   return useStoreSelector(store, selector);
+}
+
+/**
+ * Recycles subtrees from `prevData` by replacing equal subtrees in `nextData`.
+ * Does not mutate a frozen subtree.
+ * https://github.com/facebook/relay/blob/ff3e51e6bb3dc87ab03632183bcb37b6d28b676e/packages/relay-runtime/util/recycleNodesInto.js
+ */
+function recycleNodesInto<T>(prevData: T, nextData: T): T {
+  if (
+    prevData === nextData ||
+    typeof prevData !== "object" ||
+    !prevData ||
+    (prevData.constructor !== Object && !Array.isArray(prevData)) ||
+    typeof nextData !== "object" ||
+    !nextData ||
+    (nextData.constructor !== Object && !Array.isArray(nextData))
+  ) {
+    return nextData;
+  }
+  let canRecycle: boolean = false;
+
+  // Assign local variables to preserve Flow type refinement.
+  const prevArray: Array<unknown> | null = Array.isArray(prevData)
+    ? prevData
+    : null;
+  const nextArray: Array<unknown> | null = Array.isArray(nextData)
+    ? nextData
+    : null;
+  if (prevArray && nextArray) {
+    canRecycle =
+      nextArray.reduce((wasEqual, nextItem, ii) => {
+        const prevValue = prevArray[ii];
+        const nextValue = recycleNodesInto(prevValue, nextItem);
+        if (nextValue !== nextArray[ii]) {
+          nextArray[ii] = nextValue;
+        }
+        return wasEqual && nextValue === prevArray[ii];
+      }, true) && prevArray.length === nextArray.length;
+  } else if (!prevArray && !nextArray) {
+    // Assign local variables to preserve Flow type refinement.
+    const prevObject = prevData;
+    const nextObject = nextData;
+    const prevKeys = Object.keys(prevObject);
+    const nextKeys = Object.keys(nextObject);
+    canRecycle =
+      nextKeys.reduce((wasEqual, key) => {
+        const prevValue = prevObject[key];
+        const nextValue = recycleNodesInto(prevValue, nextObject[key]);
+        if (nextValue !== nextObject[key]) {
+          // $FlowFixMe[cannot-write]
+          nextObject[key] = nextValue;
+        }
+        return wasEqual && nextValue === prevObject[key];
+      }, true) && prevKeys.length === nextKeys.length;
+  }
+  return canRecycle ? prevData : nextData;
 }
