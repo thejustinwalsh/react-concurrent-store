@@ -10,17 +10,27 @@ const { createStoreFromSource, useStoreSelector } = experimental;
  */
 type RelayRecord = {
   id: string;
-  [key: string]: any;
+  [key: string]: unknown;
+};
+
+/**
+ * A value read from the store which also tracks the set of record IDs
+ * that were accessed during the read. This allows us to later determine
+ * if any of the data read has changed.
+ */
+type Snapshot<T> = {
+  seenIds: Set<string>;
+  value: T;
 };
 
 export class RecordSource {
   _records: Map<string, RelayRecord> = new Map();
-  _newer: RecordSource | null = null;
+  _older: RecordSource | null = null;
 
   get(id: string): RelayRecord | undefined {
     const value = this._records.get(id);
-    if (value === undefined && this._newer != null) {
-      return this._newer.get(id);
+    if (value === undefined && this._older != null) {
+      return this._older.get(id);
     }
     return value;
   }
@@ -32,11 +42,19 @@ export class RecordSource {
   delete(id: string) {
     this._records.delete(id);
   }
+
+  keysChangedInThisVersion(keys: Set<string>): boolean {
+    for (const key of keys) {
+      if (this._records.has(key)) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 export type FragmentRef = {
   startingID: string;
-  fragment: FragmentAstNode;
 };
 
 export type FragmentAstNode =
@@ -48,6 +66,10 @@ export type FragmentAstNode =
       kind: "object";
       fieldName: string;
       selections: FragmentAstNode[];
+    }
+  | {
+      kind: "spread";
+      alias: string;
     };
 
 // Updates in Relay look like functions wich take a current record source and
@@ -67,57 +89,79 @@ export class RelayStore {
     this.reactStore = createStoreFromSource(source);
   }
 
-  lookup(fragmentRef: FragmentRef): any {
-    return read(this._source, fragmentRef);
-  }
-
   publishAndNotify(updater: Updater) {
-    this._source = updater(this._source);
-    this.reactStore.handleUpdate(updater);
+    const wrapped = wrapUpdater(updater);
+    this._source = wrapped(this._source);
+    this.reactStore.handleUpdate(wrapped);
   }
 }
 
-function read<T>(source: RecordSource, ref: FragmentRef): T {
+function read<T>(
+  source: RecordSource,
+  fragment: FragmentAstNode,
+  ref: FragmentRef,
+): Snapshot<T> {
+  const seenIds = new Set<string>();
   const rootRecord = source.get(ref.startingID);
   if (rootRecord == null) {
     throw new Error("No record found for id: " + ref.startingID);
   }
   const rootData = {};
-  readNode(source, rootRecord, ref.fragment, rootData);
-  return rootData as T;
+  readNode(source, rootRecord, fragment, rootData, seenIds);
+  return { seenIds, value: rootData as T };
 }
 
 function readNode(
   source: RecordSource,
   record: RelayRecord,
   node: FragmentAstNode,
-  data: { [key: string]: any },
-): any {
+  data: { [key: string]: unknown },
+  seenIds: Set<string>,
+): void {
+  seenIds.add(record.id);
   switch (node.kind) {
     case "scalar":
       data[node.fieldName] = record[node.fieldName];
       return;
     case "object": {
-      const newData = {};
+      const newData: { [key: string]: unknown } = {};
       const id = record[node.fieldName];
       if (id == null) {
         throw new Error("No id found for field: " + node.fieldName);
       }
-      const newRecord = source.get(id);
+      const newRecord = source.get(id as string);
       if (newRecord == null) {
         throw new Error("No record found for id: " + record.id);
       }
       for (const selection of node.selections) {
-        readNode(source, newRecord, selection, newData);
+        readNode(source, newRecord, selection, newData, seenIds);
       }
       data[node.fieldName] = newData;
       return;
     }
+    case "spread":
+      data[node.alias] = {
+        startingID: record.id,
+      };
+      return;
     default: {
       // @ts-expect-error
       throw new Error("Unknown node kind: " + node.kind);
     }
   }
+}
+
+// Turns an `updater` function which returns a sparse RecordSource containing
+// only the changed records into one which chains the new source onto
+// the previous source for lookups of unchanged records.
+export function wrapUpdater(updater: Updater): Updater {
+  return (source: RecordSource) => {
+    const next = updater(source);
+    // NOTE! This creates a memory leak today since we don't have any kind of
+    // compaction/cleanup when new states commit.
+    next._older = source;
+    return next;
+  };
 }
 
 const relayContext = createContext<RelayStore | null>(null);
@@ -133,24 +177,106 @@ export function RelayProvider({
   );
 }
 
-export function useRelayStore(): Store<RecordSource, Updater> {
+export function useRelayStore(): RelayStore {
   const store = useContext(relayContext);
   if (store == null) {
     throw new Error("No RelayStore found in context");
   }
-  return store.reactStore;
+  return store;
 }
 
-export function useFragment<T>(ref: FragmentRef): T {
+export function useFragment<T>(fragment: FragmentAstNode, ref: FragmentRef): T {
   const store = useRelayStore();
   const selector = useMemo(() => {
-    const cache = new WeakMap<RecordSource, T>();
+    const cache = new WeakMap<RecordSource, Snapshot<T>>();
     return (state: RecordSource): T => {
-      if (!cache.has(state)) {
-        cache.set(state, read(state, ref));
+      if (cache.has(state)) {
+        return cache.get(state)!.value;
       }
-      return cache.get(state)!;
+      // If we have a cached value for the immediate older source, we can
+      // attempt to reuse it.
+      // NOTE: We could keep walking up the chain of older sources to find
+      // some previous cached value to reuse/recycle from, but that comes at
+      // extra cost and would only pay dividends in a flip/flop/toggle UI
+      // pattern.
+      if (state._older != null && cache.has(state._older)) {
+        const previousValue = cache.get(state._older)!;
+
+        // Maybe none of the keys that changed in the new state were relevant to
+        // this fragment. In that case, we can reuse the previous value as-is.
+        if (!state.keysChangedInThisVersion(previousValue.seenIds)) {
+          cache.set(state, previousValue);
+          return previousValue.value;
+        }
+
+        // We are forced to reread, however, we can try to recycle nodes from the
+        // previous value to avoid unnecessary object identity changes.
+        const newValue = read<T>(state, fragment, ref);
+        const recycledValue = recycleNodesInto(previousValue, newValue);
+        cache.set(state, recycledValue);
+        return newValue.value;
+      }
+
+      const newValue = read<T>(state, fragment, ref);
+      cache.set(state, newValue);
+      return newValue.value;
     };
-  }, [ref, store]);
-  return useStoreSelector(store, selector);
+  }, [fragment, ref]);
+  return useStoreSelector(store.reactStore, selector);
+}
+
+/**
+ * Recycles subtrees from `prevData` by replacing equal subtrees in `nextData`.
+ * Does not mutate a frozen subtree.
+ * https://github.com/facebook/relay/blob/ff3e51e6bb3dc87ab03632183bcb37b6d28b676e/packages/relay-runtime/util/recycleNodesInto.js
+ */
+function recycleNodesInto<T>(prevData: T, nextData: T): T {
+  if (
+    prevData === nextData ||
+    typeof prevData !== "object" ||
+    !prevData ||
+    (prevData.constructor !== Object && !Array.isArray(prevData)) ||
+    typeof nextData !== "object" ||
+    !nextData ||
+    (nextData.constructor !== Object && !Array.isArray(nextData))
+  ) {
+    return nextData;
+  }
+  let canRecycle = false;
+
+  // Assign local variables to preserve Flow type refinement.
+  const prevArray: Array<unknown> | null = Array.isArray(prevData)
+    ? prevData
+    : null;
+  const nextArray: Array<unknown> | null = Array.isArray(nextData)
+    ? nextData
+    : null;
+  if (prevArray && nextArray) {
+    canRecycle =
+      nextArray.reduce((wasEqual: boolean, nextItem, ii) => {
+        const prevValue = prevArray[ii];
+        const nextValue = recycleNodesInto(prevValue, nextItem);
+        if (nextValue !== nextArray[ii]) {
+          nextArray[ii] = nextValue;
+        }
+        return wasEqual && nextValue === prevArray[ii];
+      }, true) && prevArray.length === nextArray.length;
+  } else if (!prevArray && !nextArray) {
+    // Assign local variables to preserve Flow type refinement.
+    const prevObject = prevData as Record<string, unknown>;
+    const nextObject = nextData as Record<string, unknown>;
+    const prevKeys = Object.keys(prevObject);
+    const nextKeys = Object.keys(nextObject);
+    canRecycle =
+      nextKeys.reduce((wasEqual: boolean, key) => {
+        const prevValue = prevObject[key];
+        const nextValue = recycleNodesInto(prevValue, nextObject[key]);
+        if (nextValue !== nextObject[key]) {
+          // $FlowFixMe[cannot-write]
+          nextObject[key] = nextValue;
+        }
+        return wasEqual && nextValue === prevObject[key];
+      }, true) && prevKeys.length === nextKeys.length;
+  }
+  return canRecycle ? prevData : nextData;
 }
