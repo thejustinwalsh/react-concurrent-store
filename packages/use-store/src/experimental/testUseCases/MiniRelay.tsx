@@ -13,6 +13,16 @@ type RelayRecord = {
   [key: string]: unknown;
 };
 
+/**
+ * A value read from the store which also tracks the set of record IDs
+ * that were accessed during the read. This allows us to later determine
+ * if any of the data read has changed.
+ */
+type Snapshot<T> = {
+  seenIds: Set<string>;
+  value: T;
+};
+
 export class RecordSource {
   _records: Map<string, RelayRecord> = new Map();
   _older: RecordSource | null = null;
@@ -31,6 +41,15 @@ export class RecordSource {
 
   delete(id: string) {
     this._records.delete(id);
+  }
+
+  keysChangedInThisVersion(keys: Set<string>): boolean {
+    for (const key of keys) {
+      if (this._records.has(key)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
@@ -70,10 +89,6 @@ export class RelayStore {
     this.reactStore = createStoreFromSource(source);
   }
 
-  lookup(fragment: FragmentAstNode, fragmentRef: FragmentRef): unknown {
-    return read(this._source, fragment, fragmentRef);
-  }
-
   publishAndNotify(updater: Updater) {
     const wrapped = wrapUpdater(updater);
     this._source = wrapped(this._source);
@@ -85,14 +100,15 @@ function read<T>(
   source: RecordSource,
   fragment: FragmentAstNode,
   ref: FragmentRef,
-): T {
+): Snapshot<T> {
+  const seenIds = new Set<string>();
   const rootRecord = source.get(ref.startingID);
   if (rootRecord == null) {
     throw new Error("No record found for id: " + ref.startingID);
   }
   const rootData = {};
-  readNode(source, rootRecord, fragment, rootData);
-  return rootData as T;
+  readNode(source, rootRecord, fragment, rootData, seenIds);
+  return { seenIds, value: rootData as T };
 }
 
 function readNode(
@@ -100,7 +116,9 @@ function readNode(
   record: RelayRecord,
   node: FragmentAstNode,
   data: { [key: string]: unknown },
+  seenIds: Set<string>,
 ): void {
+  seenIds.add(record.id);
   switch (node.kind) {
     case "scalar":
       data[node.fieldName] = record[node.fieldName];
@@ -116,7 +134,7 @@ function readNode(
         throw new Error("No record found for id: " + record.id);
       }
       for (const selection of node.selections) {
-        readNode(source, newRecord, selection, newData);
+        readNode(source, newRecord, selection, newData, seenIds);
       }
       data[node.fieldName] = newData;
       return;
@@ -159,37 +177,52 @@ export function RelayProvider({
   );
 }
 
-export function useRelayStore(): Store<RecordSource, Updater> {
+export function useRelayStore(): RelayStore {
   const store = useContext(relayContext);
   if (store == null) {
     throw new Error("No RelayStore found in context");
   }
-  return store.reactStore;
+  return store;
 }
 
 export function useFragment<T>(fragment: FragmentAstNode, ref: FragmentRef): T {
   const store = useRelayStore();
   const selector = useMemo(() => {
-    const cache = new WeakMap<RecordSource, T>();
+    const cache = new WeakMap<RecordSource, Snapshot<T>>();
     return (state: RecordSource): T => {
-      if (!cache.has(state)) {
-        const newValue = read<T>(state, fragment, ref);
-
-        // If we have a cached value for the immediate older source, we can
-        // attempt to recycle nodes from it to ensure stable object identity and
-        // potentially avoid rerenders.
-        if (state._older != null && cache.has(state._older)) {
-          const previousValue = cache.get(state._older)!;
-          const recycledValue = recycleNodesInto(previousValue, newValue);
-          cache.set(state, recycledValue);
-        } else {
-          cache.set(state, newValue);
-        }
+      if (cache.has(state)) {
+        return cache.get(state)!.value;
       }
-      return cache.get(state)!;
+      // If we have a cached value for the immediate older source, we can
+      // attempt to reuse it.
+      // NOTE: We could keep walking up the chain of older sources to find
+      // some previous cached value to reuse/recycle from, but that comes at
+      // extra cost and would only pay dividends in a flip/flop/toggle UI
+      // pattern.
+      if (state._older != null && cache.has(state._older)) {
+        const previousValue = cache.get(state._older)!;
+
+        // Maybe none of the keys that changed in the new state were relevant to
+        // this fragment. In that case, we can reuse the previous value as-is.
+        if (!state.keysChangedInThisVersion(previousValue.seenIds)) {
+          cache.set(state, previousValue);
+          return previousValue.value;
+        }
+
+        // We are forced to reread, however, we can try to recycle nodes from the
+        // previous value to avoid unnecessary object identity changes.
+        const newValue = read<T>(state, fragment, ref);
+        const recycledValue = recycleNodesInto(previousValue, newValue);
+        cache.set(state, recycledValue);
+        return newValue.value;
+      }
+
+      const newValue = read<T>(state, fragment, ref);
+      cache.set(state, newValue);
+      return newValue.value;
     };
   }, [fragment, ref]);
-  return useStoreSelector(store, selector);
+  return useStoreSelector(store.reactStore, selector);
 }
 
 /**

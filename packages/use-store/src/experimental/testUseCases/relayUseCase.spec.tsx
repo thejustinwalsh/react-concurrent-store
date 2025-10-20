@@ -196,7 +196,7 @@ describe("createStore for a Relay-like state solution", () => {
     `);
 
     await act(async () => {
-      store.publishAndNotify((prev) => {
+      store.publishAndNotify((_prev) => {
         const next = new RecordSource();
         next.set("1", { id: "1", name: "MALICE", friend: "1" });
         return next;
@@ -218,7 +218,7 @@ describe("createStore for a Relay-like state solution", () => {
     unmount();
   });
 
-  it.only("Implements structural sharing such that substructures remain referential identical even if parent object change", async () => {
+  it("Implements structural sharing such that substructures remain referential identical even if parent object change", async () => {
     const store = new RelayStore();
     store.publishAndNotify(initialize);
 
@@ -302,7 +302,7 @@ describe("createStore for a Relay-like state solution", () => {
     `);
 
     await act(async () => {
-      store.publishAndNotify((prev) => {
+      store.publishAndNotify((_prev) => {
         const next = new RecordSource();
         next.set("1", { id: "1", name: "MALICE", friend: "2" });
         return next;
