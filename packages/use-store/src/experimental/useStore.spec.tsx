@@ -998,58 +998,6 @@ describe("Experimental Userland Store", () => {
     expect(store._listeners.length).toBe(0);
   });
 
-  it("dynamic selectors are not yet supported", async () => {
-    const store = createStore(reducer, 1);
-
-    let setSelector: any;
-    function Count({ testid }: { testid: string }) {
-      const [selector, _setSelector] = useState(() => identity);
-      setSelector = _setSelector;
-      const count = useStoreSelector(store, selector);
-      logger.log({ testid, count });
-      return <div>{count}</div>;
-    }
-
-    function App() {
-      return (
-        <StoreProvider>
-          <Count testid="count" />
-        </StoreProvider>
-      );
-    }
-
-    const { asFragment, unmount } = await act(async () => {
-      return render(<App />);
-    });
-
-    logger.assertLog([{ testid: "count", count: 1 }]);
-
-    expect(asFragment()).toMatchInlineSnapshot(`
-      <DocumentFragment>
-        <div>
-          1
-        </div>
-      </DocumentFragment>
-    `);
-
-    let error: any;
-    try {
-      await act(async () => {
-        setSelector((s: number) => s * 2);
-      });
-    } catch (e) {
-      error = e;
-    }
-
-    logger.assertLog([]);
-
-    expect(error.message).toMatch(
-      "useStoreSelector does not currently support dynamic selectors",
-    );
-    unmount();
-    expect(store._listeners.length).toBe(0);
-  });
-
   it("dynamic stores are not yet supported", async () => {
     const store1 = createStore(reducer, 1);
     const store2 = createStore(reducer, 10);
@@ -1365,5 +1313,59 @@ describe("Experimental Userland Store", () => {
 
     expect(storeA._listeners.length).toBe(0);
     expect(storeB._listeners.length).toBe(0);
+  });
+});
+
+describe("Selectors can be dynamic", () => {
+  it("dynamic selectors are not yet supported", async () => {
+    const store = createStore(reducer, 1);
+
+    let setSelector: any;
+    function Count({ testid }: { testid: string }) {
+      const [selector, _setSelector] = useState(() => identity);
+      setSelector = _setSelector;
+      const count = useStoreSelector(store, selector);
+      logger.log({ testid, count });
+      return <div>{count}</div>;
+    }
+
+    function App() {
+      return (
+        <StoreProvider>
+          <Count testid="count" />
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ testid: "count", count: 1 }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    await act(async () => {
+      setSelector(() => (s: number) => s * 2);
+    });
+
+    logger.assertLog([{ testid: "count", count: 2 }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
   });
 });

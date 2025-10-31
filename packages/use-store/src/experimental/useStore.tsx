@@ -147,12 +147,6 @@ export function useStoreSelector<S, T>(
       "useStoreSelector does not currently support dynamic stores",
     );
   }
-  const previousSelectorRef = useRef(selector);
-  if (selector !== previousSelectorRef.current) {
-    throw new Error(
-      "useStoreSelector does not currently support dynamic selectors",
-    );
-  }
 
   // Counterintuitively we initially render with the transition/head state
   // instead of the committed state. This is required in order for us to
@@ -166,7 +160,22 @@ export function useStoreSelector<S, T>(
   // Instead we must initially render with the transition state and then
   // trigger a sync fixup setState in the useLayoutEffect if we are mounting
   // sync and thus should be showing the committed state.
-  const [state, setState] = useState<T>(() => selector(store.getState()));
+
+  // We also track the selector used for each state so that we can determine if
+  // the selector has changed since our last updated.
+  const [_state, setState] = useState<{
+    value: T;
+    selector: (state: S) => T;
+  }>(() => {
+    const value = selector(store.getState());
+    return { value, selector };
+  });
+
+  // If we have a new selector, we try to derive a new value during render. If
+  // the mount was sync, we'll apply a fixup in useLayoutEffect, just like we do
+  // on mount.
+  const state =
+    _state.selector === selector ? _state.value : selector(store.getState());
 
   useLayoutEffect(() => {
     // Ensure our store is managed by the tracker.
@@ -183,7 +192,7 @@ export function useStoreSelector<S, T>(
     // Both of these cases manifest as our initial render state not matching
     // the currently committed state.
     if (state !== mountCommittedState) {
-      setState(mountCommittedState);
+      setState({ value: mountCommittedState, selector });
     }
 
     // If we mounted mid-transition, and that transition is still ongoing, we
@@ -200,20 +209,22 @@ export function useStoreSelector<S, T>(
       // while we were mounting resolves, it will also include rerendering
       // this component to reflect the new state.
       startTransition(() => {
-        setState(mountState);
+        setState({ value: mountState, selector });
       });
     }
+
     const unsubscribe = store.subscribe(() => {
       const state = store.getState();
-      setState(selector(state));
+      setState({ value: selector(state), selector });
     });
     return () => {
       unsubscribe();
       storeManager.removeStore(store);
     };
-    // We intentionally ignore `state` since we only care about its value on mount
+    // We intentionally ignore `state` since we only care about its value on
+    // mount or when the selector changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selector]);
 
   return state;
 }
