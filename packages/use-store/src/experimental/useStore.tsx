@@ -101,6 +101,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+type HookState<S, T> = {
+  value: T;
+  selector: (state: S) => T;
+};
+
 /**
  * Tearing-resistant hook for consuming application state locally within a
  * component (without prop drilling or putting state in context).
@@ -147,12 +152,6 @@ export function useStoreSelector<S, T>(
       "useStoreSelector does not currently support dynamic stores",
     );
   }
-  const previousSelectorRef = useRef(selector);
-  if (selector !== previousSelectorRef.current) {
-    throw new Error(
-      "useStoreSelector does not currently support dynamic selectors",
-    );
-  }
 
   // Counterintuitively we initially render with the transition/head state
   // instead of the committed state. This is required in order for us to
@@ -166,13 +165,37 @@ export function useStoreSelector<S, T>(
   // Instead we must initially render with the transition state and then
   // trigger a sync fixup setState in the useLayoutEffect if we are mounting
   // sync and thus should be showing the committed state.
-  const [state, setState] = useState<T>(() => selector(store.getState()));
+  //
+  // We also track the selector used for each state so that we can determine if
+  // the selector has changed since our last updated.
+  const [hookState, setState] = useState<HookState<S, T>>(() => ({
+    value: selector(store.getState()),
+    selector,
+  }));
+
+  // If we have a new selector, we try to derive a new value during render. If
+  // the mount was sync, we'll apply a fixup in useLayoutEffect, just like we do
+  // on mount.
+  const selectorChange = hookState.selector !== selector;
+  const state = selectorChange ? selector(store.getState()) : hookState.value;
 
   useLayoutEffect(() => {
     // Ensure our store is managed by the tracker.
     storeManager.addStore(store);
     const mountState = selector(store.getState());
     const mountCommittedState = selector(store.getCommittedState());
+
+    // Helper to ensure we preserve object identity if neither state nor selector has changed.
+    function setHookState(value: T) {
+      setState((prev) => {
+        // If nothing has changed...
+        if (prev.value === value && prev.selector === selector) {
+          // Preserve object identity.
+          return prev;
+        }
+        return { value, selector };
+      });
+    }
 
     // If we are mounting as part of a sync update mid transition, our initial
     // render value was wrong and we must trigger a sync fixup update.
@@ -183,7 +206,7 @@ export function useStoreSelector<S, T>(
     // Both of these cases manifest as our initial render state not matching
     // the currently committed state.
     if (state !== mountCommittedState) {
-      setState(mountCommittedState);
+      setHookState(mountCommittedState);
     }
 
     // If we mounted mid-transition, and that transition is still ongoing, we
@@ -200,20 +223,21 @@ export function useStoreSelector<S, T>(
       // while we were mounting resolves, it will also include rerendering
       // this component to reflect the new state.
       startTransition(() => {
-        setState(mountState);
+        setHookState(mountState);
       });
     }
+
     const unsubscribe = store.subscribe(() => {
-      const state = store.getState();
-      setState(selector(state));
+      setHookState(selector(store.getState()));
     });
     return () => {
       unsubscribe();
       storeManager.removeStore(store);
     };
-    // We intentionally ignore `state` since we only care about its value on mount
+    // We intentionally ignore `state` since we only care about its value on
+    // mount or when the selector changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selector]);
 
   return state;
 }
