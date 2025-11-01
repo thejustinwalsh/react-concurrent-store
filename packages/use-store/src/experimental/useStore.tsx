@@ -163,19 +163,13 @@ export function useStoreSelector<S, T>(
 
   // We also track the selector used for each state so that we can determine if
   // the selector has changed since our last updated.
-  const [_state, setState] = useState<{
-    value: T;
-    selector: (state: S) => T;
-  }>(() => {
-    const value = selector(store.getState());
-    return { value, selector };
-  });
+  const [_state, setState] = useState<T>(() => selector(store.getState()));
+  const [_selector, setSelector] = useState<(state: S) => T>(() => selector);
 
   // If we have a new selector, we try to derive a new value during render. If
   // the mount was sync, we'll apply a fixup in useLayoutEffect, just like we do
   // on mount.
-  const state =
-    _state.selector === selector ? _state.value : selector(store.getState());
+  const state = _selector === selector ? _state : selector(store.getState());
 
   useLayoutEffect(() => {
     // Ensure our store is managed by the tracker.
@@ -192,7 +186,8 @@ export function useStoreSelector<S, T>(
     // Both of these cases manifest as our initial render state not matching
     // the currently committed state.
     if (state !== mountCommittedState) {
-      setState({ value: mountCommittedState, selector });
+      setSelector(() => selector);
+      setState(mountCommittedState);
     }
 
     // If we mounted mid-transition, and that transition is still ongoing, we
@@ -209,13 +204,15 @@ export function useStoreSelector<S, T>(
       // while we were mounting resolves, it will also include rerendering
       // this component to reflect the new state.
       startTransition(() => {
-        setState({ value: mountState, selector });
+        setSelector(() => selector);
+        setState(mountState);
       });
     }
 
     const unsubscribe = store.subscribe(() => {
       const state = store.getState();
-      setState({ value: selector(state), selector });
+      setSelector(() => selector);
+      setState(selector(state));
     });
     return () => {
       unsubscribe();
