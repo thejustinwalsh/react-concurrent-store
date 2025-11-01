@@ -210,14 +210,20 @@ export function useStoreSelector<S, T>(
     }
 
     // If we mounted mid-transition, and that transition is still ongoing, we
-    // mounted with the pre-transition state but are not ourselves part of the
-    // transition. We must ensure we update to the new state along with the
-    // rest of the UI when the transition resolves
+    // just triggered a fixup to switch bath to the pre-transition, comitted,
+    // state but are not ourselves part of the. We must ensure we _also_ still
+    // update back to the transitions state along with the rest of the UI when
+    // the transition resolves
+    //
+    // It's also possible that between the time when we rendered and now, a new
+    // transition update has started. For example, a `startTransition` in a
+    // `useLayoutEffect` of a earlier sibling component. In that case we want to
+    // add ourselves to that transition.
     if (mountState !== mountCommittedState) {
-      // Here we tell React to update us to the new pending state. Since all
-      // state updates are propagated to React components in transitions, we
-      // assume there is a transition currently happening, and (unsafely)
-      // depend upon current transition entanglement semantics which we expect
+      // Here we tell React to update us to the new pending state. Since there
+      // is a difference between the canonical state and the comitted state, we
+      // assume there is a transition currently happening, and (unsafely) depend
+      // upon current transition entanglement semantics which we expect
       // will ensure this update gets added to the currently pending
       // transition. Our goal is that when the transition that was pending
       // while we were mounting resolves, it will also include rerendering
