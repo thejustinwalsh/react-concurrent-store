@@ -1317,7 +1317,7 @@ describe("Experimental Userland Store", () => {
 });
 
 describe("Selectors can be dynamic", () => {
-  it("dynamic selectors are not yet supported", async () => {
+  it("dynamic selectors are supported", async () => {
     const store = createStore(reducer, 1);
 
     let setSelector: any;
@@ -1361,6 +1361,93 @@ describe("Selectors can be dynamic", () => {
       <DocumentFragment>
         <div>
           2
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("selector changes sync during a transition update to the store", async () => {
+    const store = createStore(reducer, 1);
+
+    let setSelector: any;
+    function Count({ testid }: { testid: string }) {
+      const [selector, _setSelector] = useState(() => identity);
+      setSelector = _setSelector;
+      const count = useStoreSelector(store, selector);
+      logger.log({ testid, count });
+      return <div>{count}</div>;
+    }
+
+    function App() {
+      return (
+        <StoreProvider>
+          <Count testid="count" />
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ testid: "count", count: 1 }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    let resolve: () => void;
+
+    const promise = new Promise<void>((_resolve) => {
+      resolve = _resolve;
+    });
+
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" });
+        await promise;
+      });
+    });
+
+    await act(async () => {
+      setSelector(() => (s: number) => s * 2);
+    });
+
+    logger.assertLog([
+      // Just like a fresh mount, the new selector is run on the transition state...
+      { testid: "count", count: 4 },
+      // But gets fixed up to the sync state in the layoutEffect before yielding to the user.
+      { testid: "count", count: 2 },
+    ]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
+
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([
+      // Now we render the transition state
+      { testid: "count", count: 4 },
+    ]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          4
         </div>
       </DocumentFragment>
     `);
