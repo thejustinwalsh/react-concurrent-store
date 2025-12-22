@@ -13,7 +13,12 @@ import { flushSync } from "react-dom";
 import { experimental } from "../index";
 import Logger from "../../test/TestLogger";
 
-const { createStore, StoreProvider, useStoreSelector } = experimental;
+const {
+  createStore,
+  StoreProvider,
+  useStoreSelector,
+  useStoreSelectorWithEquality,
+} = experimental;
 
 type State = number;
 
@@ -2476,6 +2481,1137 @@ describe("prevResult selector behavior", () => {
     logger.assertLog([{ doubled: 24, tripled: 36 }]);
     // prevResult when rendering state 12 should be the result from state 6
     expect(prevResultByState.get(12)).toEqual({ doubled: 12, tripled: 18 });
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+});
+
+describe("useStoreSelectorWithEquality", () => {
+  // Helper for shallow equality comparison
+  function shallowEqual<T extends Record<string, unknown>>(
+    objA: T,
+    objB: T,
+  ): boolean {
+    if (objA === objB) return true;
+    const keysA = Object.keys(objA);
+    const keysB = Object.keys(objB);
+    if (keysA.length !== keysB.length) return false;
+    for (const key of keysA) {
+      if (objA[key] !== objB[key]) return false;
+    }
+    return true;
+  }
+
+  // Object-based state for more complex tests
+  type UserState = {
+    user: { name: string; age: number; version?: number };
+    other?: string;
+    value?: number | null;
+  };
+  type UserAction =
+    | { type: "SET_NAME"; payload: string }
+    | { type: "SET_AGE"; payload: number }
+    | { type: "SET_OTHER"; payload: string }
+    | { type: "SET_VALUE"; payload: number | null }
+    | { type: "INCREMENT_VERSION" };
+
+  function userReducer(state: UserState, action: UserAction): UserState {
+    switch (action.type) {
+      case "SET_NAME":
+        return { ...state, user: { ...state.user, name: action.payload } };
+      case "SET_AGE":
+        return { ...state, user: { ...state.user, age: action.payload } };
+      case "SET_OTHER":
+        return { ...state, other: action.payload };
+      case "SET_VALUE":
+        return { ...state, value: action.payload };
+      case "INCREMENT_VERSION":
+        return {
+          ...state,
+          user: { ...state.user, version: (state.user.version || 0) + 1 },
+        };
+      default:
+        return state;
+    }
+  }
+
+  // Basic Functionality
+
+  it("returns selected value from store", async () => {
+    const store = createStore(reducer, 5);
+
+    function Test() {
+      const count = useStoreSelectorWithEquality(store, (s: State) => s);
+      logger.log({ count });
+      return <div data-testid="count">{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 5 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("updates when store changes", async () => {
+    const store = createStore(reducer, 0);
+
+    function Test() {
+      const count = useStoreSelectorWithEquality(store, (s: State) => s);
+      logger.log({ count });
+      return <div data-testid="count">{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 0 }]);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 1 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("uses default Object.is equality when no equalityFn provided", async () => {
+    // Create store with NaN value to test Object.is behavior
+    // Object.is(NaN, NaN) === true, unlike === comparison
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+      value: NaN,
+    });
+
+    function Test() {
+      const value = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => s.value,
+      );
+      logger.log({ value: String(value) });
+      return <div>{String(value)}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    // Clear initial render logs (may include fixup renders from concurrent-safe hook)
+    logger._logs = [];
+
+    // Dispatch but value stays NaN
+    await act(async () => {
+      store.dispatch({ type: "SET_VALUE", payload: NaN });
+    });
+
+    // Object.is(NaN, NaN) is true, so the selected value shouldn't change
+    // and no additional renders should occur from this dispatch
+    logger.assertLog([]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Equality Function Behavior
+
+  it("skips re-render when equalityFn returns true", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+    });
+
+    let renderCount = 0;
+
+    function Test() {
+      renderCount++;
+      const user = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => ({ name: s.user.name }),
+        shallowEqual,
+      );
+      logger.log({ name: user.name, renderCount });
+      return <div>{user.name}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ name: "Alice", renderCount: 1 }]);
+    const initialRenderCount = renderCount;
+
+    // Change age (not selected), name stays the same
+    await act(async () => {
+      store.dispatch({ type: "SET_AGE", payload: 31 });
+    });
+
+    // Should not re-render because shallowEqual({ name: "Alice" }, { name: "Alice" }) is true
+    logger.assertLog([]);
+    expect(renderCount).toBe(initialRenderCount);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("preserves reference identity when equal", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+      other: "x",
+    });
+
+    const results: object[] = [];
+
+    function Test() {
+      const obj = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => ({ name: s.user.name }),
+        shallowEqual,
+      );
+      results.push(obj);
+      logger.log({ name: obj.name });
+      return null;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ name: "Alice" }]);
+    expect(results.length).toBe(1);
+
+    // Change 'other' field, not the selected 'name'
+    await act(async () => {
+      store.dispatch({ type: "SET_OTHER", payload: "y" });
+    });
+
+    // No re-render should occur, and if any fixup happened, same reference should be returned
+    logger.assertLog([]);
+    // If there was any additional render (due to fixup), verify same reference
+    if (results.length > 1) {
+      expect(results[0]).toBe(results[results.length - 1]);
+    }
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("works with shallowEqual", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+    });
+
+    let renderCount = 0;
+
+    function Test() {
+      renderCount++;
+      const user = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => ({ name: s.user.name, age: s.user.age }),
+        shallowEqual,
+      );
+      logger.log({ name: user.name, age: user.age, renderCount });
+      return (
+        <div>
+          {user.name}-{user.age}
+        </div>
+      );
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ name: "Alice", age: 30, renderCount: 1 }]);
+
+    // Update name - should trigger re-render
+    await act(async () => {
+      store.dispatch({ type: "SET_NAME", payload: "Bob" });
+    });
+
+    logger.assertLog([{ name: "Bob", age: 30, renderCount: 2 }]);
+
+    // Update age - should trigger re-render
+    await act(async () => {
+      store.dispatch({ type: "SET_AGE", payload: 31 });
+    });
+
+    logger.assertLog([{ name: "Bob", age: 31, renderCount: 3 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("re-renders when equalityFn returns false", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+    });
+
+    let renderCount = 0;
+
+    function Test() {
+      renderCount++;
+      const user = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => ({ name: s.user.name }),
+        shallowEqual,
+      );
+      logger.log({ name: user.name, renderCount });
+      return <div>{user.name}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ name: "Alice", renderCount: 1 }]);
+
+    // Change name - should re-render
+    await act(async () => {
+      store.dispatch({ type: "SET_NAME", payload: "Bob" });
+    });
+
+    logger.assertLog([{ name: "Bob", renderCount: 2 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Selector Changes
+
+  it("handles selector function changes", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+    });
+
+    let setField: (field: "name" | "age") => void;
+
+    function Test() {
+      const [field, _setField] = useState<"name" | "age">("name");
+      setField = _setField;
+      // Inline selector - new function each render when field changes
+      const value = useStoreSelectorWithEquality(store, (s: UserState) =>
+        field === "name" ? s.user.name : s.user.age,
+      );
+      logger.log({ field, value });
+      return (
+        <div data-testid="value">
+          {field}: {value}
+        </div>
+      );
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ field: "name", value: "Alice" }]);
+
+    // Change selector to read age
+    await act(async () => {
+      setField("age");
+    });
+
+    logger.assertLog([{ field: "age", value: 30 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("handles equalityFn changes", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+    });
+
+    let setUseShallowEqual: (use: boolean) => void;
+
+    // Custom equality that always returns false (never equal)
+    const neverEqual = () => false;
+
+    const selector = (s: UserState) => ({ name: s.user.name });
+
+    // Track the rendered values and equality function used
+    const renders: { name: string; useShallow: boolean }[] = [];
+
+    function Test() {
+      const [useShallow, _setUseShallowEqual] = useState(true);
+      setUseShallowEqual = _setUseShallowEqual;
+      const user = useStoreSelectorWithEquality(
+        store,
+        selector,
+        useShallow ? shallowEqual : neverEqual,
+      );
+      renders.push({ name: user.name, useShallow });
+      logger.log({ name: user.name, useShallow });
+      return <div>{user.name}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    // Clear logs and reset render tracking after mount
+    logger._logs = [];
+    const rendersAfterMount = renders.length;
+
+    // With shallowEqual, changing age should not cause re-render
+    // because name stays the same and shallowEqual({ name: "Alice" }, { name: "Alice" }) is true
+    await act(async () => {
+      store.dispatch({ type: "SET_AGE", payload: 31 });
+    });
+
+    // No new renders should have occurred
+    expect(renders.length).toBe(rendersAfterMount);
+    logger.assertLog([]);
+
+    // Switch to neverEqual - this will cause at least one render
+    await act(async () => {
+      setUseShallowEqual(false);
+    });
+
+    // Clear logs after the equality function switch
+    logger._logs = [];
+    const rendersAfterSwitch = renders.length;
+    // Verify we've rendered with useShallow: false at least once
+    expect(renders.some((r) => r.useShallow === false)).toBe(true);
+
+    // Now with neverEqual, any store update should cause re-render
+    // because neverEqual always returns false
+    await act(async () => {
+      store.dispatch({ type: "SET_AGE", payload: 32 });
+    });
+
+    // With neverEqual, we should have at least one new render
+    expect(renders.length).toBeGreaterThan(rendersAfterSwitch);
+    // And the latest render should still show "Alice" with useShallow: false
+    expect(renders[renders.length - 1]).toEqual({
+      name: "Alice",
+      useShallow: false,
+    });
+
+    logger.assertLog([
+      {
+        name: "Alice",
+        useShallow: false,
+      },
+    ]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Concurrent Behavior
+
+  it("maintains consistency during concurrent updates", async () => {
+    const store = createStore(reducer, 1);
+    const values: number[] = [];
+
+    const selector = (s: State) => s;
+
+    function Display({ testid }: { testid: string }) {
+      const count = useStoreSelectorWithEquality(store, selector);
+      values.push(count);
+      logger.log({ testid, count });
+      return <div>{count}</div>;
+    }
+
+    let setShowSecond: (show: boolean) => void;
+
+    function Trigger() {
+      const [showSecond, _setShowSecond] = useState(false);
+      setShowSecond = _setShowSecond;
+      return (
+        <>
+          <Display testid="first" />
+          {showSecond && <Display testid="second" />}
+        </>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Trigger />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ testid: "first", count: 1 }]);
+
+    let resolve: () => void;
+
+    // Start transition and mount second component
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" }); // count = 2
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    // Mount second component mid-transition
+    await act(async () => {
+      setShowSecond(true);
+    });
+
+    // First component re-renders with old state
+    // Second component mounts with transition state, then fixes up to sync state
+    logger.assertLog([
+      { testid: "first", count: 1 },
+      { testid: "second", count: 2 }, // Initially renders with transition state
+      { testid: "second", count: 1 }, // Fixup to sync state
+    ]);
+
+    // Both should show same value (no tearing)
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Complete the transition
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([
+      { testid: "first", count: 2 },
+      { testid: "second", count: 2 },
+    ]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("works correctly with startTransition", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30, version: 1 },
+    });
+
+    let renderCount = 0;
+
+    function Test() {
+      renderCount++;
+      const name = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => ({ name: s.user.name }),
+        shallowEqual,
+      );
+      logger.log({ name: name.name, renderCount });
+      return <div>{name.name}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Test />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ name: "Alice", renderCount: 1 }]);
+    const initialRenders = renderCount;
+
+    let resolve: () => void;
+
+    // Transition that only changes version, not name
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT_VERSION" });
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    // Complete the transition
+    await act(async () => {
+      resolve();
+    });
+
+    // Should not cause additional renders because name didn't change
+    // (shallowEqual returns true for { name: "Alice" } === { name: "Alice" })
+    logger.assertLog([]);
+    expect(renderCount).toBe(initialRenders);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Edge Cases
+
+  it("handles selector that throws", async () => {
+    const store = createStore(userReducer, {
+      user: { name: "Alice", age: 30 },
+      value: null,
+    });
+
+    // Suppress expected console.error from React error boundary
+    const originalError = console.error;
+    console.error = () => {};
+
+    function Test() {
+      const value = useStoreSelectorWithEquality(
+        store,
+        (s: UserState) => (s.value as any).property, // Will throw when value is null
+      );
+      return <div>{value}</div>;
+    }
+
+    // Wrap in error boundary for the test
+    class ErrorBoundary extends Component<
+      { children: React.ReactNode },
+      { hasError: boolean }
+    > {
+      state = { hasError: false };
+      static getDerivedStateFromError() {
+        return { hasError: true };
+      }
+      render() {
+        if (this.state.hasError) {
+          return <div>Error caught</div>;
+        }
+        return this.props.children;
+      }
+    }
+
+    let renderResult: Awaited<ReturnType<typeof render>> | null = null;
+
+    try {
+      renderResult = await act(async () => {
+        return render(
+          <ErrorBoundary>
+            <StoreProvider>
+              <Test />
+            </StoreProvider>
+          </ErrorBoundary>,
+        );
+      });
+    } catch {
+      // Error was thrown during render
+    }
+
+    console.error = originalError;
+
+    // Either error boundary caught it or render threw
+    if (renderResult) {
+      expect(renderResult.asFragment().textContent).toBe("Error caught");
+      renderResult.unmount();
+    }
+  });
+});
+
+describe("inline selector (new reference every render)", () => {
+  // This tests the common React-Redux pattern:
+  // const todos = useSelector(state => state.todos)
+  // Where a new function reference is created every render
+
+  it("handles inline selector without causing infinite loops", async () => {
+    const store = createStore(reducer, 5);
+
+    let renderCount = 0;
+    function Component() {
+      renderCount++;
+      // Inline selector - new function reference every render!
+      const count = useStoreSelector(store, (state) => state);
+      logger.log({ count, renderCount });
+      return <div>{count}</div>;
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 5, renderCount: 1 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          5
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Should not have infinite loops - renderCount should be reasonable
+    expect(renderCount).toBeLessThan(5);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("returns consistent values with inline selector", async () => {
+    const store = createStore(reducer, 10);
+
+    const renderedValues: number[] = [];
+    function Component() {
+      // Inline selector - new function reference every render!
+      const count = useStoreSelector(store, (state) => state * 2);
+      renderedValues.push(count);
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 20 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          20
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Update the store
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 22 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          22
+        </div>
+      </DocumentFragment>
+    `);
+
+    // All rendered values should be consistent (multiples of state * 2)
+    expect(renderedValues.every((v) => v % 2 === 0)).toBe(true);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult works correctly with changing selector identity", async () => {
+    const store = createStore(reducer, 1);
+
+    // Track prevResult values when we see each state
+    const prevResultByState = new Map<number, number | undefined>();
+
+    function Component() {
+      // Inline selector - new function reference every render!
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+    expect(prevResultByState.get(1)).toBe(undefined);
+
+    // Dispatch updates
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 2 }]);
+    // Even though selector identity changed, prevResult should be 1
+    expect(prevResultByState.get(2)).toBe(1);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 3 }]);
+    // prevResult should be 2
+    expect(prevResultByState.get(3)).toBe(2);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("inline selector works during transitions", async () => {
+    const store = createStore(reducer, 1);
+
+    function Component() {
+      // Inline selector - new function reference every render!
+      const count = useStoreSelector(store, (state) => state);
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+
+    let resolve: () => void;
+
+    // Start a transition
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" });
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    // Transition not completed yet
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Complete the transition
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([{ count: 2 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("inline selector with object result uses prevResult for stability", async () => {
+    // Object-based state
+    type ObjState = { a: number; b: number };
+    type ObjAction =
+      | { type: "SET_A"; value: number }
+      | { type: "SET_B"; value: number };
+
+    function objReducer(state: ObjState, action: ObjAction): ObjState {
+      switch (action.type) {
+        case "SET_A":
+          return { ...state, a: action.value };
+        case "SET_B":
+          return { ...state, b: action.value };
+        default:
+          return state;
+      }
+    }
+
+    const store = createStore(objReducer, { a: 1, b: 2 });
+
+    let renderCount = 0;
+    function Component() {
+      renderCount++;
+      // Inline selector with prevResult equality pattern
+      const result = useStoreSelector(
+        store,
+        (state, prevResult?: { a: number }) => {
+          const newResult = { a: state.a };
+          if (prevResult && prevResult.a === newResult.a) {
+            return prevResult; // Return same reference if equal
+          }
+          return newResult;
+        },
+      );
+      logger.log({ a: result.a, renderCount });
+      return <div>{result.a}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ a: 1, renderCount: 1 }]);
+    const initialRenderCount = renderCount;
+
+    // Update b only - a stays the same
+    await act(async () => {
+      store.dispatch({ type: "SET_B", value: 100 });
+    });
+
+    // Should not re-render because selector returns prevResult
+    logger.assertLog([]);
+    expect(renderCount).toBe(initialRenderCount);
+
+    // Update a - should trigger re-render
+    await act(async () => {
+      store.dispatch({ type: "SET_A", value: 10 });
+    });
+
+    logger.assertLog([{ a: 10, renderCount: 2 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("useStoreSelectorWithEquality handles inline selector", async () => {
+    // Object-based state
+    type ObjState = { a: number; b: number };
+    type ObjAction =
+      | { type: "SET_A"; value: number }
+      | { type: "SET_B"; value: number };
+
+    function objReducer(state: ObjState, action: ObjAction): ObjState {
+      switch (action.type) {
+        case "SET_A":
+          return { ...state, a: action.value };
+        case "SET_B":
+          return { ...state, b: action.value };
+        default:
+          return state;
+      }
+    }
+
+    function shallowEqual<T extends Record<string, unknown>>(
+      objA: T,
+      objB: T,
+    ): boolean {
+      if (objA === objB) return true;
+      const keysA = Object.keys(objA);
+      const keysB = Object.keys(objB);
+      if (keysA.length !== keysB.length) return false;
+      for (const key of keysA) {
+        if (objA[key] !== objB[key]) return false;
+      }
+      return true;
+    }
+
+    const store = createStore(objReducer, { a: 1, b: 2 });
+
+    let renderCount = 0;
+    function Component() {
+      renderCount++;
+      // Inline selector - new function reference every render!
+      const result = useStoreSelectorWithEquality(
+        store,
+        (state) => ({ a: state.a }),
+        shallowEqual,
+      );
+      logger.log({ a: result.a, renderCount });
+      return <div>{result.a}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ a: 1, renderCount: 1 }]);
+    const initialRenderCount = renderCount;
+
+    // Update b only - a stays the same, should not re-render due to shallowEqual
+    await act(async () => {
+      store.dispatch({ type: "SET_B", value: 100 });
+    });
+
+    // Should not re-render because shallowEqual({ a: 1 }, { a: 1 }) is true
+    logger.assertLog([]);
+    expect(renderCount).toBe(initialRenderCount);
+
+    // Update a - should trigger re-render
+    await act(async () => {
+      store.dispatch({ type: "SET_A", value: 10 });
+    });
+
+    logger.assertLog([{ a: 10, renderCount: 2 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("inline selector does not cause issues with multiple components", async () => {
+    const store = createStore(reducer, 1);
+
+    const renderCounts = { A: 0, B: 0 };
+
+    function ComponentA() {
+      renderCounts.A++;
+      // Inline selector
+      const count = useStoreSelector(store, (state) => state);
+      logger.log({ component: "A", count });
+      return <div>A: {count}</div>;
+    }
+
+    function ComponentB() {
+      renderCounts.B++;
+      // Inline selector
+      const count = useStoreSelector(store, (state) => state * 2);
+      logger.log({ component: "B", count });
+      return <div>B: {count}</div>;
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <ComponentA />
+          <ComponentB />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([
+      { component: "A", count: 1 },
+      { component: "B", count: 2 },
+    ]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          A: 1
+        </div>
+        <div>
+          B: 2
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Reasonable render counts
+    expect(renderCounts.A).toBeLessThan(5);
+    expect(renderCounts.B).toBeLessThan(5);
+
+    // Update store
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([
+      { component: "A", count: 2 },
+      { component: "B", count: 4 },
+    ]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("inline selector with closure captures current props", async () => {
+    const store = createStore(reducer, 10);
+
+    function Component({ multiplier }: { multiplier: number }) {
+      // Inline selector that captures props - new function reference every render!
+      const count = useStoreSelector(store, (state) => state * multiplier);
+      logger.log({ count, multiplier });
+      return <div>{count}</div>;
+    }
+
+    const { rerender, asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Component multiplier={2} />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 20, multiplier: 2 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          20
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Change multiplier prop
+    await act(async () => {
+      rerender(
+        <StoreProvider>
+          <Component multiplier={3} />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 30, multiplier: 3 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          30
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Update store - should use current multiplier (3)
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 33, multiplier: 3 }]);
 
     unmount();
     expect(store._listeners.length).toBe(0);

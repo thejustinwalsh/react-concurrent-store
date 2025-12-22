@@ -1,6 +1,7 @@
 export {
   useStore,
   useStoreSelector,
+  useStoreSelectorWithEquality,
   createStore,
   createStoreFromSource,
   StoreProvider,
