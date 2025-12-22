@@ -189,7 +189,7 @@ export function useStoreSelector<S, T>(
     function setHookState(value: T) {
       setState((prev) => {
         // If nothing has changed...
-        if (prev.value === value && prev.selector === selector) {
+        if (is(prev.value, value) && prev.selector === selector) {
           // Preserve object identity.
           return prev;
         }
@@ -250,6 +250,14 @@ export function useStoreSelector<S, T>(
 
 function identity<T>(x: T): T {
   return x;
+}
+
+function is(x: unknown, y: unknown) {
+  if (x === y) {
+    return x !== 0 || y !== 0 || 1 / x === 1 / y;
+  } else {
+    return x !== x && y !== y;
+  }
 }
 
 export function useStore<S>(store: Store<S, never>): S {
