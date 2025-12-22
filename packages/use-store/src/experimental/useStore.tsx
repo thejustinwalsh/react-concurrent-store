@@ -137,7 +137,7 @@ type HookState<S, T> = {
  * scheduled to catch us up with the rest of the app.
  */
 export function useStoreSelector<S, T>(
-  store: Store<S, any>,
+  store: Store<S, never>,
   selector: (state: S) => T,
 ): T {
   const storeManager = useContext(storeManagerContext);
@@ -252,6 +252,6 @@ function identity<T>(x: T): T {
   return x;
 }
 
-export function useStore<S>(store: Store<S, any>): S {
+export function useStore<S>(store: Store<S, never>): S {
   return useStoreSelector(store, identity);
 }
