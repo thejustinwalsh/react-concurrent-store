@@ -6,8 +6,10 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useDebugValue,
 } from "react";
 import { Store } from "./Store";
 import { ISource, Reducer } from "../types";
@@ -103,7 +105,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
 type HookState<S, T> = {
   value: T;
-  selector: (state: S) => T;
+  selector: (state: S, prevResult?: T) => T;
 };
 
 /**
@@ -137,8 +139,8 @@ type HookState<S, T> = {
  * scheduled to catch us up with the rest of the app.
  */
 export function useStoreSelector<S, T>(
-  store: Store<S, any>,
-  selector: (state: S) => T,
+  store: Store<S, never>,
+  selector: (state: S, prevResult?: T) => T,
 ): T {
   const storeManager = useContext(storeManagerContext);
   if (storeManager == null) {
@@ -169,7 +171,7 @@ export function useStoreSelector<S, T>(
   // We also track the selector used for each state so that we can determine if
   // the selector has changed since our last updated.
   const [hookState, setState] = useState<HookState<S, T>>(() => ({
-    value: selector(store.getState()),
+    value: selector(store.getState(), undefined),
     selector,
   }));
 
@@ -177,24 +179,34 @@ export function useStoreSelector<S, T>(
   // the mount was sync, we'll apply a fixup in useLayoutEffect, just like we do
   // on mount.
   const selectorChange = hookState.selector !== selector;
-  const state = selectorChange ? selector(store.getState()) : hookState.value;
+  const state = selectorChange
+    ? selector(store.getState(), hookState.value)
+    : hookState.value;
 
   useLayoutEffect(() => {
     // Ensure our store is managed by the tracker.
     storeManager.addStore(store);
-    const mountState = selector(store.getState());
-    const mountCommittedState = selector(store.getCommittedState());
+    const mountState = selector(store.getState(), hookState.value);
+    const mountCommittedState = selector(
+      store.getCommittedState(),
+      hookState.value,
+    );
+
+    function resolveHookState(
+      newValue: T,
+      prev: HookState<S, T>,
+    ): HookState<S, T> {
+      // If nothing has changed...
+      if (is(prev.value, newValue) && prev.selector === selector) {
+        // Preserve object identity.
+        return prev;
+      }
+      return { value: newValue, selector };
+    }
 
     // Helper to ensure we preserve object identity if neither state nor selector has changed.
     function setHookState(value: T) {
-      setState((prev) => {
-        // If nothing has changed...
-        if (prev.value === value && prev.selector === selector) {
-          // Preserve object identity.
-          return prev;
-        }
-        return { value, selector };
-      });
+      setState((prev) => resolveHookState(value, prev));
     }
 
     // If we are mounting as part of a sync update mid transition, our initial
@@ -234,7 +246,12 @@ export function useStoreSelector<S, T>(
     }
 
     const unsubscribe = store.subscribe(() => {
-      setHookState(selector(store.getState()));
+      // Capture store state eagerly when subscription fires, not when React processes the update
+      const currentStoreState = store.getState();
+      setState((prev) => {
+        const newValue = selector(currentStoreState, prev.value);
+        return resolveHookState(newValue, prev);
+      });
     });
     return () => {
       unsubscribe();
@@ -252,6 +269,82 @@ function identity<T>(x: T): T {
   return x;
 }
 
-export function useStore<S>(store: Store<S, any>): S {
+function is(x: unknown, y: unknown) {
+  if (x === y) {
+    return x !== 0 || y !== 0 || 1 / x === 1 / y;
+  } else {
+    return x !== x && y !== y;
+  }
+}
+
+export function useStore<S>(store: Store<S, never>): S {
   return useStoreSelector(store, identity);
+}
+
+export function useStoreSelectorWithEquality<State, Selection>(
+  store: Store<State, never>,
+  selector: (state: State) => Selection,
+  isEqual: (a: Selection, b: Selection) => boolean = Object.is,
+): Selection {
+  const memoizedSelector = useMemo(() => {
+    // Track the memoized state using closure variables that are local to this
+    // memoized instance of a getSnapshot function. Intentionally not using a
+    // useRef hook, because that state would be shared across all concurrent
+    // copies of the hook/component.
+    let hasMemo = false;
+    let memoizedSnapshot: State;
+    let memoizedSelection: Selection;
+
+    const memoizedSelector = (nextSnapshot: State, prevResult?: Selection) => {
+      if (!hasMemo) {
+        // The first time the hook is called, there is no memoized result.
+        hasMemo = true;
+        memoizedSnapshot = nextSnapshot;
+        const nextSelection = selector(nextSnapshot);
+        // Even if the selector has changed, the currently rendered selection
+        // may be equal to the new selection. We should attempt to reuse the
+        // current value if possible, to preserve downstream memoizations.
+        if (prevResult !== undefined && isEqual(prevResult, nextSelection)) {
+          memoizedSelection = prevResult;
+          return prevResult;
+        }
+        memoizedSelection = nextSelection;
+        return nextSelection;
+      }
+
+      // We may be able to reuse the previous invocation's result.
+      const prevSnapshot = memoizedSnapshot;
+      const prevSelection = memoizedSelection;
+
+      if (is(prevSnapshot, nextSnapshot)) {
+        // The snapshot is the same as last time. Reuse the previous selection.
+        return prevSelection;
+      }
+
+      // The snapshot has changed, so we need to compute a new selection.
+      const nextSelection = selector(nextSnapshot);
+
+      // If a custom isEqual function is provided, use that to check if the data
+      // has changed. If it hasn't, return the previous selection. That signals
+      // to React that the selections are conceptually equal, and we can bail
+      // out of rendering.
+      if (isEqual !== undefined && isEqual(prevSelection, nextSelection)) {
+        // The snapshot still has changed, so make sure to update to not keep
+        // old references alive
+        memoizedSnapshot = nextSnapshot;
+        return prevSelection;
+      }
+
+      memoizedSnapshot = nextSnapshot;
+      memoizedSelection = nextSelection;
+      return nextSelection;
+    };
+
+    return memoizedSelector;
+  }, [selector, isEqual]);
+
+  const value = useStoreSelector(store, memoizedSelector);
+
+  useDebugValue(value);
+  return value;
 }
