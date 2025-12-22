@@ -103,7 +103,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
 type HookState<S, T> = {
   value: T;
-  selector: (state: S) => T;
+  selector: (state: S, prevResult?: T) => T;
 };
 
 /**
@@ -138,7 +138,7 @@ type HookState<S, T> = {
  */
 export function useStoreSelector<S, T>(
   store: Store<S, never>,
-  selector: (state: S) => T,
+  selector: (state: S, prevResult?: T) => T,
 ): T {
   const storeManager = useContext(storeManagerContext);
   if (storeManager == null) {
@@ -169,7 +169,7 @@ export function useStoreSelector<S, T>(
   // We also track the selector used for each state so that we can determine if
   // the selector has changed since our last updated.
   const [hookState, setState] = useState<HookState<S, T>>(() => ({
-    value: selector(store.getState()),
+    value: selector(store.getState(), undefined),
     selector,
   }));
 
@@ -177,24 +177,34 @@ export function useStoreSelector<S, T>(
   // the mount was sync, we'll apply a fixup in useLayoutEffect, just like we do
   // on mount.
   const selectorChange = hookState.selector !== selector;
-  const state = selectorChange ? selector(store.getState()) : hookState.value;
+  const state = selectorChange
+    ? selector(store.getState(), hookState.value)
+    : hookState.value;
 
   useLayoutEffect(() => {
     // Ensure our store is managed by the tracker.
     storeManager.addStore(store);
-    const mountState = selector(store.getState());
-    const mountCommittedState = selector(store.getCommittedState());
+    const mountState = selector(store.getState(), hookState.value);
+    const mountCommittedState = selector(
+      store.getCommittedState(),
+      hookState.value,
+    );
+
+    function resolveHookState(
+      newValue: T,
+      prev: HookState<S, T>,
+    ): HookState<S, T> {
+      // If nothing has changed...
+      if (is(prev.value, newValue) && prev.selector === selector) {
+        // Preserve object identity.
+        return prev;
+      }
+      return { value: newValue, selector };
+    }
 
     // Helper to ensure we preserve object identity if neither state nor selector has changed.
     function setHookState(value: T) {
-      setState((prev) => {
-        // If nothing has changed...
-        if (is(prev.value, value) && prev.selector === selector) {
-          // Preserve object identity.
-          return prev;
-        }
-        return { value, selector };
-      });
+      setState((prev) => resolveHookState(value, prev));
     }
 
     // If we are mounting as part of a sync update mid transition, our initial
@@ -234,7 +244,12 @@ export function useStoreSelector<S, T>(
     }
 
     const unsubscribe = store.subscribe(() => {
-      setHookState(selector(store.getState()));
+      // Capture store state eagerly when subscription fires, not when React processes the update
+      const currentStoreState = store.getState();
+      setState((prev) => {
+        const newValue = selector(currentStoreState, prev.value);
+        return resolveHookState(newValue, prev);
+      });
     });
     return () => {
       unsubscribe();
