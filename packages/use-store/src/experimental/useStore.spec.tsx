@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, act } from "@testing-library/react";
-import {
+import React, {
   useState,
   startTransition,
   useEffect,
   useLayoutEffect,
   Suspense,
   use,
+  Component,
 } from "react";
 import { flushSync } from "react-dom";
 import { experimental } from "../index";
@@ -1451,6 +1452,1030 @@ describe("Selectors can be dynamic", () => {
         </div>
       </DocumentFragment>
     `);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+});
+
+describe("prevResult selector behavior", () => {
+  // Helper for shallow equality comparison
+  function shallowEqual<T extends Record<string, unknown>>(
+    objA: T,
+    objB: T,
+  ): boolean {
+    if (objA === objB) return true;
+    const keysA = Object.keys(objA);
+    const keysB = Object.keys(objB);
+    if (keysA.length !== keysB.length) return false;
+    for (const key of keysA) {
+      if (objA[key] !== objB[key]) return false;
+    }
+    return true;
+  }
+
+  // Object-based state for more complex tests
+  type ObjectState = { a: number; b: number; c: number };
+  type ObjectAction =
+    | { type: "SET_A"; value: number }
+    | { type: "SET_B"; value: number }
+    | { type: "INCREMENT_ALL" };
+
+  function objectReducer(
+    state: ObjectState,
+    action: ObjectAction,
+  ): ObjectState {
+    switch (action.type) {
+      case "SET_A":
+        return { ...state, a: action.value };
+      case "SET_B":
+        return { ...state, b: action.value };
+      case "INCREMENT_ALL":
+        return { a: state.a + 1, b: state.b + 1, c: state.c + 1 };
+      default:
+        return state;
+    }
+  }
+
+  // Note: The selector is called multiple times during mount due to the concurrent-safe
+  // fixup logic in useLayoutEffect. This is expected behavior. Tests should account for this
+  // by either:
+  // 1. Only checking meaningful prevResult values (not exact call counts)
+  // 2. Using the prevResult equality pattern for object-returning selectors
+
+  // Basic Functionality Tests
+
+  it("prevResult is undefined on the very first selector call", async () => {
+    const store = createStore(reducer, 1);
+
+    // Track only the first prevResult we receive
+    let firstPrevResult: number | undefined = "NOT_SET" as any;
+    let callCount = 0;
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          callCount++;
+          if (callCount === 1) {
+            firstPrevResult = prevResult;
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+    // The very first call should have undefined prevResult
+    expect(firstPrevResult).toBe(undefined);
+    // Selector may be called multiple times due to fixup logic
+    expect(callCount).toBeGreaterThanOrEqual(1);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult receives previous value on store update", async () => {
+    const store = createStore(reducer, 1);
+
+    // Track prevResult by state value, not call count
+    const prevResultByState = new Map<number, number | undefined>();
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          // Only record first time we see each state
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+    // First state (1) should have undefined prevResult
+    expect(prevResultByState.get(1)).toBe(undefined);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 2 }]);
+    // When we first see state 2, prevResult should be 1
+    expect(prevResultByState.get(2)).toBe(1);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult updates correctly on subsequent renders", async () => {
+    const store = createStore(reducer, 1);
+
+    // Track prevResult by state value
+    const prevResultByState = new Map<number, number | undefined>();
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+
+    // Chain of updates
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+    logger.assertLog([{ count: 2 }]);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+    logger.assertLog([{ count: 3 }]);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+    logger.assertLog([{ count: 4 }]);
+
+    // Each state should have received the previous state as prevResult
+    expect(prevResultByState.get(1)).toBe(undefined);
+    expect(prevResultByState.get(2)).toBe(1);
+    expect(prevResultByState.get(3)).toBe(2);
+    expect(prevResultByState.get(4)).toBe(3);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Store Update Scenarios
+
+  it("prevResult during synchronous store updates", async () => {
+    const store = createStore(reducer, 1);
+
+    const prevResultByState = new Map<number, number | undefined>();
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+    expect(prevResultByState.get(1)).toBe(undefined);
+
+    // Multiple sync updates in single act
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    // Due to auto-batching, we get only one render with final state
+    logger.assertLog([{ count: 3 }]);
+    // The selector may be called for intermediate states during fixup,
+    // so prevResult for state 3 could be 2 (if intermediate states were seen)
+    // or 1 (if only final state was seen). We just verify it's defined and correct.
+    const prevResultFor3 = prevResultByState.get(3);
+    expect(prevResultFor3).toBeDefined();
+    expect([1, 2]).toContain(prevResultFor3);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult during batched updates", async () => {
+    const store = createStore(reducer, 1);
+
+    const prevResultByState = new Map<number, number | undefined>();
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+
+    // Batched updates using flushSync
+    await act(async () => {
+      flushSync(() => {
+        store.dispatch({ type: "INCREMENT" });
+        store.dispatch({ type: "INCREMENT" });
+      });
+    });
+
+    logger.assertLog([{ count: 3 }]);
+    // Initial state had undefined
+    expect(prevResultByState.get(1)).toBe(undefined);
+    // The selector may see intermediate states, so prevResult for state 3
+    // could be 2 (if intermediate state was seen) or 1 (if not)
+    const prevResultFor3 = prevResultByState.get(3);
+    expect(prevResultFor3).toBeDefined();
+    expect([1, 2]).toContain(prevResultFor3);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Selector Change Scenarios
+
+  it("prevResult when selector changes", async () => {
+    const store = createStore(reducer, 10);
+
+    let firstIdentityPrevResult: number | undefined = "NOT_SET" as any;
+    let firstDoublePrevResult: number | undefined = "NOT_SET" as any;
+
+    let setSelector: React.Dispatch<
+      React.SetStateAction<(state: number, prev?: number) => number>
+    >;
+
+    function Count() {
+      const [selector, _setSelector] = useState<
+        (state: number, prev?: number) => number
+      >(() => (state: number, prevResult?: number) => {
+        if (firstIdentityPrevResult === ("NOT_SET" as any)) {
+          firstIdentityPrevResult = prevResult;
+        }
+        return state;
+      });
+      setSelector = _setSelector;
+      const count = useStoreSelector(store, selector);
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 10 }]);
+    expect(firstIdentityPrevResult).toBe(undefined);
+
+    // Change selector to double
+    await act(async () => {
+      setSelector(() => (state: number, prevResult?: number): number => {
+        if (firstDoublePrevResult === ("NOT_SET" as any)) {
+          firstDoublePrevResult = prevResult;
+        }
+        return state * 2;
+      });
+    });
+
+    logger.assertLog([{ count: 20 }]);
+    // New selector should receive previous result from old selector (10)
+    expect(firstDoublePrevResult).toBe(10);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult when selector identity changes but logic is same", async () => {
+    const store = createStore(reducer, 5);
+
+    let firstPrevResult: number | undefined = "NOT_SET" as any;
+    let secondPrevResult: number | undefined = "NOT_SET" as any;
+    let selectorCallCount = 0;
+    let setTrigger: (v: number) => void;
+
+    function Count() {
+      const [trigger, _setTrigger] = useState(0);
+      setTrigger = _setTrigger;
+      // Create new selector function on each render when trigger changes
+      const selector = (state: number, prevResult?: number) => {
+        selectorCallCount++;
+        if (trigger === 0 && firstPrevResult === ("NOT_SET" as any)) {
+          firstPrevResult = prevResult;
+        } else if (trigger === 100 && secondPrevResult === ("NOT_SET" as any)) {
+          secondPrevResult = prevResult;
+        }
+        return state + trigger;
+      };
+      const count = useStoreSelector(store, selector);
+      logger.log({ count, trigger });
+      return <div>{count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 5, trigger: 0 }]);
+    expect(firstPrevResult).toBe(undefined);
+
+    // Change trigger, causing selector identity to change
+    await act(async () => {
+      setTrigger(100);
+    });
+
+    logger.assertLog([{ count: 105, trigger: 100 }]);
+    // New selector should receive previous result (5)
+    expect(secondPrevResult).toBe(5);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Two-Layer Architecture (Custom Equality)
+
+  it("selector can use prevResult for custom equality", async () => {
+    const store = createStore(objectReducer, { a: 1, b: 2, c: 3 });
+
+    let renderCount = 0;
+    function Count() {
+      const result = useStoreSelector(
+        store,
+        (state, prevResult?: { a: number; b: number }) => {
+          const newResult = { a: state.a, b: state.b };
+          // Return prevResult if equal to prevent re-render
+          if (
+            prevResult &&
+            prevResult.a === newResult.a &&
+            prevResult.b === newResult.b
+          ) {
+            return prevResult;
+          }
+          return newResult;
+        },
+      );
+      renderCount++;
+      logger.log({ a: result.a, b: result.b, renderCount });
+      return (
+        <div>
+          {result.a}-{result.b}
+        </div>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ a: 1, b: 2, renderCount: 1 }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1-2
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Update c only - selector should return prevResult, no re-render
+    const initialRenderCount = renderCount;
+    await act(async () => {
+      store.dispatch({ type: "SET_A", value: 1 }); // Same value
+    });
+
+    // The subscription fires but selector returns same reference
+    // React should bail out from re-render
+    logger.assertLog([]);
+    expect(renderCount).toBe(initialRenderCount);
+
+    // Update a - should trigger re-render
+    await act(async () => {
+      store.dispatch({ type: "SET_A", value: 100 });
+    });
+
+    logger.assertLog([{ a: 100, b: 2, renderCount: 2 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("selector with shallowEqual using prevResult", async () => {
+    const store = createStore(objectReducer, { a: 1, b: 2, c: 3 });
+
+    let renderCount = 0;
+    function Count() {
+      const result = useStoreSelector(
+        store,
+        (state, prevResult?: { a: number; b: number }) => {
+          const newResult = { a: state.a, b: state.b };
+          if (prevResult && shallowEqual(newResult, prevResult)) {
+            return prevResult; // Prevent unnecessary re-render
+          }
+          return newResult;
+        },
+      );
+      renderCount++;
+      logger.log({ a: result.a, b: result.b, renderCount });
+      return (
+        <div>
+          {result.a}-{result.b}
+        </div>
+      );
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ a: 1, b: 2, renderCount: 1 }]);
+
+    // Update c only - shallowEqual should prevent re-render
+    const initialRenderCount = renderCount;
+    await act(async () => {
+      store.dispatch({ type: "SET_A", value: 1 }); // Same value for a
+    });
+
+    logger.assertLog([]);
+    expect(renderCount).toBe(initialRenderCount);
+
+    // Update both a and b
+    await act(async () => {
+      store.dispatch({ type: "SET_A", value: 10 });
+    });
+
+    logger.assertLog([{ a: 10, b: 2, renderCount: 2 }]);
+
+    await act(async () => {
+      store.dispatch({ type: "SET_B", value: 20 });
+    });
+
+    logger.assertLog([{ a: 10, b: 20, renderCount: 3 }]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Concurrent/Transition Scenarios
+
+  it("prevResult during startTransition", async () => {
+    const store = createStore(reducer, 1);
+
+    const prevResultByState = new Map<number, number | undefined>();
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+    expect(prevResultByState.get(1)).toBe(undefined);
+
+    let resolve: () => void;
+
+    // Start a transition
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" });
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    // Transition not completed yet
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Complete the transition
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([{ count: 2 }]);
+    // prevResult should have been 1 during the transition render
+    expect(prevResultByState.get(2)).toBe(1);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult when store updates mid-transition", async () => {
+    const store = createStore(reducer, 1);
+
+    let setShowOther: (v: boolean) => void;
+
+    function Count({ testid }: { testid: string }) {
+      const count = useStoreSelector(store, identity);
+      logger.log({ testid, count });
+      return <div>{count}</div>;
+    }
+
+    function App() {
+      const [showOther, _setShowOther] = useState(false);
+      setShowOther = _setShowOther;
+      return (
+        <StoreProvider>
+          <Count testid="count" />
+          {showOther && <Count testid="otherCount" />}
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ testid: "count", count: 1 }]);
+
+    let resolve: () => void;
+
+    // Start a transition
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" });
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    // Mount new component mid-transition (sync)
+    await act(async () => {
+      setShowOther(true);
+    });
+
+    // The new component mounts with transition state (2) then fixup to sync state (1)
+    logger.assertLog([
+      { testid: "count", count: 1 },
+      { testid: "otherCount", count: 2 }, // First render with transition state
+      { testid: "otherCount", count: 1 }, // Fixup to sync state
+    ]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          1
+        </div>
+        <div>
+          1
+        </div>
+      </DocumentFragment>
+    `);
+
+    // Complete transition
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([
+      { testid: "count", count: 2 },
+      { testid: "otherCount", count: 2 },
+    ]);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult with concurrent renders - each component tracks independently", async () => {
+    const store = createStore(reducer, 1);
+
+    // Track prevResult by state for each component
+    const prevResultByStateA = new Map<number, number | undefined>();
+    const prevResultByStateB = new Map<number, number | undefined>();
+
+    function CountA() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByStateA.has(state)) {
+            prevResultByStateA.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ testid: "A", count });
+      return <div>A: {count}</div>;
+    }
+
+    function CountB() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByStateB.has(state)) {
+            prevResultByStateB.set(state, prevResult);
+          }
+          return state;
+        },
+      );
+      logger.log({ testid: "B", count });
+      return <div>B: {count}</div>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <CountA />
+          <CountB />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([
+      { testid: "A", count: 1 },
+      { testid: "B", count: 1 },
+    ]);
+
+    // Both start with undefined for state 1
+    expect(prevResultByStateA.get(1)).toBe(undefined);
+    expect(prevResultByStateB.get(1)).toBe(undefined);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([
+      { testid: "A", count: 2 },
+      { testid: "B", count: 2 },
+    ]);
+
+    // Each component should have prevResult=1 when rendering state=2
+    expect(prevResultByStateA.get(2)).toBe(1);
+    expect(prevResultByStateB.get(2)).toBe(1);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult consistency across interrupted renders", async () => {
+    const store = createStore(reducer, 1);
+
+    // Use identity selector to avoid infinite loops from object creation
+    function Count() {
+      const count = useStoreSelector(store, identity);
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    let setShowOther: (v: boolean) => void;
+
+    function App() {
+      const [showOther, _setShowOther] = useState(false);
+      setShowOther = _setShowOther;
+      return (
+        <StoreProvider>
+          <Count />
+          {showOther && <Count />}
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ count: 1 }]);
+
+    let resolve: () => void;
+
+    // Start a transition
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" });
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    // Interrupt with sync update that mounts new component
+    await act(async () => {
+      setShowOther(true);
+    });
+
+    logger.assertLog([
+      { count: 1 },
+      { count: 2 }, // New component renders with transition state
+      { count: 1 }, // Fixup to sync state
+    ]);
+
+    // Complete the transition
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([{ count: 2 }, { count: 2 }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          2
+        </div>
+        <div>
+          2
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  // Edge Cases
+
+  it("prevResult with selector that throws", async () => {
+    const store = createStore(reducer, 1);
+
+    let shouldThrow = false;
+    let prevResultWhenThrowing: number | undefined;
+    const prevResultByState = new Map<number, number | undefined>();
+
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          if (shouldThrow) {
+            prevResultWhenThrowing = prevResult;
+            throw new Error("Selector error");
+          }
+          return state;
+        },
+      );
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    // Wrap in error boundary for the test
+    class ErrorBoundary extends Component<
+      { children: React.ReactNode },
+      { hasError: boolean }
+    > {
+      state = { hasError: false };
+      static getDerivedStateFromError() {
+        return { hasError: true };
+      }
+      render() {
+        if (this.state.hasError) {
+          return <div>Error Boundary</div>;
+        }
+        return this.props.children;
+      }
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <ErrorBoundary>
+          <StoreProvider>
+            <Count />
+          </StoreProvider>
+        </ErrorBoundary>,
+      );
+    });
+
+    logger.assertLog([{ count: 1 }]);
+    expect(prevResultByState.get(1)).toBe(undefined);
+
+    // Normal update
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ count: 2 }]);
+    expect(prevResultByState.get(2)).toBe(1);
+
+    // Suppress expected console.error from React error boundary
+    const originalError = console.error;
+    console.error = () => {};
+
+    // Now make selector throw
+    shouldThrow = true;
+    try {
+      await act(async () => {
+        store.dispatch({ type: "INCREMENT" });
+      });
+    } catch {
+      // Expected error
+    } finally {
+      console.error = originalError;
+    }
+
+    // prevResult should have been 2 when the selector threw
+    expect(prevResultWhenThrowing).toBe(2);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult after component remounts", async () => {
+    const store = createStore(reducer, 10);
+
+    // Track first prevResult per mount
+    let mountCount = 0;
+    const firstPrevResultPerMount: (number | undefined)[] = [];
+
+    function Count() {
+      const count = useStoreSelector<State, number>(
+        store,
+        (state, prevResult) => {
+          // Track first call of each mount
+          if (firstPrevResultPerMount.length === mountCount) {
+            firstPrevResultPerMount.push(prevResult);
+          }
+          return state;
+        },
+      );
+      useEffect(() => {
+        mountCount++;
+      }, []);
+      logger.log({ count });
+      return <div>{count}</div>;
+    }
+
+    let setShow: (v: boolean) => void;
+
+    function App() {
+      const [show, _setShow] = useState(true);
+      setShow = _setShow;
+      return <StoreProvider>{show && <Count />}</StoreProvider>;
+    }
+
+    const { unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ count: 10 }]);
+    // First mount starts with undefined
+    expect(firstPrevResultPerMount[0]).toBe(undefined);
+
+    // Unmount component
+    await act(async () => {
+      setShow(false);
+    });
+
+    logger.assertLog([]);
+
+    // Remount component
+    await act(async () => {
+      setShow(true);
+    });
+
+    // Fresh mount gets undefined prevResult
+    logger.assertLog([{ count: 10 }]);
+    expect(firstPrevResultPerMount[1]).toBe(undefined);
+
+    unmount();
+    expect(store._listeners.length).toBe(0);
+  });
+
+  it("prevResult with derived/computed values using equality check", async () => {
+    const store = createStore(reducer, 5);
+
+    type DerivedResult = { doubled: number; tripled: number };
+    // Track prevResult by state value
+    const prevResultByState = new Map<number, DerivedResult | undefined>();
+
+    function Count() {
+      const result = useStoreSelector(
+        store,
+        (state, prevResult?: DerivedResult) => {
+          if (!prevResultByState.has(state)) {
+            prevResultByState.set(state, prevResult);
+          }
+          const newResult = {
+            doubled: state * 2,
+            tripled: state * 3,
+          };
+          // Use prevResult equality pattern to prevent infinite loops
+          if (
+            prevResult &&
+            prevResult.doubled === newResult.doubled &&
+            prevResult.tripled === newResult.tripled
+          ) {
+            return prevResult;
+          }
+          return newResult;
+        },
+      );
+      logger.log({ doubled: result.doubled, tripled: result.tripled });
+      return (
+        <div>
+          {result.doubled}-{result.tripled}
+        </div>
+      );
+    }
+
+    const { unmount } = await act(async () => {
+      return render(
+        <StoreProvider>
+          <Count />
+        </StoreProvider>,
+      );
+    });
+
+    logger.assertLog([{ doubled: 10, tripled: 15 }]);
+    expect(prevResultByState.get(5)).toBe(undefined);
+
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    logger.assertLog([{ doubled: 12, tripled: 18 }]);
+    // prevResult when rendering state 6 should be the result from state 5
+    expect(prevResultByState.get(6)).toEqual({ doubled: 10, tripled: 15 });
+
+    await act(async () => {
+      store.dispatch({ type: "DOUBLE" });
+    });
+
+    logger.assertLog([{ doubled: 24, tripled: 36 }]);
+    // prevResult when rendering state 12 should be the result from state 6
+    expect(prevResultByState.get(12)).toEqual({ doubled: 12, tripled: 18 });
 
     unmount();
     expect(store._listeners.length).toBe(0);

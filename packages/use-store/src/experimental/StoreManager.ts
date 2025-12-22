@@ -6,7 +6,10 @@ type RefCountedSubscription = {
   unsubscribe: () => void;
 };
 
-type StoresSnapshot = Map<Store<unknown, unknown>, unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyStore = Store<any, never>;
+
+type StoresSnapshot = Map<AnyStore, unknown>;
 
 /**
  * StoreManager tracks all actively rendered stores in the tree and maintains a
@@ -15,8 +18,7 @@ type StoresSnapshot = Map<Store<unknown, unknown>, unknown>;
  * state.
  */
 export class StoreManager extends Emitter<[]> {
-  _storeRefCounts: Map<Store<unknown, unknown>, RefCountedSubscription> =
-    new Map();
+  _storeRefCounts: Map<AnyStore, RefCountedSubscription> = new Map();
 
   getAllCommittedStates(): StoresSnapshot {
     return new Map(
@@ -36,7 +38,7 @@ export class StoreManager extends Emitter<[]> {
     );
   }
 
-  addStore(store: Store<any, any>) {
+  addStore(store: AnyStore) {
     const prev = this._storeRefCounts.get(store);
     if (prev == null) {
       this._storeRefCounts.set(store, {
@@ -57,11 +59,11 @@ export class StoreManager extends Emitter<[]> {
     this.sweep();
   }
 
-  removeStore(store: Store<any, any>) {
+  removeStore(store: AnyStore) {
     const prev = this._storeRefCounts.get(store);
     if (prev == null) {
       throw new Error(
-        "Imblance in concurrent-safe store reference counting. This is a bug in react-use-store, please report it.",
+        "Imbalance in concurrent-safe store reference counting. This is a bug in react-use-store, please report it.",
       );
     }
     // We decrement the count here, but don't actually do the cleanup.  This is

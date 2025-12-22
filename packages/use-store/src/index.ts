@@ -1,4 +1,4 @@
-export type { ReactStore } from "./types";
+export type { ReactStore, ISource, Reducer } from "./types";
 import * as Experimental from "./experimental";
 
 export { createStore, useStore } from "./useStore";
