@@ -211,6 +211,6 @@ describe("createStore for Redux", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 });

@@ -159,7 +159,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("Does not tear when new component mounts in its own transition mid transition", async () => {
@@ -252,7 +252,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("Does not miss updates triggered in useEffect or useLayoutEffect", async () => {
@@ -386,7 +386,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   // This should catch the case where fixups accidentally could get entangled with a transition when they should flush sync.
@@ -552,7 +552,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("Sync update interrupting transition correctly tracks committed state", async () => {
@@ -684,7 +684,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("Multiple sync updates interrupting transition correctly tracks committed state", async () => {
@@ -818,7 +818,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("flushSync update interrupting transition correctly tracks committed state", async () => {
@@ -946,7 +946,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("correctly handles consecutive sync updates", async () => {
@@ -995,7 +995,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("dynamic stores are not yet supported", async () => {
@@ -1048,8 +1048,8 @@ describe("Experimental Userland Store", () => {
       "useStoreSelector does not currently support dynamic stores",
     );
     unmount();
-    expect(store1._listeners.length).toBe(0);
-    expect(store2._listeners.length).toBe(0);
+    expect(store1.listenerCount).toBe(0);
+    expect(store2.listenerCount).toBe(0);
   });
 
   it("transition store update causes new store reader to mount", async () => {
@@ -1104,7 +1104,7 @@ describe("Experimental Userland Store", () => {
       </DocumentFragment>
     `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   // Describes a limitation of our fixup logic: If a component mounts sync
@@ -1244,7 +1244,7 @@ describe("Experimental Userland Store", () => {
          </DocumentFragment>
        `);
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("can read from multiple different stores updating independently", async () => {
@@ -1311,8 +1311,8 @@ describe("Experimental Userland Store", () => {
 
     unmount();
 
-    expect(storeA._listeners.length).toBe(0);
-    expect(storeB._listeners.length).toBe(0);
+    expect(storeA.listenerCount).toBe(0);
+    expect(storeB.listenerCount).toBe(0);
   });
 });
 
@@ -1366,7 +1366,7 @@ describe("Selectors can be dynamic", () => {
     `);
 
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 
   it("selector changes sync during a transition update to the store", async () => {
@@ -1453,6 +1453,6 @@ describe("Selectors can be dynamic", () => {
     `);
 
     unmount();
-    expect(store._listeners.length).toBe(0);
+    expect(store.listenerCount).toBe(0);
   });
 });
