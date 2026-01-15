@@ -1,15 +1,17 @@
 export default class Emitter<T extends Array<unknown>> {
-  _listeners: Array<(...value: T) => void> = [];
+  _listeners: Set<(...value: T) => void> = new Set();
+
   subscribe(cb: (...value: T) => void): () => void {
-    const wrapped = (...value: T) => cb(...value);
-    this._listeners.push(wrapped);
+    this._listeners.add(cb);
+
     return () => {
-      this._listeners = this._listeners.filter((s) => s !== wrapped);
+      this._listeners.delete(cb);
     };
   }
+
   notify(...value: T) {
-    this._listeners.forEach((cb) => {
+    for (const cb of this._listeners) {
       cb(...value);
-    });
+    }
   }
 }
