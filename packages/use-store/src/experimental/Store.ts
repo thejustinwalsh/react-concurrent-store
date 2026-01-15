@@ -10,10 +10,18 @@ function reactTransitionIsActive() {
   return !!sharedReactInternals.T;
 }
 
-export class Store<S, A> extends Emitter<[]> {
-  private source: ISource<S, A>;
-  private state: S;
-  private committedState: S;
+export interface ReactStore<S, A = never> {
+  getState(): S;
+  getCommittedState(): S;
+  handleUpdate(action: A): void;
+  subscribe(listener: () => void): () => void;
+  commit(state: S): void;
+}
+
+export class Store<S, A> extends Emitter<[]> implements ReactStore<S, A> {
+  source: ISource<S, A>;
+  state: S;
+  committedState: S;
   constructor(source: ISource<S, A>) {
     super();
     this.source = source;

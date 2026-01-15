@@ -137,7 +137,7 @@ type HookState<S, T> = {
  * scheduled to catch us up with the rest of the app.
  */
 export function useStoreSelector<S, T>(
-  store: Store<S, any>,
+  store: Store<S, never>,
   selector: (state: S) => T,
 ): T {
   const storeManager = useContext(storeManagerContext);
@@ -189,7 +189,7 @@ export function useStoreSelector<S, T>(
     function setHookState(value: T) {
       setState((prev) => {
         // If nothing has changed...
-        if (prev.value === value && prev.selector === selector) {
+        if (is(prev.value, value) && prev.selector === selector) {
           // Preserve object identity.
           return prev;
         }
@@ -252,6 +252,14 @@ function identity<T>(x: T): T {
   return x;
 }
 
-export function useStore<S>(store: Store<S, any>): S {
+function is(x: unknown, y: unknown) {
+  if (x === y) {
+    return x !== 0 || y !== 0 || 1 / x === 1 / y;
+  } else {
+    return x !== x && y !== y;
+  }
+}
+
+export function useStore<S>(store: Store<S, never>): S {
   return useStoreSelector(store, identity);
 }
