@@ -7,6 +7,37 @@ React would implement this inside the reconciler, where it can add a reader to
 a transition that is already in flight. A library cannot, and that is the only
 thing on this page.
 
+## It reads one field out of React
+
+`useStore` needs to know one thing, and React does not expose it: whether the
+caller was inside `startTransition` when they dispatched. It reads that from
+
+```ts
+React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.T
+```
+
+Read, never written, feature-detected, and the only unsupported thing this
+package does. No experimental React build is needed — but that is why.
+
+It is not incidental. With the field, 152 tests pass. Stub it out and 42 fail,
+including every transition case, and what is left behaves like
+`useSyncExternalStore`.
+
+There is no public replacement. A library can only be told by its caller:
+
+```tsx
+import { startTransition } from "react-concurrent-store"; // hypothetical
+startTransition(() => store.dispatch(navigate("/profile")));
+```
+
+That covers transitions you start, and misses every transition started on your
+behalf — which is most of them, because a router starts navigations inside
+itself. Being told is strictly weaker than being able to look.
+
+Which makes this the clearest case for the feature landing in React rather than
+against it. The information exists, the reconciler has it for free, and a
+userland store can only reach it by reaching somewhere it should not have to.
+
 ## An effect keyed on the value runs twice when a reader lands behind
 
 A reader that appears while a transition is blocked shows what its siblings are

@@ -14,7 +14,8 @@ old screen up drops to a fallback instead, and the caller's
 `startTransition` — which said exactly what it wanted — is discarded by the
 hook doing the reading.
 
-`useStore` honours it.
+`useStore` honours it. It does that by reading one field out of React —
+[see below](#what-it-reads-from-react).
 
 ```tsx
 // Navigate to a page whose data has not arrived. The screen keeps what it has.
@@ -78,6 +79,29 @@ State is carried on a promise with `status`/`value` expandos, the shape React
 reads to unwrap `use()` without a microtask. That is what lets a store hold a
 value that is not ready yet, and lets the same object serve a suspending client
 read and a synchronous server render.
+
+## What it reads from React
+
+`useStore` needs one thing React does not expose: whether the caller was inside
+`startTransition` when they dispatched.
+
+```ts
+const clientInternals = (React as …).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+const transitionScope = (): unknown => clientInternals?.T ?? null;
+```
+
+Read, never written, feature-detected, and the only unsupported thing this
+package does. No experimental React build is needed — but that is why.
+
+It is not incidental. With that field, 152 tests pass. Stub it out and 42 fail,
+including every transition case, and what is left behaves like
+`useSyncExternalStore`.
+
+There is no public replacement. A library can only be told by its caller, and
+being told misses every transition started on your behalf — which is most of
+them, because a router starts navigations inside itself. Which makes this the
+clearest case for the feature landing in React rather than an argument against
+it: the reconciler has this information for free.
 
 ## The demo
 
