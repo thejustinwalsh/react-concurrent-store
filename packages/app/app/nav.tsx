@@ -18,16 +18,18 @@ export function Nav() {
   const here = usePathname();
   return (
     <nav className="tabs">
-      {pages.map((page) => (
-        <Link
-          key={page.href}
-          href={page.href}
-          className={page.href === here ? "tab here" : "tab"}
-          aria-current={page.href === here ? "page" : undefined}
-        >
-          {page.title}
-        </Link>
-      ))}
+      <div className="wrap">
+        {pages.map((page) => (
+          <Link
+            key={page.href}
+            href={page.href}
+            className={page.href === here ? "tab here" : "tab"}
+            aria-current={page.href === here ? "page" : undefined}
+          >
+            {page.title}
+          </Link>
+        ))}
+      </div>
     </nav>
   );
 }

@@ -13,12 +13,8 @@
   --accent: #89b4fa;    /* blue */
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
-  /* One column for every page. Bars stay full width and pad their contents in
-     to the same edges, so nothing hugs the left when the window is wide. */
-  --page: 1024px;
-  --gutter: max(20px, calc((100% - var(--page)) / 2));
-  /* Reading measure, in absolute units so every block ends on the same line. */
-  --prose: 680px;
+  /* Content column: 1024px of content plus a 20px gutter either side. */
+  --page: 1064px;
 
   /* Tints, derived rather than hand-picked, so the palette stays one thing. */
   --tint-ok: color-mix(in srgb, var(--ok) 28%, var(--line));
@@ -30,6 +26,19 @@
 
 * { box-sizing: border-box; }
 
+/* Everything on a page sits in one of these. Full-width bars keep their
+   background and border and put a .wrap inside; blocks with no background
+   are .wrap themselves. */
+.wrap,
+main,
+.lede,
+.ab {
+  width: 100%;
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -38,9 +47,11 @@ body {
 }
 
 header.top {
-  padding: 28px 24px 16px;
-  padding-inline: var(--gutter);
+  padding-block: 28px 16px;
+  padding-inline: 0;
   border-bottom: 1px solid var(--line);
+}
+header.top .wrap {
   display: flex;
   gap: 20px;
   align-items: baseline;
@@ -50,7 +61,7 @@ header.top h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
 header.top .sub { color: var(--dim); }
 header.top .tally { margin-left: auto; font-family: var(--mono); }
 
-main { padding: 20px var(--gutter); display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); }
+main { padding-block: 20px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); }
 
 .card {
   background: var(--panel);
@@ -149,12 +160,13 @@ button.run { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); bo
 /* ---------- shell ---------- */
 
 nav.tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 20px;
-  padding-inline: var(--gutter);
+  padding: 0;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
+}
+nav.tabs .wrap {
+  display: flex;
+  gap: 2px;
 }
 nav.tabs .tab {
   background: none;
@@ -170,18 +182,14 @@ nav.tabs .tab {
 nav.tabs .tab:hover { color: var(--ink); }
 nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
 
-.lede { padding: 22px var(--gutter) 4px; }
-/* One measure for everything in a lede. `ch` resolves against each element's
-   own font-size, so the same ch value gives a paragraph and a callout
-   different widths and a ragged right edge. */
-.lede > * { max-width: var(--prose); }
+.lede { padding-block: 22px 4px; }
 .lede h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
 .lede p { margin: 0 0 12px; color: var(--dim); font-size: 13.5px; line-height: 1.6; }
 .lede code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
 
 /* ---------- side by side ---------- */
 
-.ab { padding: 8px var(--gutter) 24px; display: grid; gap: 14px; }
+.ab { padding-block: 8px 24px; display: grid; gap: 14px; }
 .ab .pair {
   display: grid;
   gap: 14px;

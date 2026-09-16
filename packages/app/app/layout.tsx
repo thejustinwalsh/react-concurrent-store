@@ -19,7 +19,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <header className="top">
-          <h1>Concurrent Store</h1>
+          <div className="wrap">
+            <h1>Concurrent Store</h1>
+          </div>
         </header>
         <Nav />
         {children}
