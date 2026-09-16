@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gauntlet",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@react-concurrent-store/app", "dev"],
+      "port": 5178
+    }
+  ]
+}

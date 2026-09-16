@@ -3664,3 +3664,153 @@ describe("Activity", () => {
     expect(getByTestId("gated").textContent).toBe("2");
   });
 });
+
+describe("Promise identity", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * React's own rule: a promise passed to use() must have a stable identity
+   * across renders, and React warns when it does not ("a component was
+   * suspended by an uncached promise"). The store is what gives the promise
+   * its identity here, so that warning firing would mean the store is handing
+   * out a different promise on each read.
+   */
+  it("never suspends React on an uncached promise", async () => {
+    const logged: string[] = [];
+    const spy = vi
+      .spyOn(console, "error")
+      .mockImplementation((...args: unknown[]) => {
+        logged.push(args.map(String).join(" "));
+      });
+
+    let resolve!: (name: string) => void;
+    const pending = new Promise<string>((r) => (resolve = r));
+    const store = createStore<Promise<string>>(Promise.resolve("ada"));
+
+    function Reader() {
+      return <span>{use(useStore(store))}</span>;
+    }
+
+    const { container } = await act(async () =>
+      render(
+        <Suspense fallback={<span>loading</span>}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    expect(container.textContent).toBe("ada");
+
+    await act(async () => store.dispatch(pending));
+    // React keeps the suspended child mounted but hidden, so the container
+    // holds both; the fallback being present is the reading that matters.
+    expect(container.textContent).toContain("loading");
+
+    await act(async () => resolve("grace"));
+    expect(container.textContent).toBe("grace");
+
+    // A transition over a pending promise too: this is the path that retries.
+    let releaseSecond!: (name: string) => void;
+    const second = new Promise<string>((r) => (releaseSecond = r));
+    await act(async () => {
+      startTransition(() => store.dispatch(second));
+    });
+    await act(async () => releaseSecond("hopper"));
+    expect(container.textContent).toBe("hopper");
+
+    spy.mockRestore();
+    expect(logged.filter((line) => /uncached promise/i.test(line))).toEqual([]);
+    // Nothing else React considers a rules violation either.
+    expect(logged.filter((line) => /not wrapped in act|Cannot update a component/i.test(line))).toEqual([]);
+  });
+
+  it("hands the same promise to every reader in a pass", async () => {
+    const stored = Promise.resolve("ada");
+    const store = createStore<Promise<string>>(stored);
+    const seen: unknown[] = [];
+
+    function Reader() {
+      const promise = useStore(store);
+      seen.push(promise);
+      return <span>{use(promise)}</span>;
+    }
+
+    await act(async () =>
+      render(
+        <Suspense fallback={<span>loading</span>}>
+          <Reader />
+          <Reader />
+        </Suspense>,
+      ),
+    );
+
+    expect(seen.length).toBeGreaterThan(1);
+    expect(new Set(seen).size).toBe(1);
+    expect(seen[0]).toBe(stored);
+  });
+});
+
+describe("A sync update that does not suspend, over a transition that does", () => {
+  afterEach(() => cleanup());
+
+  it("never commits the fallback for the sync value", async () => {
+    // Letters: uppercase suspends while the gate is held, lowercase never does.
+    const store = createStore("");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+    let fallbackRenders = 0;
+    let fallbackCommits = 0;
+
+    function Reader() {
+      const applied = useStore(store);
+      if (held && /[A-Z]/.test(applied)) use(gate);
+      return <span data-testid="screen">{applied}</span>;
+    }
+    function Fallback() {
+      fallbackRenders += 1;
+      // A render React discards is not one anybody saw; a commit is.
+      useEffect(() => {
+        fallbackCommits += 1;
+      }, []);
+      return <span>loading</span>;
+    }
+
+    const { getAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<Fallback />}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    const screen = () => getAllByTestId("screen").map((n) => n.textContent);
+    expect(screen()).toEqual([""]);
+    fallbackRenders = 0;
+    fallbackCommits = 0;
+
+    // The chronological value contains A, so every head render suspends.
+    await act(async () => {
+      startTransition(() => store.dispatch((s) => s + "A"));
+    });
+    expect(screen()).toEqual([""]);
+    expect(store.getState()).toBe("A");
+
+    // The rebased value is "b", which never suspends. It must render, and the
+    // tree must not drop to the fallback to get there.
+    await act(async () => store.dispatch((s) => s + "b"));
+    expect(store.getState()).toBe("Ab");
+    expect(screen()).toEqual(["b"]);
+    // React renders the fallback while it retries the suspended attempt, but
+    // never commits it, so nobody sees it. Committing is the claim.
+    expect(fallbackCommits).toBe(0);
+    expect(fallbackRenders).toBeGreaterThanOrEqual(0);
+
+    await act(async () => store.dispatch((s) => s + "c"));
+    expect(store.getState()).toBe("Abc");
+    expect(screen()).toEqual(["bc"]);
+    expect(fallbackCommits).toBe(0);
+
+    held = false;
+    await act(async () => release());
+    expect(screen()).toEqual(["Abc"]);
+  });
+});

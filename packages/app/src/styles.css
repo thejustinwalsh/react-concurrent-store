@@ -1,0 +1,129 @@
+:root {
+  --bg: #0b0d12;
+  --panel: #12151d;
+  --panel-2: #171b25;
+  --line: #262c3a;
+  --ink: #e6e9f2;
+  --dim: #8a93a8;
+  --ok: #37d67a;
+  --bad: #ff5d5d;
+  --wait: #f5b14c;
+  --accent: #7aa2ff;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+header.top {
+  padding: 28px 24px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 20px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+header.top h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+header.top .sub { color: var(--dim); }
+header.top .tally { margin-left: auto; font-family: var(--mono); }
+
+main { padding: 20px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.card > header { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+.card h2 { margin: 0 0 6px; font-size: 15px; }
+.card .proves { margin: 0; color: var(--dim); font-size: 12.5px; }
+
+.stage {
+  padding: 16px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.readers { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.chip {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #0e111a;
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.chip .name { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.chip .value { font-size: 15px; font-variant-numeric: tabular-nums; }
+.chip.flash { animation: flash 420ms ease-out; }
+@keyframes flash {
+  0% { background: var(--accent); border-color: var(--accent); color: #0b0d12; }
+  100% { background: #0e111a; border-color: var(--line); }
+}
+.chip.pending { border-color: var(--wait); }
+.chip.torn { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+
+.track { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; min-height: 20px; }
+.track .t {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #0e111a;
+  border: 1px solid var(--line);
+  color: var(--dim);
+}
+.track .t.render { color: var(--ink); border-color: #33405c; }
+.track .t.dispatch { color: var(--accent); border-color: #2c3a5c; }
+.track .t.note { color: var(--wait); border-color: #4a3a1c; }
+
+.controls { padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); }
+
+button {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: #1b2030;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.run { background: #1d2b4a; border-color: #2c3a5c; }
+
+.verdict { padding: 11px 16px; display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
+.light { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
+.light.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.light.bad { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+.light.wait { background: var(--wait); box-shadow: 0 0 8px var(--wait); }
+.verdict .msg { color: var(--dim); }
+.verdict .msg.bad { color: var(--bad); }
+.verdict .msg.ok { color: var(--ok); }
+
+.checks { padding: 0 16px 12px; margin: 0; list-style: none; display: grid; gap: 4px; }
+.checks li { font-family: var(--mono); font-size: 11.5px; display: flex; gap: 8px; }
+.checks li .mark { flex: none; width: 12px; }
+.checks li.ok .mark { color: var(--ok); }
+.checks li.bad .mark { color: var(--bad); }
+.checks li .label { color: var(--dim); }
+.checks li .got { margin-left: auto; }
+.checks li.bad .got { color: var(--bad); }

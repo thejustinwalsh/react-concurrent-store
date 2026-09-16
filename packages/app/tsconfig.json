@@ -9,7 +9,7 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "react-concurrent-store": ["../use-store/src/index.ts"]
+      "react-concurrent-store": ["../use-store/src/useStore.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]
