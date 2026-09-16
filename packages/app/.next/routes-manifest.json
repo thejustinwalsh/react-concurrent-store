@@ -64,6 +64,18 @@
       "regex": "^/router(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/router(?:/)?$"
+    },
+    {
+      "page": "/rsc",
+      "regex": "^/rsc(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rsc(?:/)?$"
+    },
+    {
+      "page": "/ssr",
+      "regex": "^/ssr(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/ssr(?:/)?$"
     }
   ],
   "dataRoutes": [],

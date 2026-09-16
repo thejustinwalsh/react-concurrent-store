@@ -5,5 +5,7 @@
   "/fetching/page": "/fetching",
   "/identity/page": "/identity",
   "/page": "/",
-  "/router/page": "/router"
+  "/router/page": "/router",
+  "/rsc/page": "/rsc",
+  "/ssr/page": "/ssr"
 }

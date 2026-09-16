@@ -5,5 +5,7 @@
   "/fetching/page": "app/fetching/page.js",
   "/identity/page": "app/identity/page.js",
   "/page": "app/page.js",
-  "/router/page": "app/router/page.js"
+  "/router/page": "app/router/page.js",
+  "/rsc/page": "app/rsc/page.js",
+  "/ssr/page": "app/ssr/page.js"
 }
