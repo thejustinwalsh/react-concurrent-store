@@ -44,6 +44,7 @@ import {
   Suspense,
   startTransition,
   use,
+  useDeferredValue,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -3018,5 +3019,229 @@ describe("Known concurrency bugs", () => {
 
     await act(async () => release());
     expect(readAll()).toEqual(["s5", "o0", "w5"]);
+  });
+});
+
+describe("No useSyncExternalStore de-opt", () => {
+  type Count = number;
+  type CountAction = { type: "increment" | "double" };
+  const reducer = (n: Count, a: CountAction): Count =>
+    a.type === "increment" ? n + 1 : n * 2;
+
+  afterEach(() => cleanup());
+
+
+  it("a transition update stays a transition instead of flushing synchronously", async () => {
+    const store = createStore(1, reducer);
+    const seen: number[] = [];
+
+    function Reader() {
+      const n = useStore(store);
+      seen.push(n);
+      return <div>{n}</div>;
+    }
+
+    const { asFragment } = await act(async () => render(<Reader />));
+
+    let resolve!: () => void;
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "double" });
+        await new Promise<void>((r) => (resolve = r));
+      });
+    });
+
+    // useSyncExternalStore would have redone this as a blocking update, so the
+    // DOM would already read 2 here.
+    expect(asFragment().textContent).toBe("1");
+    expect(seen).toEqual([1]);
+
+    await act(async () => resolve());
+    expect(asFragment().textContent).toBe("2");
+  });
+
+  it("does not show a fallback when a transition update suspends on unrelated data", async () => {
+    const store = createStore(1, reducer);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let setShowSlow!: (v: boolean) => void;
+
+    function Reader() {
+      return <div data-reader="">{useStore(store)}</div>;
+    }
+    function Slow() {
+      use(gate);
+      return <div>slow</div>;
+    }
+    function App() {
+      const [showSlow, _set] = useState(false);
+      setShowSlow = _set;
+      return (
+        <Suspense fallback={<div data-fallback="">Loading…</div>}>
+          <Reader />
+          {showSlow && <Slow />}
+        </Suspense>
+      );
+    }
+
+    const { asFragment } = await act(async () => render(<App />));
+    expect(asFragment().textContent).toBe("1");
+
+    // One transition both updates the store and reveals a suspending child.
+    await act(async () => {
+      startTransition(() => {
+        store.dispatch({ type: "increment" });
+        setShowSlow(true);
+      });
+    });
+
+    // The transition should hold the previous content, not fall back.
+    expect(document.querySelector("[data-fallback]")).toBeNull();
+    expect(asFragment().textContent).toBe("1");
+
+    await act(async () => release());
+    expect(asFragment().textContent).toBe("2slow");
+  });
+
+  it("keeps two overlapping transitions in chronological order", async () => {
+    const store = createStore(2, reducer);
+    function Reader() {
+      return <div>{useStore(store)}</div>;
+    }
+    const { asFragment } = await act(async () => render(<Reader />));
+
+    let releaseA!: () => void;
+    let releaseB!: () => void;
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "double" });
+        await new Promise<void>((r) => (releaseA = r));
+      });
+    });
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "increment" });
+        await new Promise<void>((r) => (releaseB = r));
+      });
+    });
+
+    await act(async () => {
+      releaseA();
+      releaseB();
+    });
+    // 2 -> double -> 4 -> increment -> 5
+    expect(asFragment().textContent).toBe("5");
+  });
+});
+
+describe("Other concurrency surfaces", () => {
+  type Count = number;
+  type CountAction = { type: "increment" | "double" };
+  const reducer = (n: Count, a: CountAction): Count =>
+    a.type === "increment" ? n + 1 : n * 2;
+
+  afterEach(() => cleanup());
+
+
+  it("works through useDeferredValue", async () => {
+    const store = createStore(1, reducer);
+    const seen: Array<[number, number]> = [];
+
+    function Reader() {
+      const n = useStore(store);
+      const deferred = useDeferredValue(n);
+      seen.push([n, deferred]);
+      return <div>{`${n}/${deferred}`}</div>;
+    }
+
+    const { asFragment } = await act(async () => render(<Reader />));
+    expect(asFragment().textContent).toBe("1/1");
+
+    await act(async () => store.dispatch({ type: "double" }));
+    // Both settle; the deferred value must not get stuck behind.
+    expect(asFragment().textContent).toBe("2/2");
+
+    await act(async () => store.dispatch({ type: "increment" }));
+    expect(asFragment().textContent).toBe("3/3");
+  });
+
+  it("does not lose an update when a reader unmounts mid transition", async () => {
+    const store = createStore(2, reducer);
+    let setShowSecond!: (v: boolean) => void;
+
+    function Reader({ id }: { id: string }) {
+      return <div data-reader="">{`${id}${useStore(store)}`}</div>;
+    }
+    function App() {
+      const [showSecond, _set] = useState(true);
+      setShowSecond = _set;
+      return (
+        <>
+          <Reader id="a" />
+          {showSecond && <Reader id="b" />}
+        </>
+      );
+    }
+
+    const { asFragment } = await act(async () => render(<App />));
+    expect(asFragment().textContent).toBe("a2b2");
+
+    let resolve!: () => void;
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "double" });
+        await new Promise<void>((r) => (resolve = r));
+      });
+    });
+
+    // The second reader leaves while the transition is still pending.
+    await act(async () => setShowSecond(false));
+    await act(async () => resolve());
+
+    expect(asFragment().textContent).toBe("a4");
+  });
+
+  it("applies a dispatch made from a passive effect during a transition", async () => {
+    const store = createStore(2, reducer);
+    let setArmed!: (v: boolean) => void;
+
+    function Reader() {
+      return <div>{useStore(store)}</div>;
+    }
+    function Bump() {
+      useEffect(() => {
+        store.dispatch({ type: "increment" });
+      }, []);
+      return null;
+    }
+    function App() {
+      const [armed, _set] = useState(false);
+      setArmed = _set;
+      return (
+        <>
+          <Reader />
+          {armed && <Bump />}
+        </>
+      );
+    }
+
+    const { asFragment } = await act(async () => render(<App />));
+
+    let resolve!: () => void;
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "double" });
+        await new Promise<void>((r) => (resolve = r));
+      });
+    });
+    expect(asFragment().textContent).toBe("2");
+
+    // Mounting Bump synchronously dispatches from its effect: 2 + 1 = 3.
+    await act(async () => setArmed(true));
+    expect(asFragment().textContent).toBe("3");
+
+    // Chronologically: 2 -> double -> 4 -> increment -> 5.
+    await act(async () => resolve());
+    expect(asFragment().textContent).toBe("5");
   });
 });
