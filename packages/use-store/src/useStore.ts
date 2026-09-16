@@ -92,6 +92,13 @@ export interface ConcurrentStoreInternals<S, A>
   readonly _published: StoreHandle<S>;
   /** How many readers are subscribed; one reader has nothing to tear against. */
   readonly _readers: number;
+  /**
+   * The store the handles come from. Every reader builds its own selector view,
+   * so the view is the wrong thing to key per-pass bookkeeping by: two readers
+   * of one store would never see each other. Handles are the source's either
+   * way, so the source is the identity that matters.
+   */
+  readonly _source: object;
   _markCommitted(handle: StoreHandle<S>): void;
 }
 
@@ -228,6 +235,9 @@ export function createStore<S, A>(
     get _readers() {
       return listeners.size;
     },
+    get _source() {
+      return store;
+    },
     _markCommitted(handle) {
       // Monotonic: a reader still catching up must not drag the pointer back.
       if (handle.version > committed.version) {
@@ -276,12 +286,15 @@ function recordRendered(store: object, handle: StoreHandle<unknown>): void {
 function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> {
 
   // Mount at what this pass is committing, or at committed if we are first.
+  // Keyed by the source, not this reader's view: the handles are the source's,
+  // and two readers of one store each hold a view of their own.
+  const source = store._source;
   const [handle, setHandle] = useState(
     () =>
-      (renderedThisPass.get(store) as StoreHandle<S> | undefined) ??
+      (renderedThisPass.get(source) as StoreHandle<S> | undefined) ??
       store._committed,
   );
-  recordRendered(store, handle as StoreHandle<unknown>);
+  recordRendered(source, handle as StoreHandle<unknown>);
 
   useLayoutEffect(() => {
     // No startTransition: the update inherits the dispatching caller's priority.
@@ -472,6 +485,9 @@ export function createSelectorStore<S, A, T>(
     // source's subscriber count is the reader count.
     get _readers() {
       return source._readers;
+    },
+    get _source() {
+      return source._source;
     },
     _markCommitted: (handle) => source._markCommitted(handle),
     _onCommit(listener) {

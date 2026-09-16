@@ -3901,3 +3901,111 @@ describe("A sync update that does not suspend, over a transition that does", () 
     expect(screen()).toEqual(["Abc"]);
   });
 });
+
+describe("Reordering keys", () => {
+  type Rows = { order: string[]; value: Record<string, number> };
+
+  afterEach(() => cleanup());
+
+  const reducer = (state: Rows, action: Partial<Rows>): Rows => ({
+    ...state,
+    ...action,
+  });
+
+  it("keeps each reader on its own row when the list is reordered", async () => {
+    const store = createStore<Rows, Partial<Rows>>(
+      { order: ["a", "b", "c"], value: { a: 1, b: 2, c: 3 } },
+      reducer,
+    );
+
+    function Row({ id }: { id: string }) {
+      const n = useStore(store, (s: Rows) => s.value[id]);
+      return <li data-row={id}>{`${id}:${n}`}</li>;
+    }
+    function List() {
+      const order = useStore(store, (s: Rows) => s.order);
+      return (
+        <ul>
+          {order.map((id) => (
+            <Row key={id} id={id} />
+          ))}
+        </ul>
+      );
+    }
+
+    const { container } = await act(async () => render(<List />));
+    const read = () =>
+      Array.from(container.querySelectorAll("li"), (n) => n.textContent);
+    expect(read()).toEqual(["a:1", "b:2", "c:3"]);
+
+    // Reorder only. Fibers move; no row's own value changed.
+    await act(async () => store.dispatch({ order: ["c", "a", "b"] }));
+    expect(read()).toEqual(["c:3", "a:1", "b:2"]);
+
+    // Reorder and change a value in the same action.
+    await act(async () =>
+      store.dispatch({ order: ["b", "c", "a"], value: { a: 1, b: 20, c: 3 } }),
+    );
+    expect(read()).toEqual(["b:20", "c:3", "a:1"]);
+
+    // Remove a row that a reader was mounted on.
+    await act(async () =>
+      store.dispatch({ order: ["c", "b"], value: { b: 20, c: 3 } }),
+    );
+    expect(read()).toEqual(["c:3", "b:20"]);
+  });
+
+  it("does not let a reordered row mount from another row's pass", async () => {
+    const store = createStore<Rows, Partial<Rows>>(
+      { order: ["a", "b"], value: { a: 1, b: 2 } },
+      reducer,
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+
+    function Row({ id }: { id: string }) {
+      const n = useStore(store, (s: Rows) => s.value[id] ?? -1);
+      if (held && n === 99) use(gate);
+      return <li data-row={id}>{`${id}:${n}`}</li>;
+    }
+    function List() {
+      const order = useStore(store, (s: Rows) => s.order);
+      return (
+        <ul>
+          {order.map((id) => (
+            <Row key={id} id={id} />
+          ))}
+        </ul>
+      );
+    }
+
+    const { container } = await act(async () => render(<List />));
+    const read = () =>
+      Array.from(container.querySelectorAll("li"), (n) => n.textContent);
+    expect(read()).toEqual(["a:1", "b:2"]);
+
+    // A transition that blocks: row a would become 99 and suspend.
+    await act(async () => {
+      startTransition(() =>
+        store.dispatch({ value: { a: 99, b: 2 } }),
+      );
+    });
+    expect(read()).toEqual(["a:1", "b:2"]);
+
+    // Reorder and add a row synchronously while that is still blocked. The new
+    // row must mount on the state the list is showing, not on the pending one.
+    await act(async () =>
+      store.dispatch({
+        order: ["c", "b", "a"],
+        value: { a: 1, b: 2, c: 3 },
+      }),
+    );
+    expect(read()).toEqual(["c:3", "b:2", "a:1"]);
+
+    held = false;
+    await act(async () => release());
+    // The chronological order folds the transition's value onto the sync one.
+    expect(read()).toEqual(["c:3", "b:2", "a:1"]);
+  });
+});
