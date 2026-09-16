@@ -19,41 +19,24 @@ export { createStore };
 export type { ConcurrentStoreInternals, ReactConcurrentStore, StoreHandle };
 
 /**
- * What an earlier reader rendered in the current pass, per store.
- *
- * A mounting reader cannot ask React whether its render is urgent, but an
- * earlier reader has already answered it by what it rendered. Written during
- * render and therefore impure; a discarded pass is overwritten by the next one
- * before any mounting reader reads it, since earlier readers render first.
+ * What an earlier reader rendered in this pass, per store. A mounting reader
+ * cannot ask React whether its render is urgent; an earlier reader has already
+ * answered by what it rendered. Written during render, so impure — a discarded
+ * pass is overwritten before any mounting reader reads it.
  */
-// Values are `Handle<S>` for that store's own S; the map spans stores, so
-// the read asserts once.
 const renderedThisPass = new WeakMap<object, StoreHandle<unknown>>();
 const expiring = new WeakMap<object, number>();
 let epoch = 0;
 
 /**
- * Record what this reader is rendering, for a reader that mounts later in the
- * same pass.
+ * Record what this reader is rendering, for one that mounts later in the same
+ * pass. The slot must end when the pass does, and userland cannot see a pass
+ * boundary: a commit closes it, and a microtask closes a pass that is
+ * abandoned instead. The token means only the newest write can expire it,
+ * because React may yield mid-pass and resume from another task.
  *
- * The slot has to end when the pass does, and userland cannot see a pass
- * boundary. Two things close it. A commit clears it, which covers every pass
- * that finishes — see `forgetPass`. A microtask clears it otherwise, which
- * covers a pass that is abandoned and never commits; without that, a render
- * abandoned in one root stayed visible to a mount in another, and the next
- * root opened on a handle no tree had shown.
- *
- * The microtask is guarded by a token so only the newest write can expire the
- * slot. That matters because a concurrent render is not guaranteed to finish
- * in one task: React can yield and resume from another scheduler task, and a
- * microtask queued before the yield runs in between. The guard means a slot
- * stays alive as long as readers keep rendering into it.
- *
- * It can still expire mid-pass if React yields after the last reader writes
- * and before a mounting one reads. That failure is the conservative one: the
- * mounting reader falls back to the commit pointer, which is what the tree is
- * showing, and its catch-up runs in the same commit. The opposite failure —
- * keeping the slot too long — hands out a value no tree ever showed.
+ * Expiring early is the safe failure — the mounting reader falls back to the
+ * commit pointer. Expiring late would hand out a value no tree ever showed.
  */
 function recordRendered(store: object, handle: StoreHandle<unknown>): void {
   renderedThisPass.set(store, handle);
@@ -207,10 +190,8 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
  */
 export interface SelectorView<S, A, T> extends ConcurrentStoreInternals<S, A> {
   /**
-   * Install the current selector. An inline selector has a new identity every
-   * render, so the view outlives the selector that built it; it is replaced
-   * from a layout effect rather than rebuilding the view and losing which
-   * slice the readers already show.
+   * An inline selector has a new identity every render, so the view outlives
+   * the one that built it and the selector is replaced rather than the view.
    */
   _setSelector(next: (state: S, previous: T | undefined) => T): void;
 }
@@ -221,11 +202,8 @@ export function createSelectorStore<S, A, T>(
 ): SelectorView<S, A, T> {
   let selector = initialSelector;
 
-  // Two handles, and which is which is the whole of this view. `sourceHead` is
-  // the newest the store has; `readersAt` is the one this view's readers were
-  // lastSlice given. A bail-out moves the first and not the second, and reading
-  // them the wrong way round makes a reader chase a version whose slice it is
-  // already showing — or strands it on one it never saw.
+  // `sourceHead` is the newest the store has; `readersAt` is what this view's
+  // readers were last given. A bail-out moves the first and not the second.
   let sourceHead = source._head;
   let readersAt = source._head;
 
@@ -387,23 +365,16 @@ export function useStore<S, A, T>(
     [internals, selected],
   );
 
-  // Installed from an insertion effect, not a layout effect. Every insertion
-  // effect in a commit runs before any layout effect, so a dispatch made from
-  // another component's layout effect cannot be evaluated against the selector
-  // this render replaced. With a layout effect here, an earlier sibling
-  // dispatching left the view judging the new render's slice with the old
-  // selector, bailing out, and stranding the reader on a stale value with
-  // nothing scheduled to repair it.
+  // An insertion effect, not a layout effect: every insertion effect in a
+  // commit runs before any layout effect, so a dispatch from a sibling's layout
+  // effect cannot be judged against the selector this render replaced.
   useInsertionEffect(() => {
     if (view !== null && selector !== undefined) view._setSelector(selector);
   });
 
-  // The selector's previous result lives in closure variables written during
-  // render, which is the structure React's own useSyncExternalStoreWithSelector
-  // uses for the same job. A useMemo closure is per-fiber, so a render that is
-  // abandoned can still write it; the next render runs the selector against its
-  // own state and overwrites, so the value corrects itself rather than being
-  // handed back.
+  // The previous result lives in closure variables written during render, the
+  // structure useSyncExternalStoreWithSelector uses for the same job. An
+  // abandoned render can write it; the next one overwrites from its own state.
   const select = useMemo(() => {
     let hasPrevious = false;
     let previous: T;
