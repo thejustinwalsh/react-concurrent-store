@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export const pages = [
-  { href: "/", title: "Gauntlet", blurb: "Is it correct?" },
-  { href: "/router", title: "Router", blurb: "TanStack Router + Query" },
-  { href: "/atom", title: "One atom", blurb: "Redux" },
-  { href: "/identity", title: "Identity", blurb: "Relay" },
-  { href: "/fetching", title: "Fetching", blurb: "Fate" },
-  { href: "/ssr", title: "SSR", blurb: "Hydration" },
-  { href: "/rsc", title: "RSC", blurb: "Server components" },
+  { href: "/", title: "Examples" },
+  { href: "/router", title: "Navigation" },
+  { href: "/atom", title: "Urgency" },
+  { href: "/identity", title: "Selectors" },
+  { href: "/fetching", title: "Refetching" },
+  { href: "/ssr", title: "SSR" },
+  { href: "/rsc", title: "RSC" },
 ];
 
 export function Nav() {
@@ -24,8 +24,7 @@ export function Nav() {
           className={page.href === here ? "tab here" : "tab"}
           aria-current={page.href === here ? "page" : undefined}
         >
-          <span className="t">{page.title}</span>
-          <span className="b">{page.blurb}</span>
+          {page.title}
         </Link>
       ))}
     </nav>

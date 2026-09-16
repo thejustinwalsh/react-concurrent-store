@@ -1,11 +1,7 @@
-import {
-  startTransition,
-  use,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { use, useState, useSyncExternalStore, useTransition } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
+import { Lede, Note, TryIt } from "../prose";
 import { hueFor } from "../palette";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
@@ -191,10 +187,15 @@ export function RouterPage() {
   const [{ gate, left, right, loaders }, reset] = useReset();
   const held = useSignal(gate.held);
 
+  // One per column, so each reports its own pending state rather than sharing
+  // one. Watching them is the point: the left column's Transition ends almost
+  // immediately because reading the store opted it out.
+  const [leftPending, startLeft] = useTransition();
+  const [rightPending, startRight] = useTransition();
+
   const navigate = (to: Route) => {
-    for (const column of [left, right]) {
-      startTransition(() => column.store.dispatch({ type: "navigate", to }));
-    }
+    startLeft(() => left.store.dispatch({ type: "navigate", to }));
+    startRight(() => right.store.dispatch({ type: "navigate", to }));
   };
 
   const like = (id: string) => {
@@ -212,26 +213,60 @@ export function RouterPage() {
   const blocked = (
     <Blocked
       what="loading profile…"
-      why="The transition was flushed synchronously, so the route moved before its data arrived and the boundary took the page."
+      why="React flushed the Transition synchronously, so the route changed before its data arrived."
     />
   );
 
   return (
     <>
-      <div className="lede">
-        <h2>A navigation that has not arrived yet</h2>
+      <Lede
+        title="Navigating before the data arrives"
+        learn={[
+          "Why a store update cancels the Transition a router started",
+          "What the user sees when that happens",
+          "How useStore keeps the current screen up instead",
+        ]}
+      >
         <p>
-          Press <b>Go to profile</b>. Its data is held open, so you are looking
-          at the moment every router spends most of its time in: the
-          destination is decided, the data is not there. Then try to{" "}
-          <b>like a post</b> on the page you are still on.
+          A router changes the route inside <code>startTransition</code>, so
+          React keeps the current screen on the page until the next one is
+          ready. Both columns below dispatch exactly that way, through the same
+          reducer. They differ only in the Hook that reads the route.
+        </p>
+        <TryIt
+          steps={[
+            <>
+              Click <b>Go to profile</b>. Its data is held open, so the
+              navigation stays in flight until you release it.
+            </>,
+            <>
+              Click <b>Like Ada&rsquo;s post</b> while you wait, then{" "}
+              <b>Profile data arrives</b>.
+            </>,
+          ]}
+        />
+        <p>
+          Notice that the left column loses the feed as soon as you navigate. A
+          component reading the store with <code>useSyncExternalStore</code> opts
+          the Transition out, so React commits the route immediately, the profile
+          has no data yet, and the Suspense boundary replaces the page.
         </p>
         <p>
-          Both columns run the same actions through the same reducer, and
-          navigate inside <code>startTransition</code>. The only difference is
-          the hook that reads the route.
+          The right column stays on the feed and stays interactive. Your like
+          lands on the post you are looking at, not on the profile that has not
+          loaded, and both updates are in the order you made them once the
+          profile arrives.
         </p>
-      </div>
+        <Note>
+          <p>
+            This is the caveat in the{" "}
+            <code>useSyncExternalStore</code> docs: a store update during a
+            Transition forces React to flush it synchronously. The caller already
+            said what it wanted by calling <code>startTransition</code>. Only the
+            reading Hook discards it.
+          </p>
+        </Note>
+      </Lede>
       <div className="ab">
         <div className="bar">
           <button onClick={goProfile} disabled={held}>
@@ -241,6 +276,7 @@ export function RouterPage() {
             Profile data arrives
           </button>
           <button onClick={() => like("ada")}>♥ Like Ada&rsquo;s post</button>
+          {held && <span className="held">loader held</span>}
           <span className="spacer" />
           <button onClick={reset}>Reset</button>
         </div>
@@ -249,16 +285,17 @@ export function RouterPage() {
             how="useSyncExternalStore"
             tag="today"
             kind="today"
+            pending={leftPending}
             fallback={blocked}
             note={
               held ? (
                 <>
-                  <b>The page is gone.</b> Reading this store with{" "}
-                  <code>useSyncExternalStore</code> opted the transition out, so
-                  the route committed immediately and there is nothing to like.
+                  <b>The feed is gone.</b> The route committed before its data
+                  existed, so the Suspense boundary took the page. There is
+                  nothing here to like.
                 </>
               ) : (
-                <>Reads the route with the hook every store library uses today.</>
+                <>Reads the route the way store libraries read one today.</>
               )
             }
           >
@@ -268,16 +305,17 @@ export function RouterPage() {
             how="useStore"
             tag="this package"
             kind="ours"
+            pending={rightPending}
             fallback={blocked}
             note={
               held ? (
                 <>
-                  <b>Still on the feed, still interactive.</b> The navigation is
-                  in flight; a like dispatched now lands on the page you are
-                  looking at, and is still in order when the profile arrives.
+                  <b>Still on the feed.</b> The navigation is in flight. A like
+                  you dispatch now applies to the feed you can see, and is still
+                  in order when the profile arrives.
                 </>
               ) : (
-                <>Reads the route with this package&rsquo;s hook.</>
+                <>Reads the route with <code>useStore</code>.</>
               )
             }
           >

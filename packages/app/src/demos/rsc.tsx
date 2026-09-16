@@ -97,8 +97,8 @@ export function RscClient({
           </div>
           <p className="note">
             <b>The store lives here, the fetch did not.</b> The rows arrived as
-            data across the boundary, the store was built from them, and the
-            filter and the counters are ordinary client state on top.
+            data, the store was built from them, and the filter is ordinary
+            client state on top.
           </p>
         </section>
       </div>

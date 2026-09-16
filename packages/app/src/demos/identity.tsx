@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { recycleNodesInto } from "../recycle";
 import { Side } from "../compare";
+import { Lede, Note, TryIt } from "../prose";
 import { hueFor } from "../palette";
 import { createSignal, useSignal, type Signal } from "../ui";
 
@@ -163,21 +164,47 @@ export function IdentityPage() {
 
   return (
     <>
-      <div className="lede">
-        <h2>What stayed the same</h2>
+      <Lede
+        title="Skipping re-renders with the previous result"
+        learn={[
+          "Why memoised components re-render for data that did not move",
+          "What the second argument to a selector is for",
+          "How Relay's recycleNodesInto uses it",
+        ]}
+      >
         <p>
-          Every read of a normalized store builds a fresh tree, so memoised
-          components see new objects whether or not their data moved. Press{" "}
-          <b>Ada gains a follower</b> and watch how many of the three stats
-          blocks re-render in each column.
+          Reading from a normalized store builds a fresh object tree every time.
+          Memoised components compare by identity, so they all re-render even
+          though most of their data is unchanged.
         </p>
         <p>
-          The right column uses Relay&rsquo;s own <code>recycleNodesInto</code>,
-          which needs the selector&rsquo;s previous result — the reason the
-          signature is <code>(state, previous)</code> and not an equality
-          function.
+          A selector here is called as{" "}
+          <code>selector(state, previous)</code>. The second argument is its own
+          previous result, so it can hand back the parts that did not move
+          instead of returning all-new objects.
         </p>
-      </div>
+        <TryIt
+          steps={[
+            <>
+              Click <b>Ada gains a follower</b> a few times.
+            </>,
+            <>
+              Watch <b>stats rendered</b> at the bottom of each column.
+            </>,
+          ]}
+        />
+        <p>
+          Notice that only Ada&rsquo;s counter moves on the right. Grace and Alan
+          came back as the objects they already were, so their{" "}
+          <code>memo</code> held.
+        </p>
+        <Note>
+          <p>
+            An equality function cannot do this. It can only answer whether to
+            keep the whole result. Recycling needs the previous value itself.
+          </p>
+        </Note>
+      </Lede>
       <div className="ab">
         <div className="bar">
           <button onClick={follow}>Ada gains a follower</button>
@@ -193,9 +220,8 @@ export function IdentityPage() {
             fallback={null}
             note={
               <>
-                <b>Everyone re-renders.</b> Ada&rsquo;s follower count moved, so
-                the projection is new — and so is every object in it, including
-                the two nobody touched.
+                <b>Everyone re-renders.</b> Ada&rsquo;s count moved, so the
+                projection is new, and so is every object inside it.
               </>
             }
           >
@@ -208,8 +234,8 @@ export function IdentityPage() {
             fallback={null}
             note={
               <>
-                <b>Only Ada re-renders.</b> Grace and Alan came back as the
-                identical objects they already were, so their memo held.
+                <b>Only Ada re-renders.</b> Grace and Alan came back as the same
+                objects, so their <code>memo</code> held.
               </>
             }
           >

@@ -1,7 +1,7 @@
 "use client";
 
-import { GauntletPage } from "../src/demos/gauntlet";
+import { ExamplesPage } from "../src/demos/examples";
 
 export default function Page() {
-  return <GauntletPage />;
+  return <ExamplesPage />;
 }

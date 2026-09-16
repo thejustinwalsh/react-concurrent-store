@@ -312,41 +312,24 @@ nav.tabs {
 }
 
 nav.tabs .tab {
-  text-align: left;
+  color: var(--dim);
   cursor: pointer;
   background: none;
   border: none;
   border-bottom: 2px solid #0000;
   border-radius: 0;
-  gap: 1px;
-  padding: 10px 14px 9px;
-  display: grid;
-}
-
-nav.tabs .tab .t {
-  color: var(--dim);
+  padding: 11px 14px 10px;
   font-size: 13px;
+  text-decoration: none;
 }
 
-nav.tabs .tab .b {
-  color: var(--faint);
-  font-size: 11px;
-}
-
-nav.tabs .tab:hover .t {
+nav.tabs .tab:hover {
   color: var(--ink);
 }
 
 nav.tabs .tab.here {
   border-bottom-color: var(--accent);
-}
-
-nav.tabs .tab.here .t {
   color: var(--ink);
-}
-
-nav.tabs .tab.here .b {
-  color: var(--accent);
 }
 
 .lede {
@@ -699,6 +682,23 @@ nav.tabs .tab.here .b {
   font-family: var(--mono);
 }
 
+pre.code {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  white-space: pre;
+  border-radius: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+pre.code code {
+  display: block;
+}
+
 pre.terminal {
   background: var(--sunken);
   border: 1px solid var(--line);
@@ -715,6 +715,142 @@ pre.terminal {
 
 pre.terminal code {
   color: inherit;
+}
+
+.lede .youwill {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 10px;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+}
+
+.lede .youwill .k, .callout .k, .tryit .k {
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--dim);
+  font-size: 10.5px;
+  font-family: var(--mono);
+  margin: 0 0 6px;
+}
+
+.lede .youwill ul, .tryit ol {
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+}
+
+.lede .youwill li, .tryit li {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.callout {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-left-width: 3px;
+  border-radius: 8px;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+}
+
+.callout p {
+  color: var(--dim);
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.callout p:last-child {
+  margin-bottom: 0;
+}
+
+.callout.note {
+  border-left-color: var(--accent);
+}
+
+.callout.note .k {
+  color: var(--accent);
+}
+
+.callout.pitfall {
+  border-left-color: var(--wait);
+}
+
+.callout.pitfall .k {
+  color: var(--wait);
+}
+
+.tryit {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  margin: 0 0 6px;
+  padding: 11px 14px;
+}
+
+.tryit li b {
+  color: var(--ink);
+}
+
+.lede h3 {
+  letter-spacing: -.01em;
+  margin: 4px 0 8px;
+  font-size: 15px;
+}
+
+.lede + .ab {
+  padding-top: 0;
+}
+
+.side > header .pulse {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--wait);
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  font-size: 10.5px;
+  display: inline-flex;
+}
+
+.side > header .pulse:before {
+  content: "";
+  background: var(--wait);
+  border-radius: 50%;
+  width: 7px;
+  height: 7px;
+  animation: 1s ease-in-out infinite pulse;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: .35;
+    transform: scale(.75);
+  }
+}
+
+.side .mock {
+  transition: opacity .18s;
+}
+
+.side.pending .mock {
+  opacity: .55;
+}
+
+.bar .held {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--wait);
+  font-size: 10.5px;
 }
 
 /*# sourceMappingURL=packages_app_app_globals_0ua3uz-.css.map*/

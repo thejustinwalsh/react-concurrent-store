@@ -6,6 +6,7 @@ import {
 } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
+import { Lede, Pitfall, TryIt } from "../prose";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
 
@@ -144,30 +145,56 @@ export function AtomPage() {
   const blocked = (
     <Blocked
       what="loading the year…"
-      why="The transition was flushed synchronously, so the period moved before its data arrived."
+      why="React flushed the Transition synchronously, so the period changed before its data arrived."
     />
   );
   const waiting = (
     <Blocked
       what="loading the year…"
-      why="Still in a transition, as it should be — the old dashboard should be on screen."
+      why="Still in a Transition. The old dashboard should be on screen."
     />
   );
 
   return (
     <>
-      <div className="lede">
-        <h2>One atom, two urgencies</h2>
+      <Lede
+        title="Mixing urgent and Transition updates"
+        learn={[
+          "Why a store cannot pick one urgency for every update",
+          "What goes wrong if every dispatch is urgent",
+          "What goes wrong if every dispatch is a Transition",
+        ]}
+      >
         <p>
-          Press <b>Switch to year</b> — a slow query, held open — and then{" "}
-          <b>type in the filter box</b>. Every column puts the slow change in a
-          transition. They differ in what they do with the keystroke.
+          A Redux-shaped app keeps everything in one store and dispatches to it
+          at both speeds. A slow filter change belongs in a Transition. A
+          keystroke does not. All three columns below put the slow change in a
+          Transition. They differ in what they do with the keystroke.
         </p>
+        <TryIt
+          steps={[
+            <>
+              Click <b>Switch to year</b>. The query is held open, so it stays
+              in flight.
+            </>,
+            <>
+              Type in the filter box while you wait, then click{" "}
+              <b>Year data arrives</b>.
+            </>,
+          ]}
+        />
         <p>
-          Both obvious answers are wrong, which is why this needs three columns
-          and not two.
+          Notice that the first column loses the dashboard, the second keeps the
+          dashboard but ignores your typing, and only the third does both.
         </p>
-      </div>
+        <Pitfall>
+          <p>
+            Making every dispatch a Transition looks like the fix for the first
+            column, and it is the second column. Nothing urgent can overtake
+            something slow, so a keystroke waits on a query.
+          </p>
+        </Pitfall>
+      </Lede>
       <div className="ab">
         <div className="bar">
           <button onClick={slowSwitch} disabled={held}>
@@ -194,12 +221,11 @@ export function AtomPage() {
             note={
               held ? (
                 <>
-                  <b>The dashboard is gone.</b> The reader opted the transition
-                  out, so the period committed without its data. Nothing to type
-                  into.
+                  <b>The dashboard is gone.</b> The period committed before its
+                  data arrived, so there is nothing here to filter.
                 </>
               ) : (
-                <>What react-redux&rsquo;s useSelector does today.</>
+                <>Reads the store the way useSelector reads one today.</>
               )
             }
           >
@@ -213,13 +239,12 @@ export function AtomPage() {
             note={
               held ? (
                 <>
-                  <b>Your keystrokes are not landing.</b> The old dashboard is
-                  still up, which is right — but the keystroke was made a
-                  transition too, so it is queued behind a query that has not
-                  come back.
+                  <b>Your typing is not landing.</b> Keeping the dashboard up is
+                  right. But the keystroke was made a Transition too, so it is
+                  queued behind a query that has not come back.
                 </>
               ) : (
-                <>Never flushes, so nothing urgent can overtake anything slow.</>
+                <>Every dispatch is a Transition, so nothing can overtake.</>
               )
             }
           >
@@ -233,13 +258,13 @@ export function AtomPage() {
             note={
               held ? (
                 <>
-                  <b>Old dashboard, live filter.</b> The keystroke folds over
-                  what is on screen instead of over the year that has not
-                  arrived, and both are in order once it does.
+                  <b>Old dashboard, live filter.</b> The keystroke applies to
+                  the week you can see rather than to the year that has not
+                  arrived. Both are in order once it does.
                 </>
               ) : (
                 <>
-                  The caller says which is which, the same way React always has.
+                  The caller marks each dispatch, the way React marks any update.
                 </>
               )
             }

@@ -60,38 +60,31 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$ne
 const pages = [
     {
         href: "/",
-        title: "Gauntlet",
-        blurb: "Is it correct?"
+        title: "Examples"
     },
     {
         href: "/router",
-        title: "Router",
-        blurb: "TanStack Router + Query"
+        title: "Navigation"
     },
     {
         href: "/atom",
-        title: "One atom",
-        blurb: "Redux"
+        title: "Urgency"
     },
     {
         href: "/identity",
-        title: "Identity",
-        blurb: "Relay"
+        title: "Selectors"
     },
     {
         href: "/fetching",
-        title: "Fetching",
-        blurb: "Fate"
+        title: "Refetching"
     },
     {
         href: "/ssr",
-        title: "SSR",
-        blurb: "Hydration"
+        title: "SSR"
     },
     {
         href: "/rsc",
-        title: "RSC",
-        blurb: "Server components"
+        title: "RSC"
     }
 ];
 function Nav() {
@@ -102,25 +95,8 @@ function Nav() {
                 href: page.href,
                 className: page.href === here ? "tab here" : "tab",
                 "aria-current": page.href === here ? "page" : undefined,
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                        className: "t",
-                        children: page.title
-                    }, void 0, false, {
-                        fileName: "[project]/packages/app/app/nav.tsx",
-                        lineNumber: 27,
-                        columnNumber: 11
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                        className: "b",
-                        children: page.blurb
-                    }, void 0, false, {
-                        fileName: "[project]/packages/app/app/nav.tsx",
-                        lineNumber: 28,
-                        columnNumber: 11
-                    }, this)
-                ]
-            }, page.href, true, {
+                children: page.title
+            }, page.href, false, {
                 fileName: "[project]/packages/app/app/nav.tsx",
                 lineNumber: 21,
                 columnNumber: 9

@@ -151,18 +151,14 @@ nav.tabs .tab {
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
-  padding: 10px 14px 9px;
-  text-align: left;
-  display: grid;
-  gap: 1px;
+  padding: 11px 14px 10px;
+  font-size: 13px;
+  color: var(--dim);
+  text-decoration: none;
   cursor: pointer;
 }
-nav.tabs .tab .t { font-size: 13px; color: var(--dim); }
-nav.tabs .tab .b { font-size: 11px; color: var(--faint); }
-nav.tabs .tab:hover .t { color: var(--ink); }
-nav.tabs .tab.here { border-bottom-color: var(--accent); }
-nav.tabs .tab.here .t { color: var(--ink); }
-nav.tabs .tab.here .b { color: var(--accent); }
+nav.tabs .tab:hover { color: var(--ink); }
+nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
 
 .lede { padding: 22px 20px 4px; max-width: 760px; }
 .lede h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
@@ -355,6 +351,20 @@ nav.tabs .tab.here .b { color: var(--accent); }
   font-family: var(--mono);
 }
 
+pre.code {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+}
+pre.code code { display: block; }
+
 pre.terminal {
   margin: 0 0 14px;
   padding: 12px 14px;
@@ -369,3 +379,100 @@ pre.terminal {
   white-space: pre;
 }
 pre.terminal code { color: inherit; }
+
+/* ---------- teaching furniture ---------- */
+
+.lede .youwill {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.lede .youwill .k,
+.callout .k,
+.tryit .k {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  font-family: var(--mono);
+}
+.lede .youwill ul,
+.tryit ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.lede .youwill li,
+.tryit li {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.callout {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--panel);
+}
+.callout p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: var(--dim); }
+.callout p:last-child { margin-bottom: 0; }
+.callout.note { border-left-color: var(--accent); }
+.callout.note .k { color: var(--accent); }
+.callout.pitfall { border-left-color: var(--wait); }
+.callout.pitfall .k { color: var(--wait); }
+
+.tryit {
+  margin: 0 0 6px;
+  padding: 11px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+.tryit li b { color: var(--ink); }
+
+.lede h3 { margin: 4px 0 8px; font-size: 15px; letter-spacing: -0.01em; }
+.lede + .ab { padding-top: 0; }
+
+/* ---------- pending state ---------- */
+
+.side > header .pulse {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--wait);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.side > header .pulse::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--wait);
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+/* React's own suggestion for a pending Transition: dim what is stale. */
+.side .mock { transition: opacity 180ms ease; }
+.side.pending .mock { opacity: 0.55; }
+
+.bar .held {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--wait);
+}

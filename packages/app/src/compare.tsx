@@ -12,6 +12,7 @@ export function Side({
   kind,
   note,
   fallback,
+  pending = false,
   children,
 }: {
   how: string;
@@ -19,12 +20,15 @@ export function Side({
   kind: Kind;
   note: ReactNode;
   fallback: ReactNode;
+  /** Whether this column has a Transition in flight, from its own useTransition. */
+  pending?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className={`side ${kind}`}>
+    <section className={`side ${kind}${pending ? " pending" : ""}`}>
       <header>
         <code className="how">{how}</code>
+        {pending && <span className="pulse">Transition pending</span>}
         <span className="tag">{tag}</span>
       </header>
       <Suspense fallback={fallback}>{children}</Suspense>

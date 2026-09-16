@@ -10,6 +10,8 @@ export default [
     ignores: [
       "**/dist/",
       "**/node_modules/",
+      "**/.next/",
+      "**/.astro/",
       "packages/use-store/src/experimental/",
     ],
   },

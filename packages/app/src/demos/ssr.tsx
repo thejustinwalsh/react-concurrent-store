@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createStore, useStore } from "react-concurrent-store";
+import { Lede, Note } from "../prose";
 
 /**
  * What a store has to get right under server rendering, in a real App Router
@@ -30,10 +31,15 @@ export function SsrDemo({ snapshot }: { snapshot: Snapshot }) {
   const [store] = useState(() => createStore(snapshot));
   const state = useStore(store);
 
-  // Hydration is the only thing an effect can tell you that render cannot: it
-  // runs on the client and never on the server.
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
+  // Whether this render is the server's or the client's. The server snapshot
+  // says false and the client one says true, and a subscribe that never fires
+  // means it is answered once and never again. This is the same trick useStore
+  // uses internally to notice a hydration render.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const sell = () =>
     store.dispatch({
@@ -44,15 +50,33 @@ export function SsrDemo({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <>
-      <div className="lede">
-        <h2>Rendered on the server, continued on the client</h2>
+      <Lede
+        title="Rendering a store on the server"
+        learn={[
+          "Why useStore needs no getServerSnapshot",
+          "How to check the value really came from the server",
+        ]}
+      >
         <p>
-          This page is server-rendered by Next. The figures below were in the
-          HTML before any JavaScript ran — view source and they are there. No{" "}
-          <code>getServerSnapshot</code> was supplied, because the value the
-          store was created with already is one.
+          This page is server-rendered. The figures below were in the HTML
+          before any JavaScript ran — open the page source and they are there.
         </p>
-      </div>
+        <p>
+          <code>useSyncExternalStore</code> throws during a server render unless
+          you pass a third argument, <code>getServerSnapshot</code>, so every
+          store library has to keep a second source of truth for the server.{" "}
+          <code>useStore</code> takes no such argument. The value the store was
+          created with already is the snapshot, and the client store is created
+          from the same serialized state.
+        </p>
+        <Note>
+          <p>
+            Press <b>Sell one</b> after the page says <i>hydrated</i>. It
+            continues from the server&rsquo;s figures. A mismatch would have been
+            logged by React and this subtree replaced.
+          </p>
+        </Note>
+      </Lede>
       <div className="ab">
         <div className="bar">
           <button onClick={sell}>Sell one</button>
@@ -87,10 +111,8 @@ export function SsrDemo({ snapshot }: { snapshot: Snapshot }) {
               </div>
             </div>
             <p className="note">
-              <b>Same numbers before and after hydration.</b> A mismatch would
-              have been logged by React and replaced this subtree; press{" "}
-              <b>Sell one</b> and it carries on from the server&rsquo;s figures
-              rather than from a second snapshot.
+              <b>The same numbers before and after hydration.</b> No second
+              snapshot was supplied for the server render.
             </p>
           </section>
         </div>

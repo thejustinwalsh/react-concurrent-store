@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/tjw/Developer/react-use-store/.claude/worktrees/remote-version-compare-deferred-ff9384/packages/app/app/page.tsx"],"sourcesContent":["\"use client\";\n\nimport { GauntletPage } from \"../src/demos/gauntlet\";\n\nexport default function Page() {\n  return <GauntletPage />;\n}\n"],"names":["Page","GauntletPage"],"mappings":";;;;;;;;;;AAAA;;;AAIe,SAASA;IACtB,qBAAO,qUAACC;;;;;AACV;KAFwBD"}}]
+}

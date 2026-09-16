@@ -241,7 +241,7 @@ function RscClient({ rows, fetchedOn, at }) {
                                     lineNumber: 99,
                                     columnNumber: 13
                                 }, this),
-                                " The rows arrived as data across the boundary, the store was built from them, and the filter and the counters are ordinary client state on top."
+                                " The rows arrived as data, the store was built from them, and the filter is ordinary client state on top."
                             ]
                         }, void 0, true, {
                             fileName: "[project]/packages/app/src/demos/rsc.tsx",

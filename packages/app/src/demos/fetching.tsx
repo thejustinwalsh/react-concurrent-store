@@ -1,6 +1,7 @@
 import { startTransition, use, useDeferredValue, useState } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
+import { Lede, Note, TryIt } from "../prose";
 import { hueFor } from "../palette";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
@@ -125,20 +126,46 @@ export function FetchingPage() {
 
   return (
     <>
-      <div className="lede">
-        <h2>A refetch you can still act on</h2>
+      <Lede
+        title="Updating data while it refetches"
+        learn={[
+          "What useDeferredValue does for a refetch, and does well",
+          "Where a single deferred value runs out",
+          "Why a store can show the old list with your edit applied",
+        ]}
+      >
         <p>
-          Press <b>Open archive</b> — held open — and then{" "}
-          <b>Mark all read</b>. Both columns keep the old list up rather than
-          dropping to a fallback, which is what a deferred value is for and what
-          it is good at.
+          <code>useDeferredValue</code> keeps the previous value on screen while
+          a new one loads, so a refetch does not drop to a fallback.{" "}
+          fate&rsquo;s read Hook ends in{" "}
+          <code>use(useDeferredValue(promise))</code> for exactly that.
         </p>
+        <TryIt
+          steps={[
+            <>
+              Click <b>Open archive</b>. The fetch is held open.
+            </>,
+            <>
+              Click <b>Mark all read</b> while you wait, then{" "}
+              <b>Archive data arrives</b>.
+            </>,
+          ]}
+        />
         <p>
-          The difference is the second press. A deferred value can hold what was
-          there before; it cannot hold what was there before with your change
-          applied, because there is one value and one urgency.
+          Both columns keep the inbox on screen, which is the part{" "}
+          <code>useDeferredValue</code> gets right. Notice what happens on the
+          second click: the left column still shows two unread. Its edit was
+          applied to the fetch that has not returned, and the deferred value is
+          still the untouched old list.
         </p>
-      </div>
+        <Note>
+          <p>
+            A deferred value holds the value that was there before. It cannot
+            hold that value with your change applied, because there is one value
+            and one urgency. Two folds can.
+          </p>
+        </Note>
+      </Lede>
       <div className="ab">
         <div className="bar">
           <button onClick={openArchive} disabled={held}>
@@ -160,9 +187,9 @@ export function FetchingPage() {
             note={
               held ? (
                 <>
-                  <b>Marked read, still showing unread.</b> The patch was applied
-                  to the fetch that has not come back, so the deferred value is
-                  still the untouched old list.
+                  <b>Marked read, still showing unread.</b> The edit went to the
+                  fetch that has not returned. The deferred value is still the
+                  old list.
                 </>
               ) : (
                 <>Holds the previous promise while the next one loads.</>
@@ -179,9 +206,8 @@ export function FetchingPage() {
             note={
               held ? (
                 <>
-                  <b>Marked read on the list you are looking at.</b> The patch
-                  folded over what is on screen rather than over the fetch, and
-                  the archive arrives already read.
+                  <b>Marked read on the list you can see.</b> The edit applied
+                  to the inbox on screen, and the archive arrives already read.
                 </>
               ) : (
                 <>Holds the previous value because the caller said to.</>
