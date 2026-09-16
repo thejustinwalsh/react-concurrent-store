@@ -159,6 +159,8 @@ export function RootsScenario() {
       probe.value("root A"),
       store.getState(),
     );
+    // Eventual convergence is not the claim. No commit in between disagreed.
+    script.check("no commit was ever torn", probe.tears(), []);
   });
 
   return (

@@ -92,6 +92,21 @@ const BadgeReader = memo(function BadgeReader({
   return <Chip name="badge" value={badge.label} />;
 });
 
+/**
+ * Selects the slice nobody else does. If a bail-out ever left the store's
+ * commit pointer behind, the state later readers are built from would be
+ * missing whatever happened while nothing was listening — and this is the
+ * reader that would show it.
+ */
+const ThemeReader = memo(function ThemeReader({
+  store,
+}: {
+  store: Store;
+}) {
+  const theme = useStore(store, (s: Profile) => s.theme);
+  return <Chip name="theme" value={theme} />;
+});
+
 export function SelectorScenario() {
   const [{ store, recorder, counts }] = useState(() => ({
     store: createStore<Profile, Partial<Profile>>(
@@ -129,6 +144,9 @@ export function SelectorScenario() {
     // Still "some", so the selector hands back its previous object.
     script.check("badge held its previous result", counts.of("badge") - base.badge, 1);
     script.check("name never rendered at all", counts.of("name") - base.name, 0);
+    // The slice nobody watched while the others were bailing out is still
+    // there: a stranded commit pointer would have lost it.
+    script.check("the unwatched slice survived", store.getState().theme, "light");
   });
 
   return (
@@ -146,6 +164,7 @@ export function SelectorScenario() {
           <NameReader store={store} counts={counts} recorder={recorder} />
           <UnreadReader store={store} counts={counts} recorder={recorder} />
           <BadgeReader store={store} counts={counts} recorder={recorder} />
+          <ThemeReader store={store} />
         </div>
       }
       controls={

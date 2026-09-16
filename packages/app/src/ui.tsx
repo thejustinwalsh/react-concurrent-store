@@ -95,6 +95,12 @@ export type Probe = {
   snapshot(phase?: Phase): Record<string, unknown>;
   present(name: string, phase?: Phase): boolean;
   /**
+   * Every commit in which the readers did not agree, appended and never
+   * cleared. Checking agreement after a delay cannot tell "never torn" from
+   * "torn, then repaired on the next commit" — only a history can.
+   */
+  tears(): ReadonlyArray<Record<string, unknown>>;
+  /**
    * Clears the counters but keeps what each reader is currently showing.
    * Clearing the values too would drop live readers that have no reason to
    * re-render, and they would never report again.
@@ -115,6 +121,7 @@ export function createProbe(): Probe {
   const readers = new Set<string>();
   const order: string[] = [];
   const listeners = new Set<() => void>();
+  const tears: Array<Record<string, unknown>> = [];
   let queued = false;
   let version = 0;
 
@@ -125,18 +132,29 @@ export function createProbe(): Probe {
 
   // Reported from effects, so a listener is told on a microtask rather than
   // synchronously inside someone else's commit.
+  // One check per commit, on a microtask: every layout effect in that commit
+  // has run by then, and paint has not happened yet. Checking inside a report
+  // would see the commit half-applied and call every commit torn.
   const announce = () => {
     version += 1;
     if (queued) return;
     queued = true;
     queueMicrotask(() => {
       queued = false;
+      const names = order.filter(
+        (name) => readers.has(name) && cell("layout").has(name),
+      );
+      const shown = names.map((name) => cell("layout").get(name));
+      if (new Set(shown).size > 1) {
+        tears.push(Object.fromEntries(names.map((n, i) => [n, shown[i]])));
+      }
       for (const l of listeners) l();
     });
   };
 
   return {
     version: () => version,
+    tears: () => tears,
     report(name, phase, value, reader) {
       if (!order.includes(name)) order.push(name);
       if (reader) readers.add(name);
@@ -163,6 +181,7 @@ export function createProbe(): Probe {
     present: (name, phase = "layout") => cell(phase).has(name),
     resetCounts() {
       counts.clear();
+      tears.length = 0;
       announce();
     },
     subscribe(listener) {
@@ -217,6 +236,8 @@ export function Agreement({ probe }: { probe: Probe }) {
   useSyncExternalStore(probe.subscribe, probe.version);
   const torn = !probe.agree();
   const values = probe.values();
+  const history = probe.tears();
+  const everTorn = history.length > 0;
   return (
     <Chip
       name="agreement"
@@ -226,9 +247,11 @@ export function Agreement({ probe }: { probe: Probe }) {
           ? "no readers"
           : torn
             ? `TORN ${JSON.stringify(probe.snapshot())}`
-            : `consistent · ${String(values[0])}`
+            : everTorn
+              ? `repaired, but torn in ${history.length} commit(s): ${JSON.stringify(history[0])}`
+              : `consistent · ${String(values[0])}`
       }
-      state={torn ? "torn" : undefined}
+      state={torn || everTorn ? "torn" : undefined}
     />
   );
 }
@@ -521,6 +544,12 @@ export type Script = {
   step(label: string): Promise<void>;
   check(label: string, got: unknown, want: unknown): void;
   wait(ms?: number): Promise<void>;
+  /**
+   * Wait for something observable instead of for a duration. Two frames and a
+   * macrotask is not "React has committed" — not for a suspended transition,
+   * an interrupted one, time-sliced work, or hydration.
+   */
+  until(what: string, ready: () => boolean, timeout?: number): Promise<void>;
 };
 
 /** Two frames and a macrotask: React has rendered and committed by then. */
@@ -568,6 +597,17 @@ export function useScript(
       },
       wait: (ms = beat) =>
         settle().then(() => new Promise<void>((r) => setTimeout(r, ms))),
+      async until(what, ready, timeout = 4000) {
+        const deadline = performance.now() + timeout;
+        for (;;) {
+          await settle();
+          if (ready()) return;
+          if (performance.now() > deadline) {
+            throw new Error(`timed out waiting for ${what}`);
+          }
+          await new Promise((r) => setTimeout(r, 30));
+        }
+      },
     };
     try {
       await body(script);

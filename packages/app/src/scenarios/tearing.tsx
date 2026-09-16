@@ -143,6 +143,8 @@ export function TearingScenario() {
     });
     script.check("and agree once attached too", probe.agree("ref"), true);
     script.check("no fallback was ever shown", probe.commits("fallback", "ref"), 0);
+    // Not "do they agree now" — no commit along the way disagreed either.
+    script.check("no commit was ever torn", probe.tears(), []);
   });
 
   return (
