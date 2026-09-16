@@ -6,6 +6,9 @@
   // nodejs_compat is required by the adapter; the global fetch flag keeps
   // Next's own fetch on the Workers implementation.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // The zone must live in the same Cloudflare account as the Worker. Change
+  // the hostname here to move the demo; nothing else refers to it.
+  "routes": [{ "pattern": "concurrent-store.tjw.dev", "custom_domain": true }],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
