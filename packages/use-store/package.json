@@ -14,6 +14,16 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./with-equality-fn": {
+      "import": {
+        "types": "./dist/withEqualityFn.d.ts",
+        "default": "./dist/withEqualityFn.js"
+      },
+      "require": {
+        "types": "./dist/withEqualityFn.d.ts",
+        "default": "./dist/withEqualityFn.cjs"
+      }
     }
   },
   "files": [

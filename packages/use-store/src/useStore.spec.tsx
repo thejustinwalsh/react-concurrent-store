@@ -15,6 +15,12 @@ import ReactDefault from "react";
 import * as versioned from "./useStore";
 import Logger from "../test/TestLogger";
 import {
+  Provider,
+  createReduxStore,
+  shallowEqual,
+  useSelector,
+} from "../test/MiniRedux";
+import {
   FragmentAstNode,
   FragmentRef,
   RecordSource,
@@ -642,27 +648,6 @@ describe("Selector composition", () => {
     logger.assertLog([{ a: 2 }]);
   });
 
-  it("uses a custom isEqual to bail out on a structurally equal slice", async () => {
-    const store = createStore({ a: 1, b: 1 }, reducer);
-    // Returns a fresh object every call, so Object.is would never bail.
-    const selectPair = (state: State) => ({ a: state.a });
-    const shallow = (x: { a: number }, y: { a: number }) => x.a === y.a;
-
-    function Reader() {
-      const pair = useStore(store, selectPair, shallow);
-      logger.log({ a: pair.a });
-      return <div>{pair.a}</div>;
-    }
-
-    await act(async () => render(<Reader />));
-    logger.assertLog([{ a: 1 }]);
-
-    await act(async () => store.dispatch({ b: 99 }));
-    logger.assertLog([]);
-
-    await act(async () => store.dispatch({ a: 2 }));
-    logger.assertLog([{ a: 2 }]);
-  });
 
   it("releases its source subscription when the last reader unmounts", async () => {
     const store = createStore({ a: 1, b: 1 }, reducer);
@@ -2726,5 +2711,137 @@ describe("Relay-like normalized store (MiniRelay)", () => {
     `);
 
     unmount();
+  });
+});
+
+/**
+ * markerikson's react-redux port (reduxjs/react-redux#2263) left three
+ * `useSelector` failures. test/MiniRedux.tsx reimplements those semantics on
+ * this package's public API alone — `createStore`, `useStore`, and the
+ * equality wrapper — so whether they are resolved can be asserted.
+ */
+describe("react-redux semantics (MiniRedux)", () => {
+  type State = { count: number; other: number };
+  type Action = { type: "increment" | "touch" };
+
+  const reducer = (state: State, action: Action): State =>
+    action.type === "increment"
+      ? { ...state, count: state.count + 1 }
+      : { ...state, other: state.other + 1 };
+
+  afterEach(() => cleanup());
+
+  it("uses the latest selector", async () => {
+    const store = createReduxStore(reducer, { count: 0, other: 0 });
+    let setMultiplier!: (n: number) => void;
+
+    function Reader() {
+      const [multiplier, _set] = useState(1);
+      setMultiplier = _set;
+      const value = useSelector((state: State) => state.count * multiplier);
+      return <div>{value}</div>;
+    }
+
+    const { asFragment } = await act(async () =>
+      render(
+        <Provider store={store}>
+          <Reader />
+        </Provider>,
+      ),
+    );
+
+    await act(async () => store.dispatch({ type: "increment" }));
+    expect(asFragment().textContent).toBe("1");
+
+    // Swapping the selector must take effect immediately, not on the next
+    // dispatch.
+    await act(async () => setMultiplier(10));
+    expect(asFragment().textContent).toBe("10");
+  });
+
+  it("ignores transient errors in the selector caused by stale props", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const store = createReduxStore(reducer, { count: 0, other: 0 });
+
+    function Child({ parentCount }: { parentCount: number }) {
+      const result = useSelector((state: State) => {
+        if (state.count !== parentCount) throw new Error("stale props");
+        return state.count + parentCount;
+      });
+      return <div>{result}</div>;
+    }
+    function Parent() {
+      const count = useSelector((state: State) => state.count);
+      return <Child parentCount={count} />;
+    }
+
+    await act(async () =>
+      render(
+        <Provider store={store}>
+          <Parent />
+        </Provider>,
+      ),
+    );
+
+    await expect(
+      act(async () => store.dispatch({ type: "increment" })),
+    ).resolves.not.toThrow();
+    spy.mockRestore();
+  });
+
+  it("re-throws selector errors that occur during rendering", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const store = createReduxStore(reducer, { count: 0, other: 0 });
+
+    function Reader() {
+      const value = useSelector(() => {
+        throw new Error("render-phase failure");
+      });
+      return <div>{String(value)}</div>;
+    }
+
+    const { asFragment } = await act(async () =>
+      render(
+        <ErrorBoundary fallback={<div>boundary</div>}>
+          <Provider store={store}>
+            <Reader />
+          </Provider>
+        </ErrorBoundary>,
+      ),
+    );
+
+    expect(asFragment().textContent).toBe("boundary");
+    spy.mockRestore();
+  });
+
+  it("bails out on a shallow-equal slice built fresh each call", async () => {
+    const store = createReduxStore(reducer, { count: 0, other: 0 });
+    let renders = 0;
+
+    function Reader() {
+      // Returns a new object every call, so Object.is would never bail.
+      const slice = useSelector(
+        (state: State) => ({ count: state.count }),
+        shallowEqual,
+      );
+      renders++;
+      return <div>{slice.count}</div>;
+    }
+
+    await act(async () =>
+      render(
+        <Provider store={store}>
+          <Reader />
+        </Provider>,
+      ),
+    );
+    const afterMount = renders;
+
+    // Changes an unselected field: the slice is shallow-equal, so no re-render.
+    await act(async () => store.dispatch({ type: "touch" }));
+    expect(renders).toBe(afterMount);
+
+    await act(async () => store.dispatch({ type: "increment" }));
+    expect(renders).toBeGreaterThan(afterMount);
   });
 });

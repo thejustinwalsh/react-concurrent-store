@@ -62,11 +62,38 @@ function App() {
   );
 }
 
-// Pass a selector to read a slice, with an optional equality function.
-// The component only re-renders when the selected value changes.
+// Pass a selector to read a slice. The component only re-renders when the
+// selected value changes.
 function UserName() {
   const name = useStore(userStore, (user) => user.name);
   return <h1>{name}</h1>;
+}
+
+// A selector also receives its own previous result, so it can decide for
+// itself when nothing has changed. Returning the previous value unchanged is
+// how you tell useStore to skip the render.
+function VisibleTodos() {
+  const todos = useStore(todoStore, (state, previous) => {
+    const next = state.todos.filter((todo) => !todo.done);
+    return previous?.length === next.length &&
+      previous.every((todo, i) => todo === next[i])
+      ? previous
+      : next;
+  });
+  return <List items={todos} />;
+}
+
+// If you would rather pass an equality function, that wrapper ships from its
+// own entry point so it costs nothing unless you import it.
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+
+function UserCard() {
+  const { name, email } = useStoreWithEqualityFn(
+    userStore,
+    (user) => ({ name: user.name, email: user.email }),
+    shallowEqual,
+  );
+  return <p>{name} — {email}</p>;
 }
 
 // You can also use stores with reducers, and the state doesn't have to be asynchronous
@@ -130,7 +157,7 @@ Creates a new store with the given initial value and optional reducer function.
 - `initialValue: T` - The initial value of the store
 - `reducer?: (currentValue: T, action: Action) => T` - Optional reducer function to handle state updates. For stores without actions, you can provide a reducer that takes only the current value: `(currentValue: T) => T`
 
-**Returns:** `ReactStore<T, Action>` - A store object with an `update` method
+**Returns:** `ReactConcurrentStore<T, Action>` - A store object with `getState`, `dispatch` and `subscribe`
 
 ### `useStore(store)`
 
@@ -138,7 +165,7 @@ Hook that subscribes to a store and returns its current value. For stores managi
 
 **Parameters:**
 
-- `store: ReactStore<T, Action>` - The store to subscribe to
+- `store: ReactConcurrentStore<T, Action>` - The store to subscribe to
 
 **Returns:** `T` - The current value of the store (or Promise for async stores)
 

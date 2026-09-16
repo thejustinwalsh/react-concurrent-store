@@ -16,7 +16,7 @@ Creates a new concurrent store that can hold values or promises.
     ```tsx
     function createStore<Value>(
       initialValue: Value
-    ): ReactStore<Value, Value>
+    ): ReactConcurrentStore<Value, Value>
     ```
     
     Creates a store where updates replace the current value directly.
@@ -33,7 +33,7 @@ Creates a new concurrent store that can hold values or promises.
     function createStore<Value>(
       initialValue: Value,
       reducer: (currentValue: Value) => Value
-    ): ReactStore<Value, void>
+    ): ReactConcurrentStore<Value, void>
     ```
     
     Creates a store with a reducer function that doesn't accept actions.
@@ -50,7 +50,7 @@ Creates a new concurrent store that can hold values or promises.
     function createStore<Value, Action>(
       initialValue: Value,
       reducer: (currentValue: Value, action: Action) => Value
-    ): ReactStore<Value, Action>
+    ): ReactConcurrentStore<Value, Action>
     ```
     
     Creates a store with a reducer function that accepts actions.
@@ -80,7 +80,7 @@ Creates a new concurrent store that can hold values or promises.
 
 ### Returns
 
-A `ReactStore` object with an `update` method for modifying the store's value.
+A `ReactConcurrentStore` object with a `dispatch` method for updating the store.
 
 ---
 
@@ -91,12 +91,36 @@ A React hook that subscribes to a store and returns its current value.
 ### Signature
 
 ```tsx
-function useStore<Value>(store: ReactStore<Value, any>): Value;
+function useStore<S>(store: ReactConcurrentStore<S, A>): S;
+function useStore<S, T>(
+  store: ReactConcurrentStore<S, A>,
+  selector: (state: S, previous: T | undefined) => T,
+): T;
 ```
 
 ### Parameters
 
 - **`store`**: A store created with `createStore`
+- **`selector`** _(optional)_: Narrows the state to a slice. It receives the
+  current state and its own previous result; returning that previous value
+  unchanged tells `useStore` nothing has changed and skips the render.
+
+### Equality functions
+
+`useStore` takes no equality function, the same way React ships
+`useSyncExternalStore` without one. Returning the previous result from a
+selector is the built-in mechanism, and an equality-function wrapper is
+provided from its own entry point so it costs nothing unless imported:
+
+```tsx
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+
+const slice = useStoreWithEqualityFn(
+  store,
+  (state) => ({ id: state.id, name: state.name }),
+  shallowEqual,
+);
+```
 
 ### Returns
 
@@ -115,26 +139,40 @@ function UserProfile() {
 
 ---
 
-## ReactStore
+## ReactConcurrentStore
 
 The store object returned by `createStore`.
 
 ### Type Definition
 
 ```tsx
-type ReactStore<Value, Action = Value> = {
-  update: (action: Action) => void;
+type ReactConcurrentStore<S, A> = {
+  getState(): S;
+  dispatch(action: A): void;
+  subscribe(callback: (action: A) => void): () => void;
 };
 ```
 
 ### Methods
 
-#### `update(action)`
+#### `dispatch(action)`
 
 Updates the store's value. The behavior depends on how the store was created:
 
-- **Simple store**: Replaces the current value with the action
-- **Store with reducer**: Calls the reducer function with the current value and action
+- **No reducer**: the action is either a replacement value or an updater,
+  `(previous) => next`, like `useState`'s setter
+- **With a reducer**: the reducer is called with the current value and the action
+
+#### `getState()`
+
+Returns the current value. For reading outside React — components should use
+`useStore`.
+
+#### `subscribe(callback)`
+
+Calls `callback` after each update with the action that caused it, and returns
+an unsubscribe function. This is what lets an external store stay in step
+without exposing its reducer.
 
 **Parameters:**
 
