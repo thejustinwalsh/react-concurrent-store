@@ -36,10 +36,11 @@ import {
   type ReactConcurrentStore,
 } from "./useStore";
 import { configureStore, createSlice } from "@reduxjs/toolkit";
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { type UpdateInfo } from "@welldone-software/why-did-you-render";
 import {
   Activity,
+  ViewTransition,
   memo,
   StrictMode,
   Suspense,
@@ -49,6 +50,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useOptimistic,
   useState,
   useTransition,
 } from "react";
@@ -4280,5 +4282,223 @@ describe("The hydration check costs nothing when it is not needed", () => {
     // Hydrate on the server's value, then catch up. That second render is the
     // whole price, and it is only paid in the case that needs it.
     expect(renders).toBe(2);
+  });
+});
+
+describe("Router-shaped navigation", () => {
+  type Route = { route: string; prefetched: string[] };
+  type Nav =
+    | { type: "navigate"; route: string }
+    | { type: "prefetch"; route: string };
+
+  afterEach(() => cleanup());
+
+  /**
+   * The shape a router actually has: navigation is a transition that suspends
+   * on the page it is going to, an urgent update can interrupt it, the
+   * abandoned navigation still settles eventually, and history moves in both
+   * directions afterwards.
+   */
+  it("survives an interrupted navigation, a prefetch, and history in both directions", async () => {
+    const store = createStore<Route, Nav>(
+      { route: "/a", prefetched: [] },
+      (state, action) =>
+        action.type === "navigate"
+          ? { ...state, route: action.route }
+          : state.prefetched.includes(action.route)
+            ? state
+            : { ...state, prefetched: [...state.prefetched, action.route] },
+    );
+
+    const settle = new Map<string, (page: string) => void>();
+    const pages = new Map<string, Promise<string>>([
+      ["/a", Promise.resolve("page-a")],
+    ]);
+    for (const route of ["/b", "/c"]) {
+      pages.set(
+        route,
+        new Promise<string>((resolve) => settle.set(route, resolve)),
+      );
+    }
+
+    function Router() {
+      const state = useStore(store);
+      useEffect(() => {
+        const pop = () => {
+          const route = (window.history.state as { route: string }).route;
+          startTransition(() => store.dispatch({ type: "navigate", route }));
+        };
+        window.addEventListener("popstate", pop);
+        return () => window.removeEventListener("popstate", pop);
+      }, []);
+      return (
+        <>
+          <span data-testid="route">{state.route}</span>
+          <span data-testid="prefetch">{state.prefetched.join(",")}</span>
+          <span data-testid="page">{use(pages.get(state.route)!)}</span>
+        </>
+      );
+    }
+
+    window.history.replaceState({ route: "/a" }, "");
+    const screen = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="page">loading</span>}>
+          <Router />
+        </Suspense>,
+      ),
+    );
+    const at = (id: string) =>
+      screen.getAllByTestId(id).map((n) => n.textContent)[0];
+
+    const navigate = async (route: string) => {
+      window.history.pushState({ route }, "");
+      await act(async () => {
+        startTransition(() => store.dispatch({ type: "navigate", route }));
+      });
+    };
+
+    await navigate("/b");
+    // /b has not settled, so the transition holds and /a stays on screen.
+    expect(at("route")).toBe("/a");
+
+    // An urgent prefetch interrupts the held navigation. It must land without
+    // dragging the pending route onto the screen with it.
+    await act(async () => store.dispatch({ type: "prefetch", route: "/c" }));
+    expect(at("prefetch")).toBe("/c");
+    expect(at("route")).toBe("/a");
+
+    // A second navigation replaces the first while it is still in flight.
+    await navigate("/c");
+    await act(async () => settle.get("/c")!("page-c"));
+    expect(at("route")).toBe("/c");
+
+    // The abandoned navigation settles late. It must not roll the route back.
+    await act(async () => settle.get("/b")!("page-b"));
+    expect(at("route")).toBe("/c");
+    expect(at("page")).toBe("page-c");
+
+    // jsdom's back/forward are asynchronous and unreliable; the store only
+    // ever sees the popstate, so that is what this drives.
+    const pop = async (route: string) => {
+      window.history.replaceState({ route }, "");
+      await act(async () => {
+        window.dispatchEvent(new PopStateEvent("popstate", { state: { route } }));
+      });
+    };
+
+    await pop("/b");
+    await act(async () => {
+      await waitFor(() => expect(at("route")).toBe("/b"));
+    });
+    expect(at("page")).toBe("page-b");
+
+    await pop("/c");
+    await act(async () => {
+      await waitFor(() => expect(at("route")).toBe("/c"));
+    });
+    expect(at("page")).toBe("page-c");
+    // The prefetch survived every one of those.
+    expect(at("prefetch")).toBe("/c");
+  });
+});
+
+describe("Crossing a server/client boundary", () => {
+  /**
+   * A store cannot travel through Flight. It holds functions, mutable sets and
+   * promises, none of which serialize. The supported shape is to send the
+   * serializable initial state to a Client Component and build the store
+   * there — which is also what makes the hydration path work, since both sides
+   * start from the same value.
+   */
+  it("is not something a server component can hand to a client one", () => {
+    const store = createStore({ count: 1 });
+    expect(() => structuredClone(store)).toThrow();
+
+    // What does travel: the state.
+    const state = store.getState();
+    expect(structuredClone(state)).toEqual({ count: 1 });
+
+    // And a store built from it on the other side is equivalent, though it is
+    // a different object with its own identity, subscriptions and history.
+    const clientStore = createStore(structuredClone(state));
+    expect(clientStore.getState()).toEqual(store.getState());
+    expect(clientStore).not.toBe(store);
+  });
+});
+
+describe("Other React 19 surfaces at once", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * ViewTransition around a tree that contains an Activity boundary, a reader
+   * feeding useDeferredValue and useOptimistic, a transition that suspends,
+   * and a flushSync that interrupts it. The claim is narrow: none of these
+   * change where an action lands.
+   */
+  it("keeps a flushSync rebase correct through all of them", async () => {
+    const store = createStore(2, (n: number, action: "double" | "increment") =>
+      action === "double" ? n * 2 : n + 1,
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+    let addForecast!: (delta: number) => void;
+
+    function Reader({ id }: { id: string }) {
+      const n = useStore(store);
+      const deferred = useDeferredValue(n);
+      const [forecast, add] = useOptimistic(
+        n,
+        (value: number, delta: number) => value + delta,
+      );
+      if (id === "visible") addForecast = add;
+      if (held && n >= 4) use(gate);
+      return (
+        <span data-testid={id} data-forecast={forecast}>
+          {`${n}/${deferred}`}
+        </span>
+      );
+    }
+
+    let reveal!: () => void;
+    function App() {
+      const [mode, setMode] = useState<"hidden" | "visible">("hidden");
+      reveal = () => setMode("visible");
+      return (
+        <Suspense fallback={<span data-testid="fallback">loading</span>}>
+          <ViewTransition>
+            <Reader id="visible" />
+            <Activity mode={mode}>
+              <Reader id="activity" />
+            </Activity>
+          </ViewTransition>
+        </Suspense>
+      );
+    }
+
+    const screen = await act(async () => render(<App />));
+    const at = (id: string) =>
+      screen.queryAllByTestId(id).map((n) => n.textContent)[0];
+
+    await act(async () => {
+      startTransition(() => {
+        addForecast(10);
+        reveal();
+        store.dispatch("double");
+      });
+      // Interrupts the held transition from inside the same call stack.
+      flushSync(() => store.dispatch("increment"));
+    });
+
+    // 2 + 1, rebased onto what is on screen. Not 4 + 1, and not the fallback.
+    expect(at("visible")).toBe("3/3");
+    expect(screen.queryAllByTestId("fallback")).toEqual([]);
+    expect(store.getState()).toBe(5);
+
+    held = false;
+    await act(async () => release());
+    expect(at("visible")).toBe("5/5");
+    expect(at("activity")).toBe("5/5");
   });
 });
