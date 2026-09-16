@@ -72,21 +72,54 @@ import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn"
 
 ## How it works
 
-Two folds over the same actions, told apart by one thing recorded at dispatch —
-whether the caller was inside a transition:
+A store keeps two folds over the same actions:
 
-- **head** — every action, in dispatch order
-- **sync** — only the urgent ones: what the tree may show right now
+- **head** — every action, in dispatch order.
+- **sync** — only the urgent ones. What the tree is allowed to show now.
 
-Every action enters `head`. An urgent one also enters `sync`; a transition's
-does not, and stays out until the tree catches up. That is why an urgent update
-lands on what is on screen rather than on a state the user cannot see yet, and
-why the actions are back in dispatch order once the transition commits.
+Every action enters head. An action dispatched inside `startTransition` does
+not enter sync, and stays out until the tree catches up.
 
-State is carried on a promise with `status`/`value` expandos, the shape React
-reads to unwrap `use()` without a microtask. That is what lets a store hold a
-value that is not ready yet, and lets the same object serve a suspending client
-read and a synchronous server render.
+### What a dispatch does
+
+A dispatch reads whether its caller was inside a Transition, folds the action
+over head, and takes one of four paths:
+
+| when | head | sync | published |
+| --- | --- | --- | --- |
+| nothing outstanding | moves | moves | once |
+| inside a Transition | moves | held | once, at Transition priority |
+| urgent, while a Transition is outstanding | moves | folds over what is on screen | twice: sync now, head in a Transition |
+| urgent, and the new value is a promise | moves | joins head | once — the boundary falls back |
+
+The third row is rebasing, and the reason the two folds exist. The fourth is
+why an urgent dispatch of a promise still shows a fallback: there is no version
+of a value that has not arrived.
+
+When a single publish reaches no reader — nothing is mounted, or no selected
+slice moved — the folds rejoin, because nothing is outstanding any more.
+
+### What a reader does
+
+A reader holds one handle. It renders what that handle carries, and a layout
+Effect keeps it in step:
+
+1. **Render.** Unwrap the handle, run the selector.
+2. **Layout Effect.** Take any publish that arrived, record what this reader
+   committed, and listen for the tree moving past it.
+3. **On a publish.** If the value differs, set the handle and render again.
+4. **On a commit.** A reader left behind follows the tree to what its siblings
+   already show.
+
+Step 4 runs in a layout Effect, before the browser paints, so a reader that
+lands behind costs a render pass and not a frame.
+
+### Why the state is carried on a promise
+
+State lives on a promise carrying `status` and `value`, the shape React reads
+to unwrap `use()` without a microtask. That is what lets a store hold a value
+that has not arrived, and lets one object serve both a suspending client read
+and a synchronous server render.
 
 ## What it reads from React
 

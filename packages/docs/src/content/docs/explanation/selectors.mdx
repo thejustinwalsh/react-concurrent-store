@@ -1,18 +1,25 @@
 ---
 title: Selectors and re-renders
-description: Why useStore has no equality argument, and what to use instead.
+description: What the second argument to a selector is for, and why there is no equality option.
 ---
 
-A selector narrows a store to the part a component actually needs. The
-component re-renders when that part changes — and "changes" means the selector
-returned a different reference.
+A selector narrows a store to the part a component needs. The component
+re-renders when that part changes, and "changes" means the selector returned a
+different reference.
+
+:::note[You will learn]
+- Why a selector that builds an object re-renders on every action
+- What the selector's second argument is for
+- Why `useStore` has no equality option
+- What a selector throwing means, and when it is not an error
+:::
 
 ```tsx
 const name = useStore(store, (state) => state.user.name);
 ```
 
-That works for strings, numbers and anything else already stable in your state.
-It stops working the moment a selector builds something:
+That works for anything already stable in your state. It stops working the
+moment a selector builds something:
 
 ```tsx
 // A new object every call, so this re-renders on every action.
@@ -24,9 +31,8 @@ const user = useStore(store, (state) => ({
 
 ## The previous result
 
-A selector receives two arguments: the current state, and **its own previous
-result**. Returning that previous value unchanged is how you say nothing
-happened.
+A selector receives the current state and **its own previous result**. Return
+that previous value to say nothing happened:
 
 ```tsx
 const visible = useStore(store, (state, previous) => {
@@ -38,24 +44,29 @@ const visible = useStore(store, (state, previous) => {
 });
 ```
 
-This is the whole mechanism. There is no separate equality channel — identity
-is the signal, and you decide when to preserve it.
+Identity is the signal, and you decide when to preserve it.
 
-## Why there is no equality argument
+This is also what structural sharing needs. Relay's `recycleNodesInto` and
+TanStack Query's `replaceEqualDeep` both walk a freshly built tree against the
+previous one and put the old subtree back wherever they are equal — which they
+cannot do without the previous one:
 
-React ships `useSyncExternalStore` without one and leaves
-`useSyncExternalStoreWithSelector` to a separate module. `useStore` follows
-that, for the same reason: comparison is a policy question. Shallow, deep,
-structural sharing and "recycle unchanged subtrees" are all valid, they have
-very different costs, and a hook that picks one for you makes the other three
-awkward.
+```tsx
+const view = useStore(store, (state, previous) =>
+  previous === undefined ? project(state) : recycleNodesInto(previous, project(state)),
+);
+```
 
-Giving the selector its previous result covers every one of them without the
-hook needing to know which you chose.
+## Why there is no equality option
 
-## When you just want shallow
+Comparison is a policy question. Shallow, deep, structural sharing and
+"recycle unchanged subtrees" are all valid, they cost very different amounts,
+and a Hook that picks one makes the other three awkward. React draws the same
+line: `useSyncExternalStore` has no equality argument, and
+`useSyncExternalStoreWithSelector` is a separate module.
 
-Writing that comparison by hand each time is tedious, so the wrapper exists:
+When you want shallow and nothing more, the wrapper ships from its own entry
+point, so it costs nothing unless you import it:
 
 ```tsx
 import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
@@ -68,32 +79,25 @@ const user = useStoreWithEqualityFn(
 );
 ```
 
-It ships from its own entry point, so it adds nothing to your bundle unless you
-import it. Any comparison function works.
-
 ## When a selector throws
 
-A selector is called in two quite different situations, and a throw means
-something different in each.
+Your selector is called in two situations, and a throw means something
+different in each.
 
-**During render**, the selector is producing the value the component is about
-to show. A throw there is a real error and is left alone — it reaches your
-error boundary, exactly as it would from any other code in the component body.
+**During render**, it is producing the value the component is about to show. A
+throw is a real error and reaches your error boundary, exactly as it would from
+anywhere else in the component body.
 
-**Speculatively**, the store calls the selector to decide whether a reader needs
-to re-render at all: when an update is published, when a view first attaches,
-and when the tree commits past it. A throw there is not necessarily an error.
-It is usually the zombie-child case — the selector is being asked about a state
-its component is not going to be rendered with, because a parent has already
-removed it. So the store swallows it and forwards the update, letting the
-render decide. If the component really is about to render with that state, the
-selector throws again during render and the boundary catches it.
+**Speculatively**, the store calls it to decide whether a component needs to
+re-render at all — when an update is published, when a view attaches, and when
+a commit moves past that component. A throw here is usually the zombie-child
+case: the selector is being asked about a state its component will never render
+with, because a parent already removed it. The store swallows it and forwards
+the update, so render decides.
 
 ```tsx
-// If `id` has just been deleted from the store, this throws while the store is
-// only asking whether this reader is affected. That is not an error. It throws
-// again during render only if this component is still mounted and reading it,
-// and then it reaches the boundary.
+// Throws harmlessly while the store is only asking whether this component is
+// affected. Throws to the boundary if the component really does render it.
 const item = useStore(store, (state) => {
   const found = state.items[id];
   if (found === undefined) throw new Error(`missing ${id}`);
@@ -101,17 +105,8 @@ const item = useStore(store, (state) => {
 });
 ```
 
-The rule, in one line: **a speculative throw is a question the store cannot
-answer, so it asks render instead; a throw in render is an error.** This is the
-behaviour React-Redux's `useSelector` suite specifies, and it is checked here
-against both a direct test and a React-Redux-shaped harness.
+In one line: a speculative throw is a question the store cannot answer, so it
+asks render instead. A throw in render is an error.
 
-## Selectors run during render
-
-The selector is called while your component renders, so the props it closes
-over and the state it reads always come from the same moment. A selector that
-throws because its props are briefly out of date does not break the dispatch
-that caused it — the component simply renders again with matching props.
-
-This is the "zombie child" case, and it is why the selector is not evaluated
-eagerly when the store changes.
+This is the behaviour react-redux's `useSelector` suite specifies, checked here
+directly and through a react-redux-shaped harness.
