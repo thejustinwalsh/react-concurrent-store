@@ -483,7 +483,9 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       release();
       releaseCommit();
     };
-  }, [store, handle]);
+    // `source` is read off `store`, so it cannot move while `store` holds, but
+    // listing it keeps the whole rule set clean rather than nearly clean.
+  }, [store, source, handle]);
 
   return handle;
 }
