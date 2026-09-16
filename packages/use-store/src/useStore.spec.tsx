@@ -58,6 +58,7 @@ import {
   useLayoutEffect,
   useMemo,
   useOptimistic,
+  useRef,
   useState,
   useSyncExternalStore,
   useTransition,
@@ -5255,5 +5256,64 @@ describe("How many times a selector runs", () => {
       unrelated: 1,
       transition: 3,
     });
+  });
+});
+
+describe("A stable selector is re-run, never replayed from a cache", () => {
+  /**
+   * The publish already computes the slice in order to decide whether this
+   * reader moved, so the render's call to the same selector on the same state
+   * looks redundant, and caching it would take the cost to parity with
+   * `useSyncExternalStore`. It is not redundant, and this is why.
+   *
+   * A cache would have to be keyed on selector identity and state identity,
+   * which is only sound if the selector reads nothing but the state it is
+   * handed. react-redux's own documented escape hatch for stale props is a
+   * ref: keep the selector's identity stable and read the changing value out
+   * of `ref.current`. Under a cache, a render triggered by that prop changing
+   * finds the same state and the same selector, serves the slice computed
+   * before the prop moved, and is silently one render behind.
+   *
+   * Two calls is the price of the publish happening outside React. React
+   * itself would not pay it: the reconciler can hand the render the slice it
+   * already computed, because it schedules that render. A library can only ask
+   * for a render, never put a value inside one.
+   */
+  afterEach(() => cleanup());
+
+  type Items = { items: Record<string, string> };
+
+  it("sees a prop that changed after the last dispatch", async () => {
+    const store = createStore<Items, Items>(
+      { items: { a: "apple", b: "banana" } },
+      (_state, next) => next,
+    );
+
+    function Reader({ id }: { id: string }) {
+      // The documented stale-props workaround: stable identity, changing read.
+      const latest = useRef(id);
+      latest.current = id;
+      const select = useCallback((s: Items) => s.items[latest.current], []);
+      return <span data-testid="v">{useStore(store, select)}</span>;
+    }
+
+    let choose!: (id: string) => void;
+    function App() {
+      const [id, setId] = useState("a");
+      choose = setId;
+      return <Reader id={id} />;
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+    expect(getByTestId("v")).toHaveTextContent("apple");
+
+    // A dispatch, so the view computes and remembers a slice for this state.
+    await act(async () => store.dispatch({ items: { a: "apricot", b: "beet" } }));
+    expect(getByTestId("v")).toHaveTextContent("apricot");
+
+    // Now only the prop moves. Same state, same selector identity — the exact
+    // pair a cache would key on.
+    await act(async () => choose("b"));
+    expect(getByTestId("v")).toHaveTextContent("beet");
   });
 });
