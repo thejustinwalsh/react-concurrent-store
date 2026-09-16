@@ -784,6 +784,10 @@ describe("Subscription cleanup", () => {
     expect(store.live()).toBe(1);
 
     unmount();
+    // A view holds its source subscription across the gap while its reader
+    // resubscribes, which happens on every update, so the release lands on a
+    // microtask rather than in this tick. It still lands.
+    await act(async () => {});
     expect(store.live()).toBe(0);
   });
 

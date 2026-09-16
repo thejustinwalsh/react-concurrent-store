@@ -593,10 +593,17 @@ export function createSelectorStore<S, A, T>(
       if (release === null) release = attach(from);
       return () => {
         listeners.delete(listener);
-        if (listeners.size === 0 && release !== null) {
+        if (listeners.size !== 0 || release === null) return;
+        // Not immediately. A reader resubscribes whenever its handle changes,
+        // so the count passes through zero on every single update — detaching
+        // there threw away this view's slice memory and made it re-attach, and
+        // re-attaching runs the selector again. Wait a microtask and let a
+        // returning reader cancel it.
+        queueMicrotask(() => {
+          if (listeners.size !== 0 || release === null) return;
           release();
           release = null;
-        }
+        });
       };
     },
     get _head() {
