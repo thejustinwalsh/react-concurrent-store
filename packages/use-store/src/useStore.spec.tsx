@@ -13,6 +13,12 @@ import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import ReactDefault from "react";
 import * as versioned from "./useStore";
+import {
+  createRouter,
+  usePreloaded,
+  useRoute,
+  useScratch,
+} from "../test/MiniRouter";
 import Logger from "../test/TestLogger";
 import {
   Provider,
@@ -4922,5 +4928,196 @@ describe("The one limitation, pinned", () => {
     expect(seen.renders).toBe(2);
     expect(seen.onMount).toBe(1);
     expect(seen.stableMemo).toBe(1);
+  });
+});
+
+describe("Router-shaped navigation (MiniRouter)", () => {
+  afterEach(() => cleanup());
+
+  type Path = "/feed" | "/profile" | "/settings";
+
+  /** A loader you can settle by hand, per route. */
+  const deferredLoaders = () => {
+    const settle = new Map<Path, (value: string) => void>();
+    const loader = (to: Path) =>
+      new Promise<string>((resolve) => settle.set(to, resolve));
+    return { loader, settle };
+  };
+
+  it("holds the current route until the loader resolves, with no fallback", async () => {
+    const { loader, settle } = deferredLoaders();
+    const router = createRouter<Path>("/feed", loader);
+    settle.set("/feed", () => {});
+    const ready = router.load("/feed") as Promise<string>;
+    void ready;
+
+    function Screen() {
+      const { location, data } = useRoute(router);
+      return <span data-testid="screen">{`${location}:${String(data)}`}</span>;
+    }
+
+    const { queryAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Screen />
+        </Suspense>,
+      ),
+    );
+    await act(async () => settle.get("/feed")!("feed-data"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/feed:feed-data");
+
+    router.navigate("/profile");
+    await act(async () => {});
+    // Still on the feed, and no fallback: this is the transition doing its job.
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/feed:feed-data");
+    expect(queryAllByTestId("fb")).toEqual([]);
+
+    await act(async () => settle.get("/profile")!("profile-data"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe(
+      "/profile:profile-data",
+    );
+  });
+
+  it("lands an urgent update on the route the user is looking at", async () => {
+    const { loader, settle } = deferredLoaders();
+    const router = createRouter<Path>("/feed", loader);
+    const ready = router.load("/feed");
+    void ready;
+
+    function Screen() {
+      const { location } = useRoute(router);
+      const draft = useScratch(router, "draft");
+      return (
+        <span data-testid="screen">{`${location}:${String(draft ?? "")}`}</span>
+      );
+    }
+
+    const { queryAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Screen />
+        </Suspense>,
+      ),
+    );
+    await act(async () => settle.get("/feed")!("feed-data"));
+
+    router.navigate("/profile");
+    await act(async () => {});
+
+    // The user types while the navigation is still loading.
+    await act(async () => router.set("draft", "hello"));
+
+    // It shows, on the feed, without dragging the unloaded profile in with it.
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/feed:hello");
+    expect(queryAllByTestId("fb")).toEqual([]);
+    expect(router.state().location).toBe("/profile");
+
+    await act(async () => settle.get("/profile")!("profile-data"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/profile:hello");
+  });
+
+  it("does not roll back when an abandoned navigation settles late", async () => {
+    const { loader, settle } = deferredLoaders();
+    const router = createRouter<Path>("/feed", loader);
+    void router.load("/feed");
+
+    function Screen() {
+      const { location } = useRoute(router);
+      return <span data-testid="screen">{location}</span>;
+    }
+
+    const { queryAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Screen />
+        </Suspense>,
+      ),
+    );
+    await act(async () => settle.get("/feed")!("feed-data"));
+
+    router.navigate("/profile");
+    await act(async () => {});
+    // Interrupted by a second navigation before the first arrives.
+    router.navigate("/settings");
+    await act(async () => settle.get("/settings")!("settings-data"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/settings");
+
+    // The abandoned one arrives afterwards and must be ignored.
+    await act(async () => settle.get("/profile")!("profile-data"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/settings");
+    expect(router.state().location).toBe("/settings");
+  });
+
+  it("preloads without navigating, and the preload survives a navigation", async () => {
+    const { loader, settle } = deferredLoaders();
+    const router = createRouter<Path>("/feed", loader);
+    void router.load("/feed");
+
+    function Screen() {
+      const { location } = useRoute(router);
+      const preloaded = usePreloaded(router);
+      return <span data-testid="screen">{`${location}|${preloaded}`}</span>;
+    }
+
+    const { queryAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Screen />
+        </Suspense>,
+      ),
+    );
+    await act(async () => settle.get("/feed")!("feed-data"));
+
+    await act(async () => router.preload("/settings"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/feed|/settings");
+
+    router.navigate("/profile");
+    await act(async () => {});
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe("/feed|/settings");
+
+    await act(async () => settle.get("/profile")!("profile-data"));
+    expect(queryAllByTestId("screen")[0]?.textContent).toBe(
+      "/profile|/settings",
+    );
+  });
+
+  it("shows the current route to a component revealed mid-navigation", async () => {
+    const { loader, settle } = deferredLoaders();
+    const router = createRouter<Path>("/feed", loader);
+    void router.load("/feed");
+
+    function Screen({ id }: { id: string }) {
+      const { location } = useRoute(router);
+      return <span data-testid={id}>{location}</span>;
+    }
+
+    let reveal!: () => void;
+    function App() {
+      const [shown, setShown] = useState(false);
+      reveal = () => setShown(true);
+      return (
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Screen id="a" />
+          {shown && <Screen id="b" />}
+        </Suspense>
+      );
+    }
+
+    const { queryAllByTestId } = await act(async () => render(<App />));
+    await act(async () => settle.get("/feed")!("feed-data"));
+
+    router.navigate("/profile");
+    await act(async () => {});
+
+    // A sidebar, a toast, anything appearing while the navigation is in flight.
+    await act(async () => reveal());
+    expect(queryAllByTestId("b")[0]?.textContent).toBe("/feed");
+    expect(queryAllByTestId("a")[0]?.textContent).toBe("/feed");
+    expect(queryAllByTestId("fb")).toEqual([]);
+
+    await act(async () => settle.get("/profile")!("profile-data"));
+    expect(
+      [queryAllByTestId("a")[0]?.textContent, queryAllByTestId("b")[0]?.textContent],
+    ).toEqual(["/profile", "/profile"]);
   });
 });
