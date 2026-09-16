@@ -91,7 +91,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 
 declare global {
-  // eslint-disable-next-line no-var
   var WDYR: { notifications: UpdateInfo[] };
 }
 
@@ -220,7 +219,7 @@ describe("Handles and tearing", () => {
       // `status`/`value` alone. The moment it falls back to `then`, we lose
       // synchronous unwrapping and a blocking-lane read hits the fallback.
       const store = createStore(1, reducer);
-      const head = internals(store)._getHead();
+      const head = internals(store)._head;
       let thenCalls = 0;
       const originalThen = head.then.bind(head);
       head.then = ((onfulfilled) => {
@@ -807,7 +806,7 @@ describe("Data-level tearing", () => {
       });
       useEffect(() => {
         actedOn.push([id, value]);
-      }, [value]);
+      }, [id, value]);
       return <div>{value}</div>;
     }
 
@@ -2510,7 +2509,7 @@ describe("Relay-like normalized store (MiniRelay)", () => {
     `);
 
     await act(async () => {
-      store.publishAndNotify((prev) => {
+      store.publishAndNotify((_prev) => {
         const next = new RecordSource();
         next.set("1", { id: "1", name: "MALICE", friend: "1" });
         return next;

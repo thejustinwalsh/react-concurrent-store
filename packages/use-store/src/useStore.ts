@@ -75,14 +75,12 @@ export interface ReactConcurrentStore<S, A> {
  */
 export interface ConcurrentStoreInternals<S, A>
   extends ReactConcurrentStore<S, A> {
-  readonly _listeners: ReadonlySet<(handle: StoreHandle<S>) => void>;
   /** Subscribe to published handles; readers need to know *which* was sent. */
   _subscribe(listener: (handle: StoreHandle<S>) => void): () => void;
-  _getHead(): StoreHandle<S>;
-  _getCommitted(): StoreHandle<S>;
-  _getCommittedState(): S;
+  readonly _head: StoreHandle<S>;
+  readonly _committed: StoreHandle<S>;
   /** Last handle published at the caller's priority; a late subscriber's target. */
-  _getPublished(): StoreHandle<S>;
+  readonly _published: StoreHandle<S>;
   _markCommitted(handle: StoreHandle<S>): void;
 }
 
@@ -192,17 +190,21 @@ export function createStore<S, A>(
       };
     },
 
-    _listeners: listeners,
     _subscribe(listener) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
-    _getHead: () => head,
-    _getCommitted: () => committed,
-    _getCommittedState: () => committed.value,
-    _getPublished: () => published,
+    get _head() {
+      return head;
+    },
+    get _committed() {
+      return committed;
+    },
+    get _published() {
+      return published;
+    },
     _markCommitted(handle) {
       // Monotonic: a reader still catching up must not drag the pointer back.
       if (handle.version > committed.version) committed = handle;
@@ -233,7 +235,7 @@ function useHandle<S, A>(
   const [handle, setHandle] = useState(
     () =>
       (renderedThisPass.get(store as object) as StoreHandle<S> | undefined) ??
-      store._getCommitted(),
+      store._committed,
   );
   renderedThisPass.set(store as object, handle);
 
@@ -244,10 +246,13 @@ function useHandle<S, A>(
     });
   }, [store]);
 
+  // Intentionally runs on every commit: the catch-up depends on where the
+  // store is *now*, not on a dependency that changed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
-    const head = store._getHead();
+    const head = store._head;
     if (handle !== head) {
-      if (store._getCommitted() === head) {
+      if (store._committed === head) {
         // Siblings already committed head this pass. A setState from a layout
         // effect flushes before the commit returns, so nothing torn is painted.
         setHandle(head);
@@ -278,7 +283,7 @@ export function createSelectorStore<S, A, T>(
   source: ConcurrentStoreInternals<S, A>,
   selector: (state: S, previous: T | undefined) => T,
 ): ConcurrentStoreInternals<S, never> {
-  let head = source._getHead();
+  let head = source._head;
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
   const listeners = new Set<(handle: StoreHandle<S>) => void>();
@@ -313,9 +318,9 @@ export function createSelectorStore<S, A, T>(
     // Built during render but subscribed from a layout effect, so the source
     // can move in between. Catch up to the last priority-inheriting publish,
     // not to head, or a sync mount jumps to the pending transition's state.
-    if (source._getHead() !== head) {
-      head = source._getHead();
-      const current = source._getPublished();
+    if (source._head !== head) {
+      head = source._head;
+      const current = source._published;
       try {
         last = { value: selector(current.value, last?.value) };
       } catch {
@@ -337,7 +342,6 @@ export function createSelectorStore<S, A, T>(
       never
     >["subscribe"],
 
-    _listeners: listeners,
     _subscribe(listener) {
       listeners.add(listener);
       if (release === null) release = attach();
@@ -349,10 +353,15 @@ export function createSelectorStore<S, A, T>(
         }
       };
     },
-    _getHead: () => head,
-    _getCommitted: () => source._getCommitted(),
-    _getCommittedState: () => source._getCommitted().value,
-    _getPublished: () => source._getPublished(),
+    get _head() {
+      return head;
+    },
+    get _committed() {
+      return source._committed;
+    },
+    get _published() {
+      return source._published;
+    },
     _markCommitted: (handle) => source._markCommitted(handle),
   };
 }
