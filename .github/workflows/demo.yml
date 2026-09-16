@@ -1,3 +1,10 @@
+# Deploying by hand needs none of this: `wrangler login` does an OAuth flow in
+# a browser, then `pnpm --filter @react-concurrent-store/app cf:deploy`.
+#
+# CI has no browser, so it needs an API token instead:
+#   CLOUDFLARE_API_TOKEN   dash.cloudflare.com → My Profile → API Tokens →
+#                          Create Token → "Edit Cloudflare Workers"
+#   CLOUDFLARE_ACCOUNT_ID  `wrangler whoami` prints it once you are logged in
 name: Deploy Demo to Cloudflare
 
 on:
