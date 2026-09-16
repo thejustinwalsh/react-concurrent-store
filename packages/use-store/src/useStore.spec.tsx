@@ -1235,18 +1235,13 @@ describe("Selector error policy", () => {
 
   const reducer = (state: State): State => ({ count: state.count + 1 });
 
-  /**
-   * Selector error policy, as specified by React-Redux's own useSelector suite.
-   * Run against both implementations so the difference is visible rather than
-   * asserted.
-   */
+  /** Selector error policy, as specified by React-Redux's own useSelector suite. */
   type Adapter = {
     name: string;
     createStore: (initial: State) => { dispatch: (action: Action) => void };
     // Normalized so the union of two generic signatures stays callable.
     useSelector: <T>(store: unknown, selector: (state: State) => T) => T;
     Wrapper: React.ComponentType<{ children: React.ReactNode }>;
-    zombieChild: boolean;
   };
 
   const implementations: Adapter[] = [
@@ -1256,16 +1251,13 @@ describe("Selector error policy", () => {
       useSelector: (store, selector) =>
         versioned.useStore(store as versioned.ConcurrentStoreInternals<State, Action>, selector),
       Wrapper: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-      // Selector runs during render, so props and state are always coherent.
-      zombieChild: false,
     },
   ];
 
   afterEach(() => cleanup());
 
-  describe.each(implementations)("$name", ({ createStore, useSelector, Wrapper, zombieChild }) => {
-    const transient = zombieChild ? it.fails : it;
-    transient("ignores transient errors in selector (e.g. due to stale props)", async () => {
+  describe.each(implementations)("$name", ({ createStore, useSelector, Wrapper }) => {
+    it("ignores transient errors in selector (e.g. due to stale props)", async () => {
       const spy = vi.spyOn(console, "error").mockImplementation(() => {});
       const store = createStore({ count: 0 });
 
@@ -1339,7 +1331,6 @@ describe("Suspend on mount", () => {
     createStore: (initial: State) => { dispatch: (action: Action) => void };
     useStore: (store: unknown) => State;
     Wrapper: React.ComponentType<{ children: React.ReactNode }>;
-    stuckInSuspense: boolean;
   };
 
   const implementations: Adapter[] = [
@@ -1349,8 +1340,6 @@ describe("Suspend on mount", () => {
       useStore: (store) =>
         versioned.useStore(store as versioned.ConcurrentStoreInternals<State, Action>),
       Wrapper: ({ children }) => <>{children}</>,
-      // Mounts at the committed version, so a suspending head is never rendered.
-      stuckInSuspense: false,
     },
   ];
 
@@ -1358,10 +1347,8 @@ describe("Suspend on mount", () => {
 
   describe.each(implementations)(
     "$name",
-    ({ createStore, useStore, Wrapper, stuckInSuspense }) => {
-      const test = stuckInSuspense ? it.fails : it;
-
-      test("shows committed state when a new reader mounts while head suspends", async () => {
+    ({ createStore, useStore, Wrapper }) => {
+      it("shows committed state when a new reader mounts while head suspends", async () => {
         const store = createStore(1);
         let resolveSuspense: () => void;
         const gate = new Promise<void>((resolve) => {
