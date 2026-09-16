@@ -101,6 +101,15 @@ export type Probe = {
    */
   tears(): ReadonlyArray<Record<string, unknown>>;
   /**
+   * What the readers showed in each painted frame, sampled once per animation
+   * frame and recorded only when it changes. A commit whose repair runs in a
+   * layout effect never reaches a frame of its own, because layout effects
+   * flush before paint — so this is the only thing that can tell a render the
+   * user saw from one they did not.
+   */
+  watchFrames(): () => void;
+  frames(): ReadonlyArray<Record<string, unknown>>;
+  /**
    * Clears the counters but keeps what each reader is currently showing.
    * Clearing the values too would drop live readers that have no reason to
    * re-render, and they would never report again.
@@ -122,8 +131,10 @@ export function createProbe(): Probe {
   const order: string[] = [];
   const listeners = new Set<() => void>();
   const tears: Array<Record<string, unknown>> = [];
+  const frames: Array<Record<string, unknown>> = [];
   let queued = false;
   let version = 0;
+  let watching = 0;
 
   const cell = (phase: Phase) => cells.get(phase)!;
   const key = (name: string, phase: Phase) => `${phase}:${name}`;
@@ -152,9 +163,37 @@ export function createProbe(): Probe {
     });
   };
 
+  const snapshotOf = (phase: Phase) => {
+    const names = order.filter(
+      (name) => readers.has(name) && cell(phase).has(name),
+    );
+    return Object.fromEntries(names.map((n) => [n, cell(phase).get(n)]));
+  };
+
   return {
     version: () => version,
     tears: () => tears,
+    frames: () => frames,
+    watchFrames() {
+      watching += 1;
+      let live = true;
+      let previous = "";
+      const sample = () => {
+        if (!live) return;
+        // Sampled in a frame callback, so this is what the frame showed.
+        const shown = JSON.stringify(snapshotOf("ref"));
+        if (shown !== previous) {
+          previous = shown;
+          frames.push(JSON.parse(shown) as Record<string, unknown>);
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      return () => {
+        live = false;
+        watching -= 1;
+      };
+    },
     report(name, phase, value, reader) {
       if (!order.includes(name)) order.push(name);
       if (reader) readers.add(name);
@@ -182,6 +221,7 @@ export function createProbe(): Probe {
     resetCounts() {
       counts.clear();
       tears.length = 0;
+      frames.length = 0;
       announce();
     },
     subscribe(listener) {

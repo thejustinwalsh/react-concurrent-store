@@ -114,6 +114,8 @@ export function TearingScenario() {
     setHidden(true);
     store.dispatch(1);
     probe.resetCounts();
+    // Watch what each painted frame actually showed, not just what committed.
+    const stopWatching = probe.watchFrames();
     await script.wait(350);
 
     blockedBump();
@@ -145,6 +147,21 @@ export function TearingScenario() {
     script.check("no fallback was ever shown", probe.commits("fallback", "ref"), 0);
     // Not "do they agree now" — no commit along the way disagreed either.
     script.check("no commit was ever torn", probe.tears(), []);
+
+    stopWatching();
+    // The repair a reader makes when it lands behind runs in a layout effect,
+    // which flushes before paint — so it should never get a frame of its own.
+    const painted = probe.frames();
+    script.check(
+      "no painted frame was torn",
+      painted.filter((f) => new Set(Object.values(f)).size > 1),
+      [],
+    );
+    script.check(
+      "every painted frame showed a value the tree committed",
+      painted.every((f) => Object.values(f).every((v) => v === 1 || v === 2)),
+      true,
+    );
   });
 
   return (
