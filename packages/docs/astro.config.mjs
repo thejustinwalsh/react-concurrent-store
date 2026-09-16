@@ -32,6 +32,20 @@ export default defineConfig({
           items: [{ label: "Quick Start", slug: "quick-start" }],
         },
         {
+          label: "Guides",
+          items: [
+            { label: "Use with Redux", slug: "guides/redux" },
+            { label: "Use with Zustand", slug: "guides/zustand" },
+            { label: "Use with TanStack Store", slug: "guides/tanstack-store" },
+          ],
+        },
+        {
+          label: "Explanation",
+          items: [
+            { label: "Selectors and re-renders", slug: "explanation/selectors" },
+          ],
+        },
+        {
           label: "Reference",
           items: [{ label: "API Reference", slug: "api" }],
         },

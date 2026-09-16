@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useStore, type ReactConcurrentStore } from "./useStore";
 
 /**
- * Equality-function support for selectors, built on the public API alone.
+ * Re-render only when a selected slice is unequal by your own comparison.
  *
  * `useStore` takes no equality argument, the same way React ships
  * `useSyncExternalStore` without one. This is the wrapper, in its own entry

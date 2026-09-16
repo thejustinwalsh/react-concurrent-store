@@ -1,0 +1,82 @@
+---
+title: Selectors and re-renders
+description: Why useStore has no equality argument, and what to use instead.
+---
+
+A selector narrows a store to the part a component actually needs. The
+component re-renders when that part changes — and "changes" means the selector
+returned a different reference.
+
+```tsx
+const name = useStore(store, (state) => state.user.name);
+```
+
+That works for strings, numbers and anything else already stable in your state.
+It stops working the moment a selector builds something:
+
+```tsx
+// A new object every call, so this re-renders on every action.
+const user = useStore(store, (state) => ({
+  name: state.user.name,
+  email: state.user.email,
+}));
+```
+
+## The previous result
+
+A selector receives two arguments: the current state, and **its own previous
+result**. Returning that previous value unchanged is how you say nothing
+happened.
+
+```tsx
+const visible = useStore(store, (state, previous) => {
+  const next = state.todos.filter((todo) => !todo.done);
+  const same =
+    previous?.length === next.length &&
+    previous.every((todo, i) => todo === next[i]);
+  return same ? previous : next;
+});
+```
+
+This is the whole mechanism. There is no separate equality channel — identity
+is the signal, and you decide when to preserve it.
+
+## Why there is no equality argument
+
+React ships `useSyncExternalStore` without one and leaves
+`useSyncExternalStoreWithSelector` to a separate module. `useStore` follows
+that, for the same reason: comparison is a policy question. Shallow, deep,
+structural sharing and "recycle unchanged subtrees" are all valid, they have
+very different costs, and a hook that picks one for you makes the other three
+awkward.
+
+Giving the selector its previous result covers every one of them without the
+hook needing to know which you chose.
+
+## When you just want shallow
+
+Writing that comparison by hand each time is tedious, so the wrapper exists:
+
+```tsx
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+import { shallowEqual } from "react-redux";
+
+const user = useStoreWithEqualityFn(
+  store,
+  (state) => ({ name: state.user.name, email: state.user.email }),
+  shallowEqual,
+);
+```
+
+It ships from its own entry point, so it adds nothing to your bundle unless you
+import it. Any comparison function works.
+
+## Selectors run during render
+
+The selector is called while your component renders, so the props it closes
+over and the state it reads always come from the same moment. A selector that
+throws because its props are briefly out of date does not break the dispatch
+that caused it — the component simply renders again with matching props.
+
+This is the "zombie child" case, and it is why the selector is not evaluated
+eagerly when the store changes.

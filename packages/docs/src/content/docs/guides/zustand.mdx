@@ -1,0 +1,65 @@
+---
+title: Use with Zustand
+description: Read a Zustand store from React with concurrent-safe transitions.
+---
+
+Zustand owns its state and publishes whole snapshots, so mirror each snapshot
+into a React store.
+
+## Connect the store
+
+```ts
+import { createStore as createZustandStore } from "zustand/vanilla";
+import { createStore } from "react-concurrent-store";
+
+const zustand = createZustandStore(() => ({ count: 0, filter: "all" }));
+
+// With no reducer, dispatching a value replaces the state.
+const store = createStore(zustand.getState());
+zustand.subscribe((state) => store.dispatch(state));
+```
+
+Keep using Zustand's own setters. Every `setState` publishes a snapshot, which
+is mirrored across.
+
+## Read it in a component
+
+```tsx
+import { useStore } from "react-concurrent-store";
+
+function Count() {
+  const count = useStore(store, (state) => state.count);
+  return <output>{count}</output>;
+}
+```
+
+## Selecting an object
+
+```tsx
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+import { shallow } from "zustand/shallow";
+
+function Controls() {
+  const { filter, count } = useStoreWithEqualityFn(
+    store,
+    (state) => ({ filter: state.filter, count: state.count }),
+    shallow,
+  );
+
+  return <Toolbar filter={filter} count={count} />;
+}
+```
+
+Any comparison function works — `shallowEqual` from `react-redux`, `fast-deep-equal`,
+or one you write.
+
+## Updating inside a transition
+
+```tsx
+startTransition(() => {
+  zustand.setState({ filter: "completed" });
+});
+```
+
+The update stays a transition instead of being flushed synchronously, so a
+slow list can keep the previous results on screen while it re-renders.
