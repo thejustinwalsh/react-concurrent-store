@@ -1,0 +1,65 @@
+---
+title: Holding a promise in a store
+description: Storing promise-valued state, updating it, and recovering from a rejection.
+---
+
+A store can hold a promise. `useStore` hands it back and `use()` unwraps it, so
+the component suspends until it settles.
+
+```tsx
+const userStore = createStore(fetchUser(1));
+
+function UserProfile() {
+  const user = use(useStore(userStore));
+  return <h1>{user.name}</h1>;
+}
+
+function App() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <UserProfile />
+    </Suspense>
+  );
+}
+```
+
+## Replacing it without a fallback
+
+Dispatching a promise that has not settled is an urgent update to state that
+does not exist yet, so the boundary falls back. Dispatch it in a transition and
+the current content stays on screen instead:
+
+```tsx
+const [isPending, startTransition] = useTransition();
+
+const loadNext = (id: number) => {
+  startTransition(() => userStore.dispatch(fetchUser(id)));
+};
+```
+
+Do not put a promise-valued dispatch inside `flushSync`. `flushSync` exists so
+you can read the DOM the moment it returns, and what it returns is the
+fallback.
+
+## Recovering from a rejection
+
+`use()` rethrows the same rejection every time it reads it, so resetting an
+error boundary on its own puts you straight back in the fallback. What clears
+it is the store moving on, which makes the current value a workable reset key:
+
+```tsx
+function Guarded() {
+  const current = useStore(userStore);
+  return (
+    <ErrorBoundary
+      resetKeys={[current]}
+      onReset={() => userStore.dispatch(fetchUser(1))}
+    >
+      <UserProfile />
+    </ErrorBoundary>
+  );
+}
+```
+
+The store does not adopt the promise you give it, so a rejection is yours to
+handle and reaches your boundary rather than being swallowed.

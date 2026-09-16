@@ -35,18 +35,20 @@ export default defineConfig({
           label: "Guides",
           items: [
             { label: "Integrating an existing store", slug: "guides/integrating" },
+            { label: "Holding a promise in a store", slug: "guides/async" },
           ],
         },
         {
           label: "Explanation",
           items: [
+            { label: "Rebasing", slug: "explanation/rebasing" },
             { label: "Selectors and re-renders", slug: "explanation/selectors" },
             { label: "Limitations", slug: "explanation/limitations" },
           ],
         },
         {
           label: "Reference",
-          items: [{ label: "API Reference", slug: "api" }],
+          items: [{ label: "API", slug: "reference/api" }],
         },
       ],
       plugins: [catppuccin()],

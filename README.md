@@ -6,7 +6,7 @@ _Work In Progress_
 
 - [x] Update types and add support for stores without a reducer
 - [x] Add tests for Suspense and useTransition with async stores or stores of promises
-- [x] Align the API with React RFC #35449 (`createStore(initialValue, reducer?)`, `useStore(store, selector?)`)
+- [x] Align the API with [React RFC #35449](https://github.com/facebook/react/issues/35449) (`createStore(initialValue, reducer?)`, `useStore(store, selector?)`)
 - [x] Selector support with a custom equality function
 - [x] SSR and hydration without a `getServerSnapshot` equivalent
 - [x] Add a docs site, and a live demo that exercises the concurrent edges

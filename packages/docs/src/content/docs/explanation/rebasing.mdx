@@ -1,0 +1,66 @@
+---
+title: Rebasing
+description: Why an urgent update lands on what is on screen, not on what the store knows.
+---
+
+A store holds two folds over the same actions:
+
+- **head** — every action, in dispatch order
+- **sync** — only the urgent ones: what the tree may show right now
+
+Every action enters head. An action dispatched inside a transition does not
+enter sync, and stays out until the tree catches up.
+
+## The situation it exists for
+
+A navigation is in flight, and its page has not loaded. While the user waits,
+they like something.
+
+```tsx
+startTransition(() => store.dispatch({ type: "navigate", page: "profile" }));
+// ...profile data has not arrived...
+store.dispatch({ type: "like" });
+```
+
+The like is urgent. It has to be visible now. But the only state that contains
+it, chronologically, also contains a navigation to a page that cannot be
+rendered yet.
+
+Rebasing computes the third thing: the like applied to what is on screen.
+
+| | screen | store |
+| --- | --- | --- |
+| navigating | `home/0` | `profile/0` |
+| after the like | `home/1` | `profile/1` |
+| after the page loads | `profile/1` | `profile/1` |
+
+The user sees their like immediately, never sees a half-loaded profile, and the
+final state has both actions in the order they were dispatched.
+
+## Why the alternatives do not work
+
+**Apply it to head.** Then showing the like means showing the navigation, and
+the page is not there. You get a fallback, or a screen the user did not ask
+for.
+
+**Hold it until the navigation lands.** The like does nothing for as long as
+the network takes. For a global store this is worse than it sounds: one slow
+transition anywhere freezes every urgent update everywhere.
+
+**Read the store urgently instead.** `getState()` returns head, so a reader
+that bypasses the transition sees `profile/0` the instant navigation starts —
+the page that has not loaded. To make that reader work you would have to give
+it the fold that has the like but not the navigation, and that fold is what
+rebasing computes.
+
+## What this costs
+
+An urgent action is folded twice, once over each frontier, and published twice
+when the two differ — the tree gets what it can show now at the caller's
+priority, and the chronological order follows in a transition. When nothing is
+outstanding the two folds are the same and there is one publish.
+
+See [Limitations](/react-concurrent-store/explanation/limitations/) for the one
+thing this cannot do, and
+[React RFC #35449](https://github.com/facebook/react/issues/35449) for the API
+this follows.
