@@ -488,3 +488,45 @@ pre.terminal code { color: inherit; }
   letter-spacing: 0.07em;
   color: var(--wait);
 }
+
+.pick { display: inline-flex; gap: 7px; align-items: center; font-size: 12px; color: var(--dim); }
+.pick .field { min-width: 0; }
+
+table.results {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+table.results th, table.results td { padding: 7px 11px; text-align: left; border-bottom: 1px solid var(--line); }
+table.results th { color: var(--dim); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; }
+table.results tr:last-child td { border-bottom: none; }
+table.results td { font-variant-numeric: tabular-nums; }
+
+/* Visible on purpose: hidden nodes would not be laid out, and a measurement
+   with no layout in it is not a measurement. */
+.swarm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-height: 220px;
+  overflow: hidden;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.swarm i {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--faint);
+  min-width: 18px;
+  text-align: center;
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: var(--panel-2);
+}

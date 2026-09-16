@@ -11,6 +11,7 @@ export const pages = [
   { href: "/fetching", title: "Refetching" },
   { href: "/ssr", title: "SSR" },
   { href: "/rsc", title: "RSC" },
+  { href: "/measure", title: "Measure" },
 ];
 
 export function Nav() {
