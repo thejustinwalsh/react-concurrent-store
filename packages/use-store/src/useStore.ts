@@ -123,6 +123,13 @@ export interface ConcurrentStoreInternals<S, A>
   _onCommit(listener: (handle: StoreHandle<S>) => void): () => void;
   readonly _head: StoreHandle<S>;
   readonly _committed: StoreHandle<S>;
+  /**
+   * The urgent fold: what the tree may show right now. Equal to head unless a
+   * transition is outstanding. This is what a reader wanting the value *now*
+   * has to read — head would hand it the pending transition's state, which is
+   * precisely the state that cannot be rendered yet.
+   */
+  readonly _visible: StoreHandle<S>;
   /** The handle this store was created with. */
   readonly _initial: StoreHandle<S>;
   /**
@@ -201,9 +208,13 @@ export function createStore<S, A>(
 
   /** The tree has caught up: the two folds are the same again. */
   const settle = (handle: StoreHandle<S>) => {
+    const rejoined = sync !== handle;
     sync = handle;
     head = handle;
     if (handle.version > committed.version) committed = handle;
+    // Readers of the urgent fold are told here and nowhere else: this is the
+    // one moment it changes without a dispatch.
+    if (rejoined) for (const listener of commitListeners) listener(committed);
   };
 
   const store: ConcurrentStoreInternals<S, A> = {
@@ -297,6 +308,9 @@ export function createStore<S, A>(
     },
     get _committed() {
       return committed;
+    },
+    get _visible() {
+      return sync;
     },
     get _initial() {
       return initial;
@@ -611,6 +625,9 @@ export function createSelectorStore<S, A, T>(
     },
     get _committed() {
       return source._committed;
+    },
+    get _visible() {
+      return source._visible;
     },
     get _initial() {
       return source._initial;

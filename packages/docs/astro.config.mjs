@@ -36,6 +36,7 @@ export default defineConfig({
           items: [
             { label: "Integrating an existing store", slug: "guides/integrating" },
             { label: "Holding a promise in a store", slug: "guides/async" },
+            { label: "Reading a store urgently", slug: "guides/urgent" },
           ],
         },
         {

@@ -13,6 +13,7 @@ import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import ReactDefault from "react";
 import * as versioned from "./useStore";
+import { useStoreUrgent } from "./urgent";
 import Logger from "../test/TestLogger";
 import {
   Provider,
@@ -4846,5 +4847,94 @@ describe("React rebases its own queue", () => {
     held = false;
     await act(async () => release());
     expect(queryAllByTestId("out").map((n) => n.textContent)[0]).toBe("5");
+  });
+});
+
+describe("Reading a store urgently while the tree waits", () => {
+  type Feed = { page: string; likes: number };
+  type Nav = { type: "navigate"; page: string } | { type: "like" };
+
+  afterEach(() => cleanup());
+
+  const reduce = (state: Feed, action: Nav): Feed =>
+    action.type === "navigate"
+      ? { ...state, page: action.page }
+      : { ...state, likes: state.likes + 1 };
+
+  /**
+   * The two-hook split: useStore honours what the caller said, and
+   * useStoreUrgent is a deliberate opt out for a reader that cannot wait.
+   *
+   * What makes it work is the urgent fold. The urgent reader cannot read
+   * getState — that is the chronological state and holds a navigation whose
+   * page has not loaded — and it cannot read the commit pointer, which would
+   * never show the like. It reads the fold that has the like and not the
+   * navigation, which is the one rebasing computes. The split is built on
+   * rebasing rather than being an alternative to it.
+   */
+  it("agrees with the waiting readers, and mounts correctly mid-transition", async () => {
+    const store = createStore<Feed, Nav>({ page: "home", likes: 0 }, reduce);
+    let arrive!: () => void;
+    const profileData = new Promise<void>((r) => (arrive = r));
+
+    function Page() {
+      const { page, likes } = useStore(store);
+      if (page === "profile") use(profileData);
+      return <span data-testid="page">{`${page}/${likes}`}</span>;
+    }
+    function LikeCount() {
+      return (
+        <span data-testid="likes">
+          {useStoreUrgent(store, (s: Feed) => s.likes)}
+        </span>
+      );
+    }
+    function LateCount() {
+      return (
+        <span data-testid="late">
+          {useStoreUrgent(store, (s: Feed) => s.likes)}
+        </span>
+      );
+    }
+
+    let reveal!: () => void;
+    function App() {
+      const [shown, setShown] = useState(false);
+      reveal = () => setShown(true);
+      return (
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Page />
+          <LikeCount />
+          {shown && <LateCount />}
+        </Suspense>
+      );
+    }
+
+    const { queryAllByTestId } = await act(async () => render(<App />));
+    const at = (id: string) => queryAllByTestId(id).map((n) => n.textContent)[0];
+    const noFallback = () => expect(queryAllByTestId("fb")).toEqual([]);
+
+    await act(async () => {
+      startTransition(() =>
+        store.dispatch({ type: "navigate", page: "profile" }),
+      );
+    });
+    expect([at("page"), at("likes")]).toEqual(["home/0", "0"]);
+    noFallback();
+
+    await act(async () => store.dispatch({ type: "like" }));
+    expect([at("page"), at("likes")]).toEqual(["home/1", "1"]);
+    noFallback();
+
+    // Revealed while the navigation is still held. It reads the urgent fold,
+    // so it opens on 1 — not 0, and not the page that has not loaded.
+    await act(async () => reveal());
+    expect(at("late")).toBe("1");
+    noFallback();
+
+    arrive();
+    await act(async () => {});
+    expect([at("page"), at("likes"), at("late")]).toEqual(["profile/1", "1", "1"]);
+    noFallback();
   });
 });
