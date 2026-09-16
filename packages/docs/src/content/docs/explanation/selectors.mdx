@@ -7,13 +7,6 @@ A selector narrows a store to the part a component needs. The component
 re-renders when that part changes, and "changes" means the selector returned a
 different reference.
 
-:::note[You will learn]
-- Why a selector that builds an object re-renders on every action
-- What the selector's second argument is for
-- Why `useStore` has no equality option
-- What a selector throwing means, and when it is not an error
-:::
-
 ```tsx
 const name = useStore(store, (state) => state.user.name);
 ```
