@@ -189,6 +189,34 @@ unless imported:
 import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
 ```
 
+### When a selector throws
+
+A speculative throw is a question the store cannot answer, so it asks render
+instead. A throw in render is an error.
+
+The store calls your selector in two situations. **During render** it is
+producing the value a component is about to show, so a throw there is left
+alone and reaches your error boundary. **Speculatively** — when an update is
+published, when a view attaches, and when the tree commits past a reader — it is
+only deciding whether that reader needs to re-render, and a throw is usually the
+zombie-child case: the selector asked about a state its component will not be
+rendered with, because a parent already removed it. Those are swallowed and the
+update is forwarded, so the selector throws again during render if the component
+really is about to use it, and only then does it surface.
+
+```tsx
+// Throws harmlessly while the store is only asking whether this reader is
+// affected. Throws for real, to the boundary, if this component still renders it.
+const item = useStore(store, (state) => {
+  const found = state.items[id];
+  if (found === undefined) throw new Error(`missing ${id}`);
+  return found;
+});
+```
+
+This is the behaviour React-Redux's `useSelector` suite specifies, checked here
+both directly and through a React-Redux-shaped harness.
+
 Full reference, guides, and the one thing a userland version cannot do:
 [thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store)
 
