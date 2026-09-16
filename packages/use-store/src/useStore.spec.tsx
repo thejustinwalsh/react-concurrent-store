@@ -3344,3 +3344,118 @@ describe("Commit tracking with a stalled sibling", () => {
     expect(seen).toEqual([0, 1, 3]);
   });
 });
+
+describe("Multiple roots at different versions", () => {
+  type Action = { type: "INCREMENT" };
+  const reducer = (s: number): number => s + 1;
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("mounts a reader at its own root's version, not a sibling root's", async () => {
+    const store = versioned.createStore<number, Action>(0, reducer);
+
+    function Reader() {
+      return <div>{versioned.useStore(store)}</div>;
+    }
+    function Host({ extra }: { extra: boolean }) {
+      return (
+        <>
+          <Reader />
+          {extra && <Reader />}
+        </>
+      );
+    }
+
+    const a = document.createElement("div");
+    const b = document.createElement("div");
+    document.body.append(a, b);
+    const rootA = createRoot(a);
+    const rootB = createRoot(b);
+
+    await act(async () => {
+      rootA.render(<Host extra={false} />);
+      rootB.render(<Host extra={false} />);
+    });
+    expect(`${a.textContent}/${b.textContent}`).toBe("0/0");
+
+    // Hold a transition open so head runs ahead of committed.
+    let release!: () => void;
+    await act(async () => {
+      startTransition(async () => {
+        store.dispatch({ type: "INCREMENT" });
+        await new Promise<void>((r) => (release = r));
+      });
+    });
+    expect(`${a.textContent}/${b.textContent}`).toBe("0/0");
+
+    // Reveal a second reader in root B only, synchronously. It must agree with
+    // root B's existing reader, not adopt whatever root A last rendered.
+    await act(async () => {
+      rootB.render(<Host extra={true} />);
+    });
+    expect(b.textContent).toBe("00");
+
+    await act(async () => release());
+    expect(`${a.textContent}/${b.textContent}`).toBe("1/11");
+  });
+});
+
+describe("Multiple roots committing at different rates", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("mounts into a lagging root without tearing against its stalled reader", async () => {
+    const store = versioned.createStore<number, number>(0, (s, a) => s + a);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let armed = false;
+
+    function Fast() {
+      return <i>{versioned.useStore(store)}</i>;
+    }
+    function Stalls() {
+      const v = versioned.useStore(store);
+      if (armed && v > 0) use(gate);
+      return <i>{v}</i>;
+    }
+    function Late() {
+      return <b>{versioned.useStore(store)}</b>;
+    }
+    function HostB({ extra }: { extra: boolean }) {
+      return (
+        <Suspense fallback={<i>F</i>}>
+          <Stalls />
+          {extra && <Late />}
+        </Suspense>
+      );
+    }
+
+    const a = document.createElement("div");
+    const b = document.createElement("div");
+    document.body.append(a, b);
+    const rootA = createRoot(a);
+    const rootB = createRoot(b);
+    await act(async () => {
+      rootA.render(<Fast />);
+      rootB.render(<HostB extra={false} />);
+    });
+    expect(`${a.textContent}/${b.textContent}`).toBe("0/0");
+
+    // Root A commits 1; root B cannot commit, it suspends.
+    armed = true;
+    await act(async () => store.dispatch(1));
+    expect(a.textContent).toBe("1");
+
+    // Reveal a new reader inside the stalled root.
+    await act(async () => rootB.render(<HostB extra={true} />));
+
+    armed = false;
+    await act(async () => release());
+    // Both readers in root B must agree.
+    expect(b.textContent).toBe("11");
+    expect(a.textContent).toBe("1");
+  });
+});
