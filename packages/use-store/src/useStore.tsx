@@ -70,25 +70,46 @@ function createHandle<S>(value: S, version: number): Handle<S> {
   return handle;
 }
 
-export interface VersionedStore<S, A> {
+/**
+ * The public surface, matching RFC #35449's `ReactStore`.
+ */
+export interface ReactStore<S, A> {
   /** The current head state. */
   getState(): S;
   dispatch(action: A): void;
-  /** Live subscribers. Exposed so tests can assert there are no leaks. */
+  /**
+   * Subscribe to updates. The callback receives the dispatched action, as in
+   * the RFC, which is what lets an arbitrary external store be wrapped.
+   */
+  subscribe(callback: (action: A) => void): () => void;
+}
+
+/**
+ * Bookkeeping React keeps privately on its own `StoreWrapper` and a ponyfill
+ * has to keep on the store. Underscored because it is not API: consumers
+ * should depend on `ReactStore` above.
+ */
+export interface VersionedStore<S, A> extends ReactStore<S, A> {
+  /** Live handle subscribers. Exposed so tests can assert there are no leaks. */
   readonly _listeners: ReadonlySet<(handle: Handle<S>) => void>;
-  subscribe(listener: (handle: Handle<S>) => void): () => void;
-  getHead(): Handle<S>;
-  getCommitted(): Handle<S>;
+  /**
+   * Subscribe to published handles rather than actions. The hooks need to know
+   * *which* handle was published — `sync` or `head` — a distinction React does
+   * not need because the reconciler has lane information instead.
+   */
+  _subscribe(listener: (handle: Handle<S>) => void): () => void;
+  _getHead(): Handle<S>;
+  _getCommitted(): Handle<S>;
   /** The committed value, for callers that want state rather than a handle. */
-  getCommittedState(): S;
+  _getCommittedState(): S;
   /**
    * The most recent handle published at the caller's own priority — `head`
    * normally, `sync` while a transition is pending. A reader that subscribes
    * too late to receive a notification must catch up to this, not to `head`,
    * or it jumps to the transition's state.
    */
-  getPublished(): Handle<S>;
-  markCommitted(handle: Handle<S>): void;
+  _getPublished(): Handle<S>;
+  _markCommitted(handle: Handle<S>): void;
 }
 
 /**
@@ -143,6 +164,7 @@ export function createStore<S, A>(
   let committed = head;
 
   const listeners = new Set<(handle: Handle<S>) => void>();
+  const actionListeners = new Set<(action: A) => void>();
   const notify = (handle: Handle<S>) => {
     for (const listener of listeners) listener(handle);
   };
@@ -159,6 +181,7 @@ export function createStore<S, A>(
 
   return {
     dispatch(action) {
+      for (const callback of actionListeners) callback(action);
       // Chronological: every action in the order it was dispatched.
       const chronological = fold(head.value, action);
 
@@ -218,19 +241,25 @@ export function createStore<S, A>(
         notify(chronologicalHandle);
       });
     },
-    subscribe(listener) {
+    _subscribe(listener) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
+    subscribe(callback) {
+      actionListeners.add(callback);
+      return () => {
+        actionListeners.delete(callback);
+      };
+    },
     _listeners: listeners,
     getState: () => head.value,
-    getHead: () => head,
-    getCommitted: () => committed,
-    getCommittedState: () => committed.value,
-    getPublished: () => published,
-    markCommitted(handle) {
+    _getHead: () => head,
+    _getCommitted: () => committed,
+    _getCommittedState: () => committed.value,
+    _getPublished: () => published,
+    _markCommitted(handle) {
       // Monotonic: a reader still catching up must not drag the pointer back.
       if (handle.version > committed.version) committed = handle;
       if (committed === head) sync = head;
@@ -265,7 +294,7 @@ function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
   const [handle, setHandle] = useState(
     () =>
       (renderedThisPass.get(store as object) as Handle<S> | undefined) ??
-      store.getCommitted(),
+      store._getCommitted(),
   );
 
   renderedThisPass.set(store as object, handle);
@@ -273,7 +302,7 @@ function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
   useLayoutEffect(() => {
     // No startTransition here: the update inherits whatever priority dispatch
     // was called at, so a sync dispatch stays sync and a transition stays one.
-    return store.subscribe((next) => {
+    return store._subscribe((next) => {
       // A reconcile can hand us a different handle carrying the value we are
       // already showing. Keeping the current one bails React out of a render
       // that would produce identical output.
@@ -282,9 +311,9 @@ function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
   }, [store]);
 
   useLayoutEffect(() => {
-    const head = store.getHead();
+    const head = store._getHead();
     if (handle !== head) {
-      if (store.getCommitted() === head) {
+      if (store._getCommitted() === head) {
         // An earlier sibling's layout effect already advanced the commit
         // pointer to head, so this pass is committing head and we are the only
         // reader behind. Catch up synchronously: React flushes a setState from
@@ -303,7 +332,7 @@ function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
         });
       }
     }
-    store.markCommitted(handle);
+    store._markCommitted(handle);
   });
 
   return handle;
@@ -327,7 +356,7 @@ export function createSelectorStore<S, A, T>(
   selector: (state: S) => T,
   isEqual: (a: T, b: T) => boolean = Object.is,
 ): VersionedStore<S, never> {
-  let head = source.getHead();
+  let head = source._getHead();
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
   const listeners = new Set<(handle: Handle<S>) => void>();
@@ -345,7 +374,7 @@ export function createSelectorStore<S, A, T>(
       // The slice is unchanged, so readers already display equivalent
       // content. Record it, or the source's commit pointer lags forever
       // and every later dispatch sees a phantom pending transition.
-      source.markCommitted(published);
+      source._markCommitted(published);
       return;
     }
     last = { value: next };
@@ -358,7 +387,7 @@ export function createSelectorStore<S, A, T>(
     } catch {
       last = null;
     }
-    const release = source.subscribe(publish);
+    const release = source._subscribe(publish);
 
     // The view is constructed during render but subscribes from a layout
     // effect, so the source can move in between — an earlier sibling's layout
@@ -367,13 +396,13 @@ export function createSelectorStore<S, A, T>(
     // Forward unconditionally rather than going through `publish`: nothing has
     // rendered this version yet, so its bail-out branch would mark the source
     // committed and corrupt the rebase base.
-    if (source.getHead() !== head) {
+    if (source._getHead() !== head) {
       // Track the real head, but hand readers the last priority-inheriting
       // publish: catching up to `head` here would jump a sync mount straight
       // to the pending transition's state. The move from there to `head`
       // happens through the reader's own catch-up, at transition priority.
-      head = source.getHead();
-      const current = source.getPublished();
+      head = source._getHead();
+      const current = source._getPublished();
       try {
         last = { value: selector(current.value) };
       } catch {
@@ -389,7 +418,9 @@ export function createSelectorStore<S, A, T>(
     dispatch() {
       throw new Error("A selector view is read-only; dispatch to its source.");
     },
-    subscribe(listener) {
+    // A read-only view has no actions of its own; forward the source's.
+    subscribe: source.subscribe as VersionedStore<S, never>["subscribe"],
+    _subscribe(listener) {
       listeners.add(listener);
       if (release === null) release = attach();
       return () => {
@@ -402,11 +433,11 @@ export function createSelectorStore<S, A, T>(
     },
     _listeners: listeners,
     getState: () => head.value,
-    getHead: () => head,
-    getCommitted: () => source.getCommitted(),
-    getCommittedState: () => source.getCommitted().value,
-    getPublished: () => source.getPublished(),
-    markCommitted: (handle) => source.markCommitted(handle),
+    _getHead: () => head,
+    _getCommitted: () => source._getCommitted(),
+    _getCommittedState: () => source._getCommitted().value,
+    _getPublished: () => source._getPublished(),
+    _markCommitted: (handle) => source._markCommitted(handle),
   };
 }
 

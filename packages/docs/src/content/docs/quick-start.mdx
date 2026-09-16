@@ -80,7 +80,7 @@ It allows you to manage async resources with proper handling for non-blocking up
      return (
        <div>
          <p>Count: {count}</p>
-         <button onClick={() => counterStore.update(count + 1)}>
+         <button onClick={() => counterStore.dispatch(count + 1)}>
            Increment
          </button>
        </div>
@@ -134,7 +134,7 @@ function UserProfile() {
 
   const loadNextUser = () => {
     startTransition(() => {
-      userStore.update(fetchUser(user.id + 1));
+      userStore.dispatch(fetchUser(user.id + 1));
     });
   };
 

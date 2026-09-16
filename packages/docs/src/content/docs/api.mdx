@@ -24,7 +24,7 @@ Creates a new concurrent store that can hold values or promises.
     **Example:**
     ```tsx
     const counterStore = createStore(0);
-    counterStore.update(5); // Sets value to 5
+    counterStore.dispatch(5); // Sets value to 5
     ```
   </TabItem>
   
@@ -41,7 +41,7 @@ Creates a new concurrent store that can hold values or promises.
     **Example:**
     ```tsx
     const incrementStore = createStore(0, (current) => current + 1);
-    incrementStore.update(); // Increments by 1
+    incrementStore.dispatch(); // Increments by 1
     ```
   </TabItem>
   
@@ -67,8 +67,8 @@ Creates a new concurrent store that can hold values or promises.
       }
     });
     
-    counterStore.update({ type: 'increment' });
-    counterStore.update({ type: 'set', value: 10 });
+    counterStore.dispatch({ type: 'increment' });
+    counterStore.dispatch({ type: 'set', value: 10 });
     ```
   </TabItem>
 </Tabs>
@@ -145,14 +145,14 @@ Updates the store's value. The behavior depends on how the store was created:
 ```tsx
 // Simple store
 const simpleStore = createStore("hello");
-simpleStore.update("world"); // Value becomes "world"
+simpleStore.dispatch("world"); // Value becomes "world"
 
 // Store with reducer
 const counterStore = createStore(
   0,
   (current, action: number) => current + action,
 );
-counterStore.update(5); // Adds 5 to current value
+counterStore.dispatch(5); // Adds 5 to current value
 ```
 
 ---
@@ -175,7 +175,7 @@ function UserProfile() {
   const user = use(userPromise); // Suspends until resolved
 
   const loadUser = (id: number) => {
-    userStore.update(fetchUser(id)); // Update with new promise
+    userStore.dispatch(fetchUser(id)); // Update with new promise
   };
 
   return (
@@ -214,7 +214,7 @@ function UserProfile() {
 
   const handleUpdate = () => {
     startTransition(() => {
-      userStore.update(fetchUser(user.id + 1));
+      userStore.dispatch(fetchUser(user.id + 1));
     });
   };
 

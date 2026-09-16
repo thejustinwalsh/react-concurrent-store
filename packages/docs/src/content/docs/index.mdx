@@ -42,7 +42,7 @@ function UserProfile() {
 
   const loadNextUser = () => {
     startTransition(() => {
-      userStore.update(fetch(`/api/user/${user.id + 1}`).then((r) => r.json()));
+      userStore.dispatch(fetch(`/api/user/${user.id + 1}`).then((r) => r.json()));
     });
   };
 

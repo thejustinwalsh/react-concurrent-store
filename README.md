@@ -6,8 +6,11 @@ _Work In Progress_
 
 - [x] Update types and add support for stores without a reducer
 - [x] Add tests for Suspense and useTransition with async stores or stores of promises
+- [x] Align the API with React RFC #35449 (`createStore(initialValue, reducer?)`, `useStore(store, selector?)`)
+- [x] Selector support with a custom equality function
+- [x] SSR and hydration without a `getServerSnapshot` equivalent
 - [ ] Add docs site with interactive examples `(in-progress)`
-- [ ] Investigate SSR and streaming of promises and store values
+- [ ] Streaming of promises and store values
 
 ## Why
 
@@ -23,7 +26,7 @@ This package will be deprecated once the concurrent store feature is released in
 ## Usage
 
 ```jsx
-import { createStore, useStore } from "react-use-store";
+import { createStore, useStore } from "react-concurrent-store";
 import { Suspense, use } from "react";
 
 // Create a store that manages an async resource
@@ -44,7 +47,7 @@ function UserProfile() {
     <div>
       <h1>{user.name}</h1>
       <p>Email: {user.email}</p>
-      <button onClick={() => userStore.update(fetchUser(user.id + 1))}>
+      <button onClick={() => userStore.dispatch(fetchUser(user.id + 1))}>
         Load Next User
       </button>
     </div>
@@ -57,6 +60,13 @@ function App() {
       <UserProfile />
     </Suspense>
   );
+}
+
+// Pass a selector to read a slice, with an optional equality function.
+// The component only re-renders when the selected value changes.
+function UserName() {
+  const name = useStore(userStore, (user) => user.name);
+  return <h1>{name}</h1>;
 }
 
 // You can also use stores with reducers, and the state doesn't have to be asynchronous
@@ -77,10 +87,10 @@ function Counter() {
   return (
     <div>
       <p>Count: {state.count}</p>
-      <button onClick={() => counterStore.update({ type: "increment" })}>
+      <button onClick={() => counterStore.dispatch({ type: "increment" })}>
         Increment
       </button>
-      <button onClick={() => counterStore.update({ type: "decrement" })}>
+      <button onClick={() => counterStore.dispatch({ type: "decrement" })}>
         Decrement
       </button>
     </div>
@@ -132,7 +142,7 @@ Hook that subscribes to a store and returns its current value. For stores managi
 
 **Returns:** `T` - The current value of the store (or Promise for async stores)
 
-#### `store.update(action?)`
+#### `store.dispatch(action)`
 
 Updates the store with the given action. If a reducer was provided to `createStore`, it will be called with the current value and the action. If no reducer was provided, the action should be the new value. For reducers that don't take actions, you can call `update()` with no arguments.
 
@@ -148,7 +158,7 @@ When React's concurrent stores feature becomes stable, you can migrate by:
 
 ```jsx
 // Before
-import { createStore, useStore } from "react-use-store";
+import { createStore, useStore } from "react-concurrent-store";
 
 // After
 import { createStore, use } from "react";

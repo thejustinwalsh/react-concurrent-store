@@ -188,7 +188,7 @@ describe("Handles and tearing", () => {
       // `status`/`value` alone. The moment it falls back to `then`, we lose
       // synchronous unwrapping and a blocking-lane read hits the fallback.
       const store = createStore(1, reducer);
-      const head = store.getHead();
+      const head = store._getHead();
       let thenCalls = 0;
       const originalThen = head.then.bind(head);
       head.then = ((onfulfilled) => {
@@ -677,9 +677,10 @@ describe("Subscription cleanup", () => {
     let live = 0;
     const store: VersionedStore<S, A> & { live: () => number } = {
       ...inner,
-      subscribe(listener) {
+      // The hooks subscribe to handles, not actions.
+      _subscribe(listener) {
         live++;
-        const unsubscribe = inner.subscribe(listener);
+        const unsubscribe = inner._subscribe(listener);
         return () => {
           live--;
           unsubscribe();
@@ -1141,7 +1142,7 @@ describe("Redux integration", () => {
       const { redux, store, dispatch } = connect();
       dispatch(increment());
       dispatch(double());
-      expect(store.getHead().value).toEqual(redux.getState());
+      expect(store._getHead().value).toEqual(redux.getState());
       expect(redux.getState().count).toBe(6);
     });
 
