@@ -107,7 +107,7 @@ const data = use(useStore(store));`}</Code>
         <h3>Creating a store on the server</h3>
         <p>
           <code>createStore</code> is not a Hook. It is a plain factory, and it
-          works in a server component — this summary was folded by a store that
+          works in a server component — this summary was built by a store that
           was created, dispatched to and read during this render, on the server:
         </p>
         <Code>{`import { createStore } from "react-concurrent-store/store";

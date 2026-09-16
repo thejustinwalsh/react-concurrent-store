@@ -206,9 +206,9 @@ export function FetchingPage() {
           still the untouched old list.
         </p>
         <p>
-          A deferred value holds the value that was there before. It cannot hold
-          that value with your change applied, because there is one value and one
-          urgency. Two folds can.
+          A deferred value can hold the value that was there before. It cannot
+          hold that value with your change applied, because it is one value.
+          Keeping two — what is on screen, and everything in order — can.
         </p>
       </Lede>
       <div className="ab">

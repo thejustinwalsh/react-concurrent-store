@@ -116,15 +116,15 @@ React 19 and up, with no experimental React build.
 
 ## Urgency is per dispatch
 
-A dispatch inside `startTransition` is one the tree does not have to show yet.
-A dispatch outside one has to be visible now, and lands on what is on screen
-rather than on the state the transition is still waiting for.
+A dispatch inside `startTransition` is one no component has to show yet. A
+dispatch outside one has to be visible now, so it applies to what is on screen
+rather than to the state the Transition is still waiting for.
 
 ```tsx
 // Slow: the old screen stays up until this is ready.
 startTransition(() => store.dispatch({ type: "navigate", to: "/profile" }));
 
-// Urgent: visible immediately, on the page they are still looking at.
+// Blocking: visible immediately, on the page they are still looking at.
 store.dispatch({ type: "like" });
 ```
 

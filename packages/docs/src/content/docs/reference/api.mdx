@@ -66,8 +66,8 @@ const user = use(useStore(userStore));
 ### Caveats
 
 - `useStore` is a Hook, so it only runs in a Client Component.
-- The value a component reads is what the tree is allowed to show, which is not
-  always what `getState()` returns. While a Transition is in flight they differ
+- The value a component reads is what it is allowed to show, which is not always
+  what `getState()` returns. While a Transition is in flight they differ
   on purpose — see [Rebasing](/react-concurrent-store/explanation/rebasing/).
 - An Effect keyed on the value runs twice when a component mounts while a
   Transition is blocked. See
@@ -89,8 +89,8 @@ type ReactConcurrentStore<S, A> = {
 
 ### `dispatch(action)`
 
-Applies an action. Whether it is urgent is decided by the caller, the same way
-it is for any other update:
+Applies an action. Whether it blocks is decided by the caller, the same way it
+is for any other update:
 
 ```tsx
 store.dispatch(action);                        // visible now

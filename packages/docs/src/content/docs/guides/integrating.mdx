@@ -6,8 +6,8 @@ description: Adopting this from Redux, Zustand or TanStack Store.
 Redux, Zustand and TanStack Store all read through `useSyncExternalStore`,
 which is [documented to de-opt](https://react.dev/reference/react/useSyncExternalStore#caveats):
 a store mutated during a Transition makes React redo that update as a blocking
-one. Your `startTransition` becomes a synchronous render, and the tree drops to
-a Suspense fallback rather than waiting.
+one. Your `startTransition` becomes a synchronous render, and the screen drops
+to a Suspense fallback rather than waiting.
 
 How you adopt this depends on whether you own the reducer.
 
@@ -22,7 +22,7 @@ const store = createStore(preloadedState, rootReducer);
 ```
 
 That store is complete — `getState`, `dispatch`, `subscribe`. If you keep Redux
-for middleware and devtools, dispatch to both. They fold the same actions from
+for middleware and devtools, dispatch to both. They apply the same actions from
 the same starting state, so they stay in step:
 
 ```ts
@@ -70,8 +70,8 @@ which also covers the shallow-equality wrapper and structural sharing.
 ## What changes
 
 - A dispatch inside `startTransition` stays a Transition.
-- An urgent dispatch made while a Transition is in flight applies to what is on
-  screen, and both land in dispatch order once the Transition commits.
+- A blocking dispatch made while a Transition is in flight applies to what is
+  on screen, and both land in order once the Transition commits.
 - A component mounting mid-Transition shows what its siblings show.
 - Several `createRoot` trees can read one store, with no provider.
 - Server rendering needs no `getServerSnapshot`.

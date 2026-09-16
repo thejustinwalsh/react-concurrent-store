@@ -155,7 +155,7 @@ export function RootsScenario() {
     await script.step("release");
     script.check("both land together", probe.agree(), true);
     script.check(
-      "on the chronological value",
+      "on the store's value",
       probe.value("root A"),
       store.getState(),
     );

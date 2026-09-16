@@ -25,8 +25,8 @@ function App() {
 
 ## Replacing it without a fallback
 
-Dispatching a promise that has not settled is an urgent update to state that
-does not exist yet, so the boundary falls back. Dispatch it in a transition and
+Dispatching a promise that has not settled is a blocking update to state that
+does not exist yet, so the boundary falls back. Dispatch it in a Transition and
 the current content stays on screen instead:
 
 ```tsx
@@ -44,7 +44,7 @@ fallback.
 ## Keeping data you can still act on
 
 Replacing the promise is right when the new data supersedes the old. It is not
-enough when something urgent has to land *while* the refetch is in flight — an
+enough when something has to land immediately *while* the refetch is in flight — an
 optimistic edit, a local mark-as-read. Fold those over the data, and let the
 promise be the transient:
 
@@ -56,7 +56,7 @@ const store = createStore<State>(messages);
 // The refetch. The list on screen stays up.
 startTransition(() => store.dispatch(fetchMessages()));
 
-// Urgent, and expressed against whichever fold it lands on.
+// Blocking, and written against whichever version it lands on.
 store.dispatch((current: State) =>
   current instanceof Promise ? current.then(markAllRead) : markAllRead(current),
 );

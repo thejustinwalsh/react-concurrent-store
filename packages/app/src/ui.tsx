@@ -336,12 +336,11 @@ export function useSignal<T>(signal: Signal<T>): T {
 }
 
 /**
- * The store's chronological state — every action in the order dispatched —
- * read through the public `subscribe`/`getState` pair rather than through
- * useStore, so it is not a reader of the store and shows head rather than
- * what any tree is displaying.
+ * Every action the store has taken, in order, read through the public
+ * subscribe/getState pair rather than useStore — so it shows the whole state
+ * rather than what a component is allowed to display.
  */
-export function Chronological<S, A>({
+export function StoreValue<S, A>({
   store,
   pending,
   format = String,
@@ -362,7 +361,7 @@ export function Chronological<S, A>({
   );
   return (
     <Chip
-      name="chronological"
+      name="store"
       probe={false}
       value={format(state)}
       state={pending ? "pending" : undefined}
@@ -510,7 +509,7 @@ function VerdictRow({ verdict: signal }: { verdict: Signal<Verdict> }) {
       ? verdict.step
       : verdict.kind === "done"
         ? (verdict.error ??
-          (verdict.ok ? "every reading matched" : "a reading did not match"))
+          (verdict.ok ? "every check passed" : "a check failed"))
         : "Click the buttons, or press Run";
   return (
     <>

@@ -60,7 +60,7 @@ What it does cost is a second run of any effect keyed on the value:
 ```tsx
 const user = useStore(store);
 useEffect(() => {
-  // Runs for the value the tree was showing, then again for the final one.
+  // Runs for the value that was on screen, then again for the final one.
   track(user.id);
 }, [user]);
 ```
@@ -76,16 +76,16 @@ nothing in it suspends, while the first is still blocked, which puts the reader
 store involved, under "Why a reader that lands behind cannot simply join the
 transition".
 
-Holding the reader until it is correct removes the double effect, but a reader
-revealed by an urgent update then shows a Suspense fallback, and a reader with
-no sibling to commit for it waits forever. Correcting from a layout effect is
-the only one of the three with no correctness failure.
+Holding the component until it is correct removes the second Effect run, but
+one revealed by a blocking update then shows a Suspense fallback, and one with
+no sibling to commit for it never unblocks. Correcting from a layout Effect is
+the only option of the three with no correctness failure.
 
-## Rebasing folds actions over values, not over promises
+## Rebasing applies actions to values, not to promises
 
-A store whose state is a promise has nothing for an urgent action to fold onto:
-every fold off a thenable is another thenable, so the two folds rejoin and the
-urgent update appears when the transition does.
+A store whose state is a promise has nothing for a blocking update to apply to:
+applying an action to a promise gives another promise, so the two versions
+rejoin and the update appears when the Transition does.
 
 Hold the resolved data in the store and let the promise be the transient:
 
@@ -97,7 +97,7 @@ const store = createStore<State>(messages);
 // A refetch, in a transition. The list on screen stays up.
 startTransition(() => store.dispatch(fetchMessages()));
 
-// Urgent, and expressed against whichever fold it lands on.
+// Blocking, and written against whichever version it lands on.
 store.dispatch((current: State) =>
   current instanceof Promise ? current.then(markAllRead) : markAllRead(current),
 );
@@ -105,6 +105,6 @@ store.dispatch((current: State) =>
 
 `createStore(fetchUser(1))` is fine as-is when each dispatch simply replaces the
 promise — see [Holding a promise in a store](/react-concurrent-store/guides/async/).
-The store warns in development if an urgent dispatch lands on promise state
-while a transition is outstanding, because that is the case where a rebase was
+The store warns in development if a blocking dispatch lands on promise state
+while a Transition is in flight, because that is the case where a rebase was
 probably expected.

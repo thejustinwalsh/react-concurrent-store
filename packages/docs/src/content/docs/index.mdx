@@ -32,8 +32,8 @@ transition: a store update during one opts the transition out and React flushes
 it synchronously. A navigation that should have kept the old screen up drops to
 a fallback instead.
 
-`useStore` honours the transition the caller started, and folds an urgent update
-over what is on screen rather than over a state the user cannot see yet.
+`useStore` keeps the Transition the caller started, and applies a blocking
+update to what is on screen rather than to a state the user cannot see yet.
 
 ```tsx
 // The destination is decided. Its data has not arrived.

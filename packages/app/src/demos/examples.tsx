@@ -56,7 +56,7 @@ export function ExamplesPage() {
       <Lede
         title="What a store guarantees under concurrent React"
         learn={[
-          "Where an urgent update lands while a Transition is still in flight",
+          "Where a blocking update lands while a Transition is still in flight",
           "What a component mounting mid-Transition is allowed to display",
           "When a promise in a store shows a fallback, and when it must not",
           "What actually clears a rejected promise behind an error boundary",

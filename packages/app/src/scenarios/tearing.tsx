@@ -158,7 +158,7 @@ export function TearingScenario() {
       [],
     );
     script.check(
-      "every painted frame showed a value the tree committed",
+      "every painted frame showed a value that was committed",
       painted.every((f) => Object.values(f).every((v) => v === 1 || v === 2)),
       true,
     );

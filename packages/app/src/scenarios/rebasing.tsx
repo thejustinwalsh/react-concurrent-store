@@ -4,7 +4,7 @@ import { makeGate, type Gate } from "../gate";
 import {
   Card,
   Chip,
-  Chronological,
+  StoreValue,
   createProbe,
   createRecorder,
   useReport,
@@ -121,18 +121,18 @@ export function RebasingScenario() {
 
     slow("A");
     await script.step("append A inside a held transition");
-    script.check("chronological has A", store.getState(), "A");
+    script.check("the store has A", store.getState(), "A");
     script.check("the screen does not", onScreen(), "");
 
     sync("b");
     await script.step("append b synchronously");
-    script.check("chronological is A then b", store.getState(), "Ab");
-    script.check("the screen rebased onto what it shows", onScreen(), "b");
+    script.check("the store has A then b", store.getState(), "Ab");
+    script.check("the screen applied it to what it shows", onScreen(), "b");
     script.check("and never showed a fallback", probe.commits("fallback", "ref"), 0);
 
     sync("c");
     await script.step("append c synchronously");
-    script.check("chronological is A b c", store.getState(), "Abc");
+    script.check("the store has A b c", store.getState(), "Abc");
     script.check("the screen still has no A", onScreen(), "bc");
 
     gate.release();
@@ -145,7 +145,7 @@ export function RebasingScenario() {
     <div data-scenario="rebasing">
       <Card
         title="Rebasing"
-        rule="An urgent update applies to the state on screen"
+        rule="A blocking update applies to what is on screen"
         proves="Each letter is an action."
         recorder={recorder}
         stage={
@@ -158,7 +158,7 @@ export function RebasingScenario() {
                 recorder={recorder}
               />
             </Suspense>
-            <Chronological store={store} pending={held} format={show} />
+            <StoreValue store={store} pending={held} format={show} />
           </div>
         }
         controls={
