@@ -14,11 +14,20 @@ import * as React from "react";
 import ReactDefault from "react";
 import * as versioned from "./useStore";
 import Logger from "../test/TestLogger";
+import {
+  FragmentAstNode,
+  FragmentRef,
+  RecordSource,
+  RelayProvider,
+  RelayStore,
+  useFragment,
+} from "../test/MiniRelay";
 import { VersionedStore, createSelectorStore, createStore, useStore } from "./useStore";
 import { configureStore, createSlice } from "@reduxjs/toolkit";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { type UpdateInfo } from "@welldone-software/why-did-you-render";
 import {
+  memo,
   StrictMode,
   Suspense,
   startTransition,
@@ -1142,7 +1151,7 @@ describe("Redux integration", () => {
       const { redux, store, dispatch } = connect();
       dispatch(increment());
       dispatch(double());
-      expect(store._getHead().value).toEqual(redux.getState());
+      expect(store.getState()).toEqual(redux.getState());
       expect(redux.getState().count).toBe(6);
     });
 
@@ -2287,5 +2296,418 @@ describe("RFC #35449 scenarios", () => {
 
     await act(async () => resolve());
     expect(asFragment().textContent).toBe("7");
+  });
+});
+
+/**
+ * `subscribe` is the RFC-shaped, action-carrying subscription. It is what lets
+ * an arbitrary external store be wrapped without handing us its reducer, so it
+ * is public API and needs its own coverage.
+ */
+describe("subscribe (action form)", () => {
+  type Count = number;
+  type CountAction = { type: "increment" | "double" };
+  const reducer = (state: Count, action: CountAction): Count =>
+    action.type === "increment" ? state + 1 : state * 2;
+
+  afterEach(() => cleanup());
+
+  it("delivers the dispatched action to subscribers", () => {
+    const store = createStore(1, reducer);
+    const seen: CountAction[] = [];
+    store.subscribe((action) => seen.push(action));
+
+    store.dispatch({ type: "increment" });
+    store.dispatch({ type: "double" });
+
+    expect(seen).toEqual([{ type: "increment" }, { type: "double" }]);
+  });
+
+  it("stops delivering after unsubscribe", () => {
+    const store = createStore(1, reducer);
+    const seen: CountAction[] = [];
+    const unsubscribe = store.subscribe((action) => seen.push(action));
+
+    store.dispatch({ type: "increment" });
+    unsubscribe();
+    store.dispatch({ type: "increment" });
+
+    expect(seen).toEqual([{ type: "increment" }]);
+  });
+
+  it("delivers to every subscriber", () => {
+    const store = createStore(1, reducer);
+    const a: CountAction[] = [];
+    const b: CountAction[] = [];
+    store.subscribe((action) => a.push(action));
+    store.subscribe((action) => b.push(action));
+
+    store.dispatch({ type: "double" });
+
+    expect(a).toEqual([{ type: "double" }]);
+    expect(b).toEqual(a);
+  });
+
+  it("delivers for transition dispatches as well as sync ones", async () => {
+    const store = createStore(1, reducer);
+    const seen: CountAction[] = [];
+    store.subscribe((action) => seen.push(action));
+
+    await act(async () => {
+      startTransition(() => store.dispatch({ type: "increment" }));
+    });
+    store.dispatch({ type: "double" });
+
+    expect(seen).toEqual([{ type: "increment" }, { type: "double" }]);
+  });
+
+  it("is enough to mirror the store into an external one", async () => {
+    // The wrapping case the RFC's signature exists for: a foreign store that
+    // owns its own state can stay in step without exposing its reducer to us.
+    const store = createStore(2, reducer);
+    let mirror = 2;
+    store.subscribe((action) => {
+      mirror = reducer(mirror, action);
+    });
+
+    function Reader() {
+      return <div>{useStore(store)}</div>;
+    }
+    const { asFragment } = await act(async () => render(<Reader />));
+
+    await act(async () => store.dispatch({ type: "double" }));
+    await act(async () => store.dispatch({ type: "increment" }));
+
+    expect(asFragment().textContent).toBe("5");
+    expect(mirror).toBe(store.getState());
+  });
+
+  it("does not fire action subscribers for a no-op dispatch", () => {
+    const store = createStore({ n: 1 });
+    const seen: unknown[] = [];
+    store.subscribe((action) => seen.push(action));
+
+    const same = store.getState();
+    store.dispatch(same);
+
+    expect(store.getState()).toBe(same);
+    expect(seen).toEqual([]);
+  });
+});
+
+/**
+ * The Relay harness from src/experimental/testUseCases, run against this store.
+ *
+ * This is the case `createStoreFromSource` exists for: a normalized record
+ * store driven by updater functions rather than a reducer. Ours needs no such
+ * constructor — the reducer applies the updater — so the wiring in
+ * test/MiniRelay.tsx is shorter than the original by a mirrored record source.
+ */
+describe("Relay-like normalized store (MiniRelay)", () => {
+  let logger: Logger;
+  beforeEach(() => {
+    logger = new Logger();
+  });
+  afterEach(() => {
+    cleanup();
+    logger.assertLog([]);
+  });
+
+  function initialize(_prev: RecordSource): RecordSource {
+    const next = new RecordSource();
+    next.set("ROOT", { id: "ROOT", me: "1" });
+    next.set("1", { id: "1", name: "Alice", friend: "2" });
+    next.set("2", { id: "2", name: "Bob", friend: "1" });
+    return next;
+  }
+
+  it("Minimal example of MiniRelay", async () => {
+    const FRAGMENT: FragmentAstNode = {
+      kind: "object",
+      fieldName: "me",
+      selections: [
+        { kind: "scalar", fieldName: "id" },
+        { kind: "scalar", fieldName: "name" },
+        {
+          kind: "object",
+          fieldName: "friend",
+          selections: [
+            { kind: "scalar", fieldName: "id" },
+            { kind: "scalar", fieldName: "name" },
+            {
+              kind: "object",
+              fieldName: "friend",
+              selections: [
+                { kind: "scalar", fieldName: "id" },
+                { kind: "scalar", fieldName: "name" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    // Normally generated by Relay compiler
+    type FragmentType = {
+      me: {
+        id: string;
+        name: string;
+        friend: {
+          id: string;
+          name: string;
+          friend: {
+            id: string;
+            name: string;
+          };
+        };
+      };
+    };
+    const store = new RelayStore();
+    store.publishAndNotify(initialize);
+
+    const ref = { startingID: "ROOT" };
+    function FragmentComponent() {
+      logger.log({ type: "render" });
+      const data = useFragment<FragmentType>(FRAGMENT, ref);
+      return (
+        <div>
+          Hello! My name is {data.me.name} (id: {data.me.id})
+          <br />
+          and my friend is {data.me.friend.name} (id: {data.me.friend.id})
+          <br />
+          and their friend is {data.me.friend.friend.name} (id:{" "}
+          {data.me.friend.friend.id})
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <>
+          <RelayProvider store={store}>
+            <FragmentComponent />
+          </RelayProvider>
+        </>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ type: "render" }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          Hello! My name is Alice (id: 1)
+          <br />
+          and my friend is Bob (id: 2)
+          <br />
+          and their friend is Alice (id: 1)
+        </div>
+      </DocumentFragment>
+    `);
+
+    await act(async () => {
+      store.publishAndNotify((prev) => {
+        const next = new RecordSource();
+        next.set("1", { id: "1", name: "MALICE", friend: "1" });
+        return next;
+      });
+    });
+    logger.assertLog([{ type: "render" }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          Hello! My name is MALICE (id: 1)
+          <br />
+          and my friend is MALICE (id: 1)
+          <br />
+          and their friend is MALICE (id: 1)
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+  });
+
+  it("Avoids rerendering the component if the fragment value computes the same output", async () => {
+    const store = new RelayStore();
+    store.publishAndNotify(initialize);
+
+    const FRAGMENT: FragmentAstNode = {
+      kind: "object",
+      fieldName: "me",
+      selections: [{ kind: "scalar", fieldName: "id" }],
+    };
+
+    type FragmentType = {
+      me: {
+        id: string;
+      };
+    };
+
+    const ref = { startingID: "ROOT" };
+
+    function FragmentComponent() {
+      logger.log({ type: "render" });
+      const data = useFragment<FragmentType>(FRAGMENT, ref);
+      return <div>Hello! My id is {data.me.id}</div>;
+    }
+
+    function App() {
+      return (
+        <>
+          <RelayProvider store={store}>
+            <FragmentComponent />
+          </RelayProvider>
+        </>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ type: "render" }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          Hello! My id is 1
+        </div>
+      </DocumentFragment>
+    `);
+
+    await act(async () => {
+      store.publishAndNotify((_prev) => {
+        const next = new RecordSource();
+        next.set("1", { id: "1", name: "MALICE", friend: "1" });
+        return next;
+      });
+    });
+
+    // Because the fragment only selects `id`, and `id` did not change,
+    // the component should not rerender.
+    logger.assertLog([]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          Hello! My id is 1
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+  });
+
+  it("Implements structural sharing such that substructures remain referential identical even if parent object change", async () => {
+    const store = new RelayStore();
+    store.publishAndNotify(initialize);
+
+    const FRAGMENT: FragmentAstNode = {
+      kind: "object",
+      fieldName: "me",
+      selections: [
+        { kind: "scalar", fieldName: "name" },
+        { kind: "scalar", fieldName: "id" },
+        {
+          kind: "object",
+          fieldName: "friend",
+          selections: [{ kind: "spread", alias: "fragment" }],
+        },
+      ],
+    };
+
+    type FragmentType = {
+      me: {
+        id: string;
+        name: string;
+        friend: {
+          fragment: FragmentRef;
+        };
+      };
+    };
+
+    const ref = { startingID: "ROOT" };
+    function FragmentComponent() {
+      logger.log({ type: "render" });
+      const data = useFragment<FragmentType>(FRAGMENT, ref);
+
+      return (
+        <>
+          <div>Hello! My name is {data.me.name}</div>
+          <div>
+            My friend's name is{" "}
+            <ChildFragmentComponent user={data.me.friend.fragment} />
+          </div>
+        </>
+      );
+    }
+
+    const CHILD_FRAGMENT: FragmentAstNode = {
+      kind: "scalar",
+      fieldName: "name",
+    };
+
+    const ChildFragmentComponent = memo(
+      ({ user: userRef }: { user: FragmentRef }) => {
+        logger.log({ type: "child-render" });
+        const user = useFragment<{ name: string }>(CHILD_FRAGMENT, userRef);
+        return user.name;
+      },
+    );
+
+    function App() {
+      return (
+        <>
+          <RelayProvider store={store}>
+            <FragmentComponent />
+          </RelayProvider>
+        </>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ type: "render" }, { type: "child-render" }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          Hello! My name is Alice
+        </div>
+        <div>
+          My friend's name is Bob
+        </div>
+      </DocumentFragment>
+    `);
+
+    await act(async () => {
+      store.publishAndNotify((_prev) => {
+        const next = new RecordSource();
+        next.set("1", { id: "1", name: "MALICE", friend: "2" });
+        return next;
+      });
+    });
+
+    // Because the child fragment id is stable, and the data is structurally
+    // shared AND the child component is momoized, the child component does not
+    // need to rerender.
+    logger.assertLog([{ type: "render" }]);
+
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <div>
+          Hello! My name is MALICE
+        </div>
+        <div>
+          My friend's name is Bob
+        </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
   });
 });

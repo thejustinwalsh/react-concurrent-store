@@ -168,6 +168,12 @@ export function createStore<S, A>(
   const notify = (handle: Handle<S>) => {
     for (const listener of listeners) listener(handle);
   };
+  // RFC #35449: "called after the state has updated and includes the action
+  // that was dispatched" — so this fires once the new version exists, and not
+  // at all when the action produced no change.
+  const notifyAction = (action: A) => {
+    for (const callback of actionListeners) callback(action);
+  };
 
   // Dispatches in the same microtask necessarily share the caller's priority,
   // so a later one extends head rather than rebasing. Without this, a batch of
@@ -181,7 +187,6 @@ export function createStore<S, A>(
 
   return {
     dispatch(action) {
-      for (const callback of actionListeners) callback(action);
       // Chronological: every action in the order it was dispatched.
       const chronological = fold(head.value, action);
 
@@ -199,6 +204,7 @@ export function createStore<S, A>(
         head = createHandle(chronological, ++version);
         sync = head;
         published = head;
+        notifyAction(action);
         // With nothing mounted there is no committed tree to tear against, so
         // the commit pointer follows head. Otherwise the first reader to mount
         // after an unobserved update would start from stale state.
@@ -216,6 +222,7 @@ export function createStore<S, A>(
         head = createHandle(chronological, ++version);
         sync = head;
         published = head;
+        notifyAction(action);
         notify(head);
         return;
       }
@@ -232,6 +239,7 @@ export function createStore<S, A>(
       sync = createHandle(fold(base.value, action), ++version);
       head = createHandle(chronological, ++version);
       published = sync;
+      notifyAction(action);
       notify(sync);
 
       // Then hand readers the chronological order, so both land together when
