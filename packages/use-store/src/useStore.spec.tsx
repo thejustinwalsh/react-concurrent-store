@@ -475,6 +475,31 @@ describe("Rebasing", () => {
     expect(asFragment().textContent).toBe("5");
   });
 
+  it("does not render an intermediate value for a batch of sync updates", async () => {
+    const store = createStore(1, reducer);
+    const seen: number[] = [];
+
+    function Reader() {
+      const count = useStore(store);
+      seen.push(count);
+      return <div>{count}</div>;
+    }
+
+    const { asFragment } = await act(async () => render(<Reader />));
+    expect(seen).toEqual([1]);
+
+    // Two dispatches in one batch share the caller's priority. Folding them
+    // separately would render 2 on the way to 3, and any effect keyed on the
+    // value would fire with a number the batch never settled on.
+    await act(async () => {
+      store.dispatch({ type: "INCREMENT" });
+      store.dispatch({ type: "INCREMENT" });
+    });
+
+    expect(seen).toEqual([1, 3]);
+    expect(asFragment().textContent).toBe("3");
+  });
+
   it("handles consecutive sync updates", async () => {
     const store = createStore(1, reducer);
     function Reader() {
