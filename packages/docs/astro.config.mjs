@@ -28,6 +28,11 @@ export default defineConfig({
       ],
       sidebar: [
         {
+          label: "Demo",
+          link: "https://react-use-store.tjw.dev",
+          attrs: { target: "_blank" },
+        },
+        {
           label: "Getting Started",
           items: [{ label: "Quick Start", slug: "quick-start" }],
         },

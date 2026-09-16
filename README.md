@@ -131,8 +131,11 @@ import { createStore } from "react-concurrent-store/store";
 
 ## The demo
 
-Eight pages, each one live, covering navigation, mixed updates, selectors,
-refetching, server rendering and Server Components.
+**[react-use-store.tjw.dev](https://react-use-store.tjw.dev)** — eight pages,
+each one live, covering navigation, mixed updates, selectors, refetching,
+server rendering and Server Components.
+
+Or run it yourself:
 
 ```bash
 pnpm --filter @react-concurrent-store/app dev
