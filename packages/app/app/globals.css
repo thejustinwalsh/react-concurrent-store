@@ -220,24 +220,20 @@ nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
   padding: 9px 13px;
   border-bottom: 1px solid var(--line);
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-  min-width: 0;
-}
-.side > header .labels {
-  display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  min-width: 0;
 }
 .side > header .how {
+  font-family: var(--mono);
   font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
-.side > header .how { font-family: var(--mono); }
 .side > header .tag {
+  margin-left: auto;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -480,6 +476,7 @@ pre.terminal code { color: inherit; }
 /* ---------- pending state ---------- */
 
 .side > header .pulse {
+  margin-left: auto;
   font-family: var(--mono);
   font-size: 10.5px;
   text-transform: uppercase;

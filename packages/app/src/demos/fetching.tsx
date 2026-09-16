@@ -95,7 +95,7 @@ function Deferred({ promise }: { promise: Promise<Message[]> }) {
   return (
     <Side
       how="use(useDeferredValue(promise))"
-      tag="fate"
+      tag="deferred"
       kind="today"
       pending={stale}
       fallback={<Blocked what="loading…" why="Nothing to show yet." />}
@@ -119,7 +119,7 @@ function Stored({ store, pending }: { store: Store; pending: boolean }) {
   return (
     <Side
       how="use(useStore(store))"
-      tag="this package"
+      tag="store"
       kind="ours"
       pending={pending}
       fallback={<Blocked what="loading…" why="Nothing to show yet." />}

@@ -11,9 +11,9 @@ import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
 
 /**
- * Redux keeps everything in one atom, and a Redux app dispatches to it at both
- * urgencies: a slow filter change belongs in a transition, a keystroke does
- * not. The caller can already say which is which — `dispatch(x)` against
+ * Redux keeps everything in one atom, and a Redux app sends it both kinds of
+ * update: one that can render in the background, and one that has to appear
+ * now. The caller already says which is which — `dispatch(x)` against
  * `startTransition(() => dispatch(x))`. Nothing else in React needs telling
  * twice.
  *
@@ -160,16 +160,18 @@ export function AtomPage() {
       <Lede
         title="Mixing blocking and Transition updates"
         learn={[
-          "Why a store cannot pick one speed for every update",
+          "Why one store receives both kinds of update",
           "What goes wrong if every dispatch is blocking",
           "What goes wrong if every dispatch is a Transition",
         ]}
       >
         <p>
-          A Redux-shaped app keeps everything in one store and updates it at
-          both speeds. A slow filter change belongs in a Transition. A keystroke
-          has to be blocking. All three columns below put the slow change in a
-          Transition; they differ in what they do with the keystroke.
+          A Redux-shaped app keeps everything in one store, and not every
+          update to it is the same kind. Changing the period can render in the
+          background, so it belongs in a Transition. A keystroke cannot — it has
+          to appear as you type, which is an ordinary blocking update. All three
+          columns below put the period change in a Transition; they differ in
+          what they do with the keystroke.
         </p>
         <TryIt
           steps={[
@@ -190,8 +192,9 @@ export function AtomPage() {
         <Pitfall>
           <p>
             Making every dispatch a Transition looks like the fix for the first
-            column, and it is the second column. Nothing blocking can overtake
-            something slow, so a keystroke waits on a query.
+            column, and it is the second column. A Transition is interrupted by
+            other updates, not by another Transition, so the keystroke waits on
+            the query instead of overtaking it.
           </p>
         </Pitfall>
       </Lede>
@@ -215,7 +218,7 @@ export function AtomPage() {
         <div className="pair">
           <Side
             how="useSyncExternalStore"
-            tag="de-opts to blocking"
+            tag="blocking"
             kind="today"
             fallback={blocked}
             note={
@@ -233,7 +236,7 @@ export function AtomPage() {
           </Side>
           <Side
             how="useStore"
-            tag="always a Transition"
+            tag="transition"
             kind="naive"
             fallback={waiting}
             note={
@@ -252,7 +255,7 @@ export function AtomPage() {
           </Side>
           <Side
             how="useStore"
-            tag="Transition or blocking"
+            tag="both"
             kind="ours"
             fallback={waiting}
             note={

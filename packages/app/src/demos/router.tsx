@@ -281,7 +281,7 @@ export function RouterPage() {
         <div className="pair">
           <Side
             how="useSyncExternalStore"
-            tag="today"
+            tag="blocking"
             kind="today"
             pending={leftPending}
             fallback={blocked}
@@ -301,7 +301,7 @@ export function RouterPage() {
           </Side>
           <Side
             how="useStore"
-            tag="this package"
+            tag="transition"
             kind="ours"
             pending={rightPending}
             fallback={blocked}

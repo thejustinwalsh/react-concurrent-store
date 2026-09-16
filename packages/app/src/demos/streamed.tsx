@@ -59,7 +59,7 @@ export function StreamedClient({ rows }: { rows: Promise<Row[]> }) {
       <div className="pair">
         <Side
           how="use(useStore(store))"
-          tag="streamed from the server"
+          tag="streamed"
           kind="ours"
           pending={pending}
           fallback={

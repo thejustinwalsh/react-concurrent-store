@@ -213,7 +213,7 @@ export function IdentityPage() {
         <div className="pair">
           <Side
             how="(state) => project(state)"
-            tag="fresh every read"
+            tag="fresh"
             kind="today"
             fallback={null}
             note={
@@ -227,7 +227,7 @@ export function IdentityPage() {
           </Side>
           <Side
             how="(state, previous) => recycleNodesInto(previous, …)"
-            tag="this package"
+            tag="recycled"
             kind="ours"
             fallback={null}
             note={

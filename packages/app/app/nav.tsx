@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 export const pages = [
   { href: "/", title: "Guarantees" },
   { href: "/router", title: "Navigation" },
-  { href: "/atom", title: "Urgency" },
+  { href: "/atom", title: "Mixed updates" },
   { href: "/identity", title: "Selectors" },
   { href: "/fetching", title: "Refetching" },
   { href: "/ssr", title: "SSR" },
