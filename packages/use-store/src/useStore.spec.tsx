@@ -5534,3 +5534,180 @@ describe("Swapping the store a reader is pointed at", () => {
     expect(getByTestId("v")).toHaveTextContent("2");
   });
 });
+
+describe("The dispatch decision table", () => {
+  /**
+   * The four paths a dispatch can take, measured in one go and asserted as one
+   * object.
+   *
+   * Written this way on purpose. A mutation audit found six unrelated ways to
+   * break rebasing — reading urgency backwards, never parting the folds,
+   * deciding the collapse by the wrong fold, publishing head where sync
+   * belongs, sending the chronological publish urgently — and every one of
+   * them failed the same forty-odd tests. That tells you something broke
+   * without telling you what, and splitting it into more small tests did not
+   * help: these decisions are not separately observable, because breaking any
+   * one of them breaks rebasing as a whole.
+   *
+   * So rather than more assertions, one assertion that prints the whole table.
+   * A failure diffs the row that moved against the row that should not have.
+   */
+  afterEach(() => cleanup());
+
+  type Reading = {
+    /** What the component is allowed to show: the sync fold. */
+    screen: string;
+    /** Every action in dispatch order: the chronological fold. */
+    chronological: string;
+    /** Whether the fallback was ever attached to the DOM during the row. */
+    fellBack: boolean;
+  };
+
+  /** A component that cannot render an uppercase letter until released. */
+  const run = async (
+    play: (store: ReturnType<typeof createStore<string>>) => Promise<void>,
+  ): Promise<Reading> => {
+    const store = createStore<string>("");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let fellBack = false;
+
+    function Reader() {
+      const shown = useStore(store);
+      if (/[A-Z]/.test(shown)) use(held);
+      return <span data-testid="shown">{shown === "" ? "-" : shown}</span>;
+    }
+    function Fallback() {
+      // A ref callback runs when the element is attached, so this counts a
+      // fallback that reached the DOM. React renders a fallback in the
+      // background during a Transition and throws it away; setting a flag in
+      // the component body counts those too, and they are not something
+      // anybody saw.
+      return (
+        <span
+          data-testid="fallback"
+          ref={() => {
+            fellBack = true;
+          }}
+        >
+          fallback
+        </span>
+      );
+    }
+
+    // Scoped to this row's own container: every row renders into the same
+    // document, so a document-wide query would find the previous rows too.
+    const { container } = await act(async () =>
+      render(
+        <Suspense fallback={<Fallback />}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    const find = (id: string) =>
+      container.querySelector(`[data-testid="${id}"]`);
+
+    await play(store);
+
+    const reading: Reading = {
+      screen:
+        find("fallback") !== null
+          ? "fallback"
+          : (find("shown")?.textContent ?? "gone"),
+      chronological: store.getState(),
+      fellBack,
+    };
+    release();
+    return reading;
+  };
+
+  it("takes the path the caller asked for, on every row", async () => {
+    const table = {
+      "nothing outstanding": await run(async (store) => {
+        await act(async () => store.dispatch("a"));
+      }),
+
+      "inside a Transition": await run(async (store) => {
+        await act(async () => {
+          startTransition(() => store.dispatch("A"));
+        });
+      }),
+
+      "urgent, while a Transition is outstanding": await run(async (store) => {
+        await act(async () => {
+          startTransition(() => store.dispatch((s) => s + "A"));
+        });
+        await act(async () => store.dispatch((s) => s + "b"));
+      }),
+
+      "both in one tick": await run(async (store) => {
+        await act(async () => {
+          startTransition(() => store.dispatch((s) => s + "A"));
+          store.dispatch((s) => s + "b");
+        });
+      }),
+    };
+
+    expect(table).toEqual({
+      // One fold serves both, so they agree.
+      "nothing outstanding": {
+        screen: "a",
+        chronological: "a",
+        fellBack: false,
+      },
+      // The tree may not show it yet, and must not be made to.
+      "inside a Transition": {
+        screen: "-",
+        chronological: "A",
+        fellBack: false,
+      },
+      // Folded over "", which is on screen — not over "A", which is not. The
+      // chronological publish that follows carries "A", which this component
+      // cannot render, so sending it urgently would show the fallback.
+      "urgent, while a Transition is outstanding": {
+        screen: "b",
+        chronological: "Ab",
+        fellBack: false,
+      },
+      // Urgency is the caller's statement, not a question of timing.
+      "both in one tick": {
+        screen: "b",
+        chronological: "Ab",
+        fellBack: false,
+      },
+    });
+  });
+
+  it("rejoins the folds for an urgent promise, because there is no version to show", async () => {
+    const store = createStore<string | Promise<string>>("here");
+    function Reader() {
+      const value = useStore(store);
+      return (
+        <span data-testid="shown">
+          {value instanceof Promise ? use(value) : value}
+        </span>
+      );
+    }
+    const { queryByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fallback">fallback</span>}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    const screen = () =>
+      queryByTestId("fallback") !== null
+        ? "fallback"
+        : queryByTestId("shown")?.textContent;
+
+    expect(screen()).toBe("here");
+
+    let arrive!: (value: string) => void;
+    const pending = new Promise<string>((resolve) => (arrive = resolve));
+    await act(async () => store.dispatch(pending));
+    expect(screen()).toBe("fallback");
+
+    await act(async () => arrive("there"));
+    expect(screen()).toBe("there");
+  });
+});
