@@ -102,8 +102,7 @@ function Deferred({ promise }: { promise: Promise<Message[]> }) {
       note={
         stale ? (
           <>
-            <b>Holding the old list, which is right.</b> Now mark it read and
-            watch what the deferred value can and cannot do.
+            <b>Still showing the inbox.</b> Now mark it read.
           </>
         ) : (
           <>Holds the previous promise while the next one loads.</>
@@ -127,8 +126,8 @@ function Stored({ store, pending }: { store: Store; pending: boolean }) {
       note={
         pending ? (
           <>
-            <b>Holding the old list too.</b> An edit you make now applies to the
-            inbox you can see, not to the fetch that has not returned.
+            <b>Still showing the inbox.</b> An edit now applies to this list, not
+            to the fetch that has not returned.
           </>
         ) : (
           <>Holds the previous value because the caller said it could wait.</>

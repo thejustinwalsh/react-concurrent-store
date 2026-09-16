@@ -1,7 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 import { Boundary } from "../Boundary";
 import { runEveryScenario } from "../ui";
-import { Lede, Note } from "../prose";
+import { Lede } from "../prose";
 import { RebasingScenario } from "../scenarios/rebasing";
 import { SuspenseScenario } from "../scenarios/suspense";
 import { ErrorResetScenario } from "../scenarios/errors";
@@ -63,25 +63,17 @@ export function ExamplesPage() {
         ]}
       >
         <p>
-          Six behaviours you can try yourself. Click through a panel with its
-          buttons, or press <b>Run</b> to watch the same sequence play out
-          slowly and finish with a list of every value it read.
+          React&rsquo;s documentation advises against suspending a render on a
+          value read with <code>useSyncExternalStore</code>. A mutation to an
+          external store cannot be marked as a Transition, so it triggers the
+          nearest Suspense fallback and replaces content that is already on
+          screen. It also notes that a store mutated during a Transition makes
+          React redo that update as a blocking one.
         </p>
         <p>
-          These are the guarantees a store has to make once React can render in
-          the background, abandon that work and start again. Four of the six
-          are guarantees <code>useSyncExternalStore</code> cannot make, because
-          a store update during a Transition opts that Transition out.
+          Every panel below suspends on a store value on purpose. These are the
+          six guarantees that makes possible.
         </p>
-        <Note>
-          <p>
-            Readings come from a probe outside React, written from ref
-            callbacks, layout Effects and Effects. That is what makes what a
-            component <i>committed</i> distinguishable from what it merely
-            rendered, and from what reached the DOM — a value React renders and
-            then throws away is not a tear.
-          </p>
-        </Note>
         <button className="run" onClick={runAll}>
           Run all
         </button>

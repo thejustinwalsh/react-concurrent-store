@@ -115,13 +115,6 @@ export function SuspenseScenario() {
       <Card
         title="Suspense"
         rule="A Transition must not produce a fallback"
-proves={
-        "Dispatching a promise that has not settled replaces the state with " +
-        "one that does not exist yet, so the boundary falls back — that one " +
-        "you asked for. The same dispatch inside a Transition must keep the " +
-        "current content instead. That is the half useSyncExternalStore " +
-        "gives up: it flushes the Transition and falls back anyway."
-      }
         recorder={recorder}
         stage={
           <div className="readers">

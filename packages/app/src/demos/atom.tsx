@@ -151,7 +151,7 @@ export function AtomPage() {
   const waiting = (
     <Blocked
       what="loading the year…"
-      why="Still in a Transition. The old dashboard should be on screen."
+      why="Still in a Transition. The old dashboard is on screen."
     />
   );
 
@@ -233,7 +233,7 @@ export function AtomPage() {
           </Side>
           <Side
             how="useStore, every dispatch in a transition"
-            tag="the naive fix"
+            tag="all Transitions"
             kind="naive"
             fallback={waiting}
             note={

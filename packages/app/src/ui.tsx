@@ -550,8 +550,8 @@ export function Card({
   title: string;
   /** The guarantee it demonstrates, in one sentence. */
   rule: string;
-  /** Why the guarantee holds, and what to press to see it. */
-  proves: string;
+  /** Only where the panel's own controls do not already say it. */
+  proves?: string;
   stage: ReactNode;
   controls: ReactNode;
   recorder: Recorder;
@@ -562,7 +562,7 @@ export function Card({
       <header>
         <h2>{title}</h2>
         <p className="rule">{rule}</p>
-        <p className="proves">{proves}</p>
+        {proves !== undefined && <p className="proves">{proves}</p>}
       </header>
       <div className="stage">
         {stage}

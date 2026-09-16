@@ -72,9 +72,8 @@ export function StreamedClient({ rows }: { rows: Promise<Row[]> }) {
           note={
             held ? (
               <>
-                <b>The rows you were reading are still here.</b> The refetch is
-                in flight and the store was told it could wait, so nothing was
-                replaced by a fallback.
+                <b>The rows stayed on screen.</b> The refetch is in flight and the
+                store was told it could wait, so nothing fell back.
               </>
             ) : (
               <>

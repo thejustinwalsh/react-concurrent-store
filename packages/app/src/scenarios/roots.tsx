@@ -168,12 +168,6 @@ export function RootsScenario() {
       <Card
         title="Multiple roots"
         rule="One store can serve two roots with no provider"
-proves={
-          "Two separate createRoot trees read the same store directly, with " +
-          "nothing between them. They stay in step — including while one is " +
-          "blocked on a Transition and the other is not, and with StrictMode " +
-          "double-rendering only one of them."
-        }
         recorder={recorder}
         stage={
           <>

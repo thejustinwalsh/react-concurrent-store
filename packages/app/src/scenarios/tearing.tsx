@@ -169,13 +169,6 @@ export function TearingScenario() {
       <Card
         title="Tearing"
         rule="A component mounting mid-Transition shows what its siblings show"
-proves={
-        "A component that appears while a Transition is blocked must " +
-        "display what the rest of the page is displaying, not the value the " +
-        "Transition is waiting on. Otherwise one part of the screen is " +
-        "ahead of the rest, which is a tear. Reveal a second reader, or an " +
-        "Activity tree, while the Transition is held."
-      }
         recorder={recorder}
         stage={
           <>

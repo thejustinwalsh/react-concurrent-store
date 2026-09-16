@@ -146,14 +146,7 @@ export function RebasingScenario() {
       <Card
         title="Rebasing"
         rule="An urgent update applies to the state on screen"
-proves={
-        "An update dispatched outside a Transition has to be visible now, " +
-        "so it applies to the state the tree is showing — not to the state " +
-        "a pending Transition is waiting on. Dispatch order survives: once " +
-        "the Transition commits, the actions are in the order you made " +
-        "them. Each letter here is an action, and the uppercase one is held " +
-        "inside a Transition."
-      }
+        proves="Each letter is an action."
         recorder={recorder}
         stage={
           <div className="readers">
