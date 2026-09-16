@@ -41,9 +41,30 @@ revealed by an urgent update then shows a Suspense fallback, and a reader with
 no sibling to commit for it waits forever. Correcting from a layout effect is
 the only one of the three with no correctness failure.
 
-## It is a ponyfill
+## Rebasing folds actions over values, not over promises
 
-This exists to try the shape of an API React has proposed but not shipped. If
-the feature lands, the real one will be better — it has information this cannot
-reach. Expect this package to be deprecated rather than maintained alongside
-it.
+A store whose state is a promise has nothing for an urgent action to fold onto:
+every fold off a thenable is another thenable, so the two folds rejoin and the
+urgent update appears when the transition does.
+
+Hold the resolved data in the store and let the promise be the transient:
+
+```tsx
+type State = Message[] | Promise<Message[]>;
+
+const store = createStore<State>(messages);
+
+// A refetch, in a transition. The list on screen stays up.
+startTransition(() => store.dispatch(fetchMessages()));
+
+// Urgent, and expressed against whichever fold it lands on.
+store.dispatch((current: State) =>
+  current instanceof Promise ? current.then(markAllRead) : markAllRead(current),
+);
+```
+
+`createStore(fetchUser(1))` is fine as-is when each dispatch simply replaces the
+promise — see [Holding a promise in a store](/react-concurrent-store/guides/async/).
+The store warns in development if an urgent dispatch lands on promise state
+while a transition is outstanding, because that is the case where a rebase was
+probably expected.

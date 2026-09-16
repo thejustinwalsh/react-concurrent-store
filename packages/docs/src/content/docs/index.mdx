@@ -19,46 +19,37 @@ hero:
       variant: minimal
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+## What it is
 
-## What is React Concurrent Store?
+A userland implementation of the `createStore` / `useStore` API proposed in
+[React RFC #35449](https://github.com/facebook/react/issues/35449), for React 19
+and up. No experimental React build required.
 
-React Concurrent Store is a ponyfill that brings the experimental React concurrent store API to React 19+.
-It provides a simple and powerful way to manage async resources with built-in support for React's concurrent features.
+## What it does that a subscription cannot
 
-## Quick Example
+An external store read with `useSyncExternalStore` cannot take part in a
+transition: a store update during one opts the transition out and React flushes
+it synchronously. A navigation that should have kept the old screen up drops to
+a fallback instead.
+
+`useStore` honours the transition the caller started, and folds an urgent update
+over what is on screen rather than over a state the user cannot see yet.
 
 ```tsx
-import { createStore, useStore } from "react-concurrent-store";
-import { Suspense, use, useTransition } from "react";
+// The destination is decided. Its data has not arrived.
+startTransition(() => store.dispatch({ type: "navigate", to: "/profile" }));
 
-// Create a store with async data
-const userStore = createStore(fetch("/api/user/1").then((r) => r.json()));
-
-function UserProfile() {
-  const userPromise = useStore(userStore);
-  const user = use(userPromise);
-  const [isPending, startTransition] = useTransition();
-
-  const loadNextUser = () => {
-    startTransition(() => {
-      userStore.dispatch(fetch(`/api/user/${user.id + 1}`).then((r) => r.json()));
-    });
-  };
-
-  return (
-    <div style={{ opacity: isPending ? 0.5 : 1 }}>
-      <h1>{user.name}</h1>
-      <button onClick={loadNextUser}>Next User</button>
-    </div>
-  );
-}
-
-function App() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <UserProfile />
-    </Suspense>
-  );
-}
+// Visible now, on the page they are actually looking at.
+store.dispatch({ type: "like" });
 ```
+
+| | screen | store |
+| --- | --- | --- |
+| navigating | `home/0` | `profile/0` |
+| after the like | `home/1` | `profile/1` |
+| after the page loads | `profile/1` | `profile/1` |
+
+The like appears immediately, no half-loaded profile is ever shown, and the
+final state has both actions in the order they were dispatched.
+
+[Rebasing](/react-concurrent-store/explanation/rebasing/) explains how.

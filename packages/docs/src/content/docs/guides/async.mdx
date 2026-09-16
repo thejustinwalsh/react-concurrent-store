@@ -41,6 +41,30 @@ Do not put a promise-valued dispatch inside `flushSync`. `flushSync` exists so
 you can read the DOM the moment it returns, and what it returns is the
 fallback.
 
+## Keeping data you can still act on
+
+Replacing the promise is right when the new data supersedes the old. It is not
+enough when something urgent has to land *while* the refetch is in flight — an
+optimistic edit, a local mark-as-read. Fold those over the data, and let the
+promise be the transient:
+
+```tsx
+type State = Message[] | Promise<Message[]>;
+
+const store = createStore<State>(messages);
+
+// The refetch. The list on screen stays up.
+startTransition(() => store.dispatch(fetchMessages()));
+
+// Urgent, and expressed against whichever fold it lands on.
+store.dispatch((current: State) =>
+  current instanceof Promise ? current.then(markAllRead) : markAllRead(current),
+);
+```
+
+The edit is visible on the list the user is looking at, and is still in the
+fetched data when it arrives.
+
 ## Recovering from a rejection
 
 `use()` rethrows the same rejection every time it reads it, so resetting an
