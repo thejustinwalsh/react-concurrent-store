@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 3, "column": 0}, "map": {"version":3,"sources":["file:///Users/tjw/Developer/react-use-store/.claude/worktrees/remote-version-compare-deferred-ff9384/node_modules/.pnpm/next@16.3.5_@types+node@22.20.3_react-dom@19.3.0_react@19.3.0/node_modules/next/navigation.js"],"sourcesContent":["module.exports = require('./dist/client/components/navigation')\n"],"names":["module","exports"],"mappings":"AAAAA,OAAOC,OAAO","ignoreList":[0]}}]
+}

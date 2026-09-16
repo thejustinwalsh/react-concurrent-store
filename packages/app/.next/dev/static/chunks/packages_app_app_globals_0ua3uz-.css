@@ -1,0 +1,694 @@
+/* [project]/packages/app/app/globals.css [app-client] (css) */
+:root {
+  --bg: #1e1e2e;
+  --panel: #181825;
+  --panel-2: #313244;
+  --line: #313244;
+  --ink: #cdd6f4;
+  --dim: #a6adc8;
+  --faint: #6c7086;
+  --ok: #a6e3a1;
+  --bad: #f38ba8;
+  --wait: #f9e2af;
+  --accent: #89b4fa;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --tint-ok: color-mix(in srgb, var(--ok) 28%, var(--line));
+  --tint-bad: color-mix(in srgb, var(--bad) 28%, var(--line));
+  --tint-wait: color-mix(in srgb, var(--wait) 28%, var(--line));
+  --tint-accent: color-mix(in srgb, var(--accent) 28%, var(--line));
+  --sunken: #11111b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  margin: 0;
+  font: 14px / 1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+header.top {
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 20px;
+  padding: 28px 24px 16px;
+  display: flex;
+}
+
+header.top h1 {
+  letter-spacing: -.01em;
+  margin: 0;
+  font-size: 20px;
+}
+
+header.top .sub {
+  color: var(--dim);
+}
+
+header.top .tally {
+  font-family: var(--mono);
+  margin-left: auto;
+}
+
+main {
+  grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+  gap: 18px;
+  padding: 20px;
+  display: grid;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  flex-direction: column;
+  display: flex;
+  overflow: hidden;
+}
+
+.card > header {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 16px 12px;
+}
+
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.card .proves {
+  color: var(--dim);
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.stage {
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  flex-direction: column;
+  gap: 12px;
+  min-height: 92px;
+  padding: 16px;
+  display: flex;
+}
+
+.readers {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  display: flex;
+}
+
+.chip {
+  font-family: var(--mono);
+  border: 1px solid var(--line);
+  background: var(--sunken);
+  border-radius: 8px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  display: inline-flex;
+}
+
+.chip .name {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 11px;
+}
+
+.chip .value {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+.chip.flash {
+  animation: .42s ease-out flash;
+}
+
+@keyframes flash {
+  0% {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+
+  100% {
+    background: var(--sunken);
+    border-color: var(--line);
+  }
+}
+
+.chip.pending {
+  border-color: var(--wait);
+}
+
+.chip.torn {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad) inset;
+}
+
+.track {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-height: 20px;
+  display: flex;
+}
+
+.track .t {
+  font-family: var(--mono);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 10.5px;
+}
+
+.track .t.render {
+  color: var(--ink);
+  border-color: var(--tint-accent);
+}
+
+.track .t.dispatch {
+  color: var(--accent);
+  border-color: var(--tint-accent);
+}
+
+.track .t.note {
+  color: var(--wait);
+  border-color: var(--tint-wait);
+}
+
+.controls {
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  display: flex;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  border-radius: 7px;
+  padding: 6px 11px;
+  font-size: 12.5px;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+button.run {
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  border-color: var(--tint-accent);
+}
+
+.verdict {
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  font-size: 12.5px;
+  display: flex;
+}
+
+.light {
+  background: var(--dim);
+  border-radius: 50%;
+  flex: none;
+  width: 9px;
+  height: 9px;
+}
+
+.light.ok {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
+
+.light.bad {
+  background: var(--bad);
+  box-shadow: 0 0 8px var(--bad);
+}
+
+.light.wait {
+  background: var(--wait);
+  box-shadow: 0 0 8px var(--wait);
+}
+
+.verdict .msg {
+  color: var(--dim);
+}
+
+.verdict .msg.bad {
+  color: var(--bad);
+}
+
+.verdict .msg.ok {
+  color: var(--ok);
+}
+
+.checks {
+  gap: 4px;
+  margin: 0;
+  padding: 0 16px 12px;
+  list-style: none;
+  display: grid;
+}
+
+.checks li {
+  font-family: var(--mono);
+  gap: 8px;
+  font-size: 11.5px;
+  display: flex;
+}
+
+.checks li .mark {
+  flex: none;
+  width: 12px;
+}
+
+.checks li.ok .mark {
+  color: var(--ok);
+}
+
+.checks li.bad .mark {
+  color: var(--bad);
+}
+
+.checks li .label {
+  color: var(--dim);
+}
+
+.checks li .got {
+  margin-left: auto;
+}
+
+.checks li.bad .got {
+  color: var(--bad);
+}
+
+nav.tabs {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  gap: 2px;
+  padding: 0 20px;
+  display: flex;
+}
+
+nav.tabs .tab {
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-bottom: 2px solid #0000;
+  border-radius: 0;
+  gap: 1px;
+  padding: 10px 14px 9px;
+  display: grid;
+}
+
+nav.tabs .tab .t {
+  color: var(--dim);
+  font-size: 13px;
+}
+
+nav.tabs .tab .b {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+nav.tabs .tab:hover .t {
+  color: var(--ink);
+}
+
+nav.tabs .tab.here {
+  border-bottom-color: var(--accent);
+}
+
+nav.tabs .tab.here .t {
+  color: var(--ink);
+}
+
+nav.tabs .tab.here .b {
+  color: var(--accent);
+}
+
+.lede {
+  max-width: 760px;
+  padding: 22px 20px 4px;
+}
+
+.lede h2 {
+  letter-spacing: -.01em;
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.lede p {
+  color: var(--dim);
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.lede code {
+  font-family: var(--mono);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.ab {
+  gap: 14px;
+  padding: 8px 20px 24px;
+  display: grid;
+}
+
+.ab .pair {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+  gap: 14px;
+  display: grid;
+}
+
+.ab .bar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  display: flex;
+}
+
+.ab .bar .spacer {
+  flex: 1;
+}
+
+.side {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.side > header {
+  border-bottom: 1px solid var(--line);
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 13px;
+  display: flex;
+}
+
+.side > header .how {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.side > header .tag {
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: 20px;
+  margin-left: auto;
+  padding: 2px 7px;
+  font-size: 10.5px;
+}
+
+.side.today > header .how {
+  color: var(--bad);
+}
+
+.side.today > header .tag {
+  border-color: var(--tint-bad);
+  color: var(--bad);
+}
+
+.side.ours > header .how {
+  color: var(--ok);
+}
+
+.side.ours > header .tag {
+  border-color: var(--tint-ok);
+  color: var(--ok);
+}
+
+.mock {
+  background: var(--bg);
+  flex-direction: column;
+  min-height: 268px;
+  display: flex;
+}
+
+.mock .crumb {
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  font-size: 12px;
+  display: flex;
+}
+
+.mock .crumb .where {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+.mock .crumb .spin {
+  color: var(--wait);
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.mock .body {
+  flex: 1;
+  align-content: start;
+  gap: 9px;
+  padding: 13px;
+  display: grid;
+}
+
+.row {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 9px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  display: flex;
+}
+
+.row .av {
+  width: 30px;
+  height: 30px;
+  color: var(--bg);
+  border-radius: 50%;
+  flex: none;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  display: grid;
+}
+
+.row .who {
+  gap: 2px;
+  min-width: 0;
+  display: grid;
+}
+
+.row .who b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.row .who span {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+
+.row .like {
+  font-family: var(--mono);
+  text-align: center;
+  min-width: 52px;
+  margin-left: auto;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.row .like.on {
+  color: var(--bad);
+  border-color: var(--tint-bad);
+}
+
+.row.ghost {
+  opacity: .45;
+}
+
+.blocked {
+  text-align: center;
+  color: var(--wait);
+  flex: 1;
+  place-items: center;
+  gap: 8px;
+  padding: 24px;
+  display: grid;
+}
+
+.blocked .big {
+  font-size: 13px;
+}
+
+.blocked .why {
+  color: var(--dim);
+  max-width: 34ch;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.note {
+  border-top: 1px solid var(--line);
+  color: var(--dim);
+  min-height: 56px;
+  padding: 10px 13px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.note b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.side.today .note b {
+  color: var(--bad);
+}
+
+.side.ours .note b {
+  color: var(--ok);
+}
+
+.side.naive > header .how {
+  color: var(--wait);
+}
+
+.side.naive > header .tag {
+  border-color: var(--tint-wait);
+  color: var(--wait);
+}
+
+.side.naive .note b {
+  color: var(--wait);
+}
+
+.field {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-width: 190px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.field:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.echo {
+  font-family: var(--mono);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 9px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  font-size: 13px;
+  display: flex;
+}
+
+.echo .lbl {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 11px;
+}
+
+.echo .val {
+  min-height: 18px;
+}
+
+.echo .val em {
+  color: var(--dim);
+  font-style: normal;
+}
+
+.stat {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 9px;
+  gap: 3px;
+  padding: 9px 11px;
+  display: grid;
+}
+
+.stat .k {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 11px;
+}
+
+.stat .v {
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
+}
+
+.ledger {
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  color: var(--dim);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: auto;
+  padding: 9px 13px;
+  font-size: 11.5px;
+  display: flex;
+}
+
+.ledger .k {
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 10.5px;
+}
+
+.ledger .c b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ledger .tot {
+  color: var(--ink);
+  margin-left: auto;
+}
+
+/*# sourceMappingURL=packages_app_app_globals_0ua3uz-.css.map*/

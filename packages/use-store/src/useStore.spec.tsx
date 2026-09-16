@@ -5452,3 +5452,85 @@ describe("Warning when there is nothing to rebase onto", () => {
     warn.mockRestore();
   });
 });
+
+describe("Swapping the store a reader is pointed at", () => {
+  /**
+   * A reader's handle is seeded once, from the store it first saw. Nothing
+   * re-seeds it when the prop changes, so pointing a component at a different
+   * store left it showing the old one's value until that new store happened to
+   * dispatch — which, for a store that had just been constructed, is never.
+   *
+   * Real: a store per tenant or per document, and every Reset button that
+   * builds a fresh one rather than dispatching its way back to the start.
+   */
+  afterEach(() => cleanup());
+
+  it("shows the new store's value, not the old one's", async () => {
+    const first = createStore("first");
+    const second = createStore("second");
+
+    function Reader({ store }: { store: typeof first }) {
+      return <span data-testid="v">{useStore(store)}</span>;
+    }
+
+    let swap!: () => void;
+    function App() {
+      const [store, setStore] = useState(first);
+      swap = () => setStore(second);
+      return <Reader store={store} />;
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+    expect(getByTestId("v")).toHaveTextContent("first");
+
+    await act(async () => swap());
+    expect(getByTestId("v")).toHaveTextContent("second");
+  });
+
+  it("follows the new store afterwards, and not the old one", async () => {
+    const first = createStore("first");
+    const second = createStore("second");
+
+    function Reader({ store }: { store: typeof first }) {
+      return <span data-testid="v">{useStore(store)}</span>;
+    }
+    let swap!: () => void;
+    function App() {
+      const [store, setStore] = useState(first);
+      swap = () => setStore(second);
+      return <Reader store={store} />;
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+    await act(async () => swap());
+
+    await act(async () => second.dispatch("moved"));
+    expect(getByTestId("v")).toHaveTextContent("moved");
+
+    // The store it no longer reads must not pull it back.
+    await act(async () => first.dispatch("stale"));
+    expect(getByTestId("v")).toHaveTextContent("moved");
+  });
+
+  it("re-seeds a selector reader too", async () => {
+    type Shape = { n: number };
+    const first = createStore<Shape, number>({ n: 1 }, (_s, n) => ({ n }));
+    const second = createStore<Shape, number>({ n: 2 }, (_s, n) => ({ n }));
+
+    function Reader({ store }: { store: typeof first }) {
+      const n = useStore(store, (state: Shape) => state.n);
+      return <span data-testid="v">{n}</span>;
+    }
+    let swap!: () => void;
+    function App() {
+      const [store, setStore] = useState(first);
+      swap = () => setStore(second);
+      return <Reader store={store} />;
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+    expect(getByTestId("v")).toHaveTextContent("1");
+    await act(async () => swap());
+    expect(getByTestId("v")).toHaveTextContent("2");
+  });
+});

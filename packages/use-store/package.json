@@ -30,7 +30,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/use-client.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "eslint",
     "lint:fix": "eslint --fix",

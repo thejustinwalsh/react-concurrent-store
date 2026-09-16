@@ -270,7 +270,7 @@ export function useReport(
  * behind and would call a settled screen torn.
  */
 export function Agreement({ probe }: { probe: Probe }) {
-  useSyncExternalStore(probe.subscribe, probe.version);
+  useSyncExternalStore(probe.subscribe, probe.version, probe.version);
   const torn = !probe.agree();
   const values = probe.values();
   const history = probe.tears();
@@ -327,7 +327,12 @@ export function createSignal<T>(initial: T): Signal<T> {
 }
 
 export function useSignal<T>(signal: Signal<T>): T {
-  return useSyncExternalStore(signal.subscribe, signal.get);
+  // Three arguments, not two. A `useSyncExternalStore` read without a server
+  // snapshot throws during SSR, which is the ceremony `useStore` does not need
+  // because the value a store was created with *is* the snapshot. A signal is
+  // not a store, so it pays it: the value is the same on both sides here, so
+  // the client getter serves.
+  return useSyncExternalStore(signal.subscribe, signal.get, signal.get);
 }
 
 /**
@@ -350,6 +355,9 @@ export function Chronological<S, A>({
 }) {
   const state = useSyncExternalStore(
     (onChange: () => void) => store.subscribe(onChange),
+    () => store.getState(),
+    // Deliberately reading the chronological fold the old way, so it needs the
+    // server snapshot that useStore does not.
     () => store.getState(),
   );
   return (
@@ -385,7 +393,7 @@ export function Track({ recorder }: { recorder: Recorder }) {
   // Debug readouts mirroring a mutable source outside React, which is exactly
   // what useSyncExternalStore is for. The store itself avoids it because of
   // the transition de-opt; a readout of what already happened does not care.
-  useSyncExternalStore(recorder.subscribe, recorder.version);
+  useSyncExternalStore(recorder.subscribe, recorder.version, recorder.version);
   const shown = recorder.marks.slice(-26);
   return (
     <div className="track">

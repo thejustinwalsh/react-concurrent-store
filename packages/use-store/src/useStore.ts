@@ -417,7 +417,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
     store._drifted ? isHydrating : notHydrating,
   );
 
-  const [handle, setHandle] = useState(() =>
+  let [handle, setHandle] = useState(() =>
     hydrating
       ? // The value the server rendered from. The client store is built from
         // the same serialized state, so this is it — no second snapshot has to
@@ -426,6 +426,22 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       : ((renderedThisPass.get(source) as StoreHandle<S> | undefined) ??
         store._committed),
   );
+
+  // A reader pointed at a different store starts again from that store. The
+  // seed above runs once per fiber, so without this a component handed a new
+  // store keeps showing the old one's value until the new one happens to
+  // dispatch — which, for a store that was just constructed, is never.
+  // Adjusted during render rather than from an effect, so the first render
+  // under the new store is already its own.
+  const [seenSource, setSeenSource] = useState(source);
+  if (seenSource !== source) {
+    handle =
+      (renderedThisPass.get(source) as StoreHandle<S> | undefined) ??
+      store._committed;
+    setSeenSource(source);
+    setHandle(handle);
+  }
+
   recordRendered(source, handle as StoreHandle<unknown>);
 
   // One effect, in three parts and in this order: take publishes, settle where
