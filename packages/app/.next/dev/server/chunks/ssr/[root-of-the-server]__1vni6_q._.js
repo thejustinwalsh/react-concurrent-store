@@ -99,7 +99,15 @@ const data = use(useStore(store));`
                                 lineNumber: 51,
                                 columnNumber: 22
                             }, this),
-                            ". The rows you are reading stay on screen while the next ones load, because the store was told the update could wait."
+                            ". The fetch is held open, so you can sit in the in-flight state: the column says the Transition is pending and dims, and the rows you were reading stay on screen instead of being replaced by a fallback. Press ",
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("b", {
+                                children: "New rows arrive"
+                            }, void 0, false, {
+                                fileName: "[project]/packages/app/app/rsc/page.tsx",
+                                lineNumber: 54,
+                                columnNumber: 50
+                            }, this),
+                            " to let it finish."
                         ]
                     }, void 0, true, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
@@ -112,12 +120,12 @@ const data = use(useStore(store));`
                 lineNumber: 35,
                 columnNumber: 7
             }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "ab",
-                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "pair",
-                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Suspense"], {
-                        fallback: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Suspense"], {
+                fallback: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "ab",
+                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "pair",
+                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
                             className: "side ours",
                             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "mock",
@@ -129,7 +137,7 @@ const data = use(useStore(store));`
                                             children: "streaming…"
                                         }, void 0, false, {
                                             fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                            lineNumber: 63,
+                                            lineNumber: 65,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -137,45 +145,45 @@ const data = use(useStore(store));`
                                             children: "The shell was sent before the server had these rows."
                                         }, void 0, false, {
                                             fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                            lineNumber: 64,
+                                            lineNumber: 66,
                                             columnNumber: 21
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                    lineNumber: 62,
+                                    lineNumber: 64,
                                     columnNumber: 19
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                lineNumber: 61,
+                                lineNumber: 63,
                                 columnNumber: 17
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/packages/app/app/rsc/page.tsx",
-                            lineNumber: 60,
+                            lineNumber: 62,
                             columnNumber: 15
-                        }, this),
-                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$packages$2f$app$2f$src$2f$demos$2f$streamed$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["StreamedClient"], {
-                            rows: fetchAccounts()
-                        }, void 0, false, {
-                            fileName: "[project]/packages/app/app/rsc/page.tsx",
-                            lineNumber: 72,
-                            columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                        lineNumber: 58,
-                        columnNumber: 11
+                        lineNumber: 61,
+                        columnNumber: 13
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/packages/app/app/rsc/page.tsx",
-                    lineNumber: 57,
+                    lineNumber: 60,
+                    columnNumber: 11
+                }, this),
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$packages$2f$app$2f$src$2f$demos$2f$streamed$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["StreamedClient"], {
+                    rows: fetchAccounts()
+                }, void 0, false, {
+                    fileName: "[project]/packages/app/app/rsc/page.tsx",
+                    lineNumber: 76,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                lineNumber: 56,
+                lineNumber: 58,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -185,7 +193,7 @@ const data = use(useStore(store));`
                         children: "Or awaiting it first"
                     }, void 0, false, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                        lineNumber: 78,
+                        lineNumber: 80,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -195,20 +203,20 @@ const data = use(useStore(store));`
                                 children: "await"
                             }, void 0, false, {
                                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                lineNumber: 80,
+                                lineNumber: 82,
                                 columnNumber: 35
                             }, this),
                             " it in the server component and pass plain rows. The store is created from them on the client and everything on top — the filter, the counters — is ordinary client state."
                         ]
                     }, void 0, true, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                        lineNumber: 79,
+                        lineNumber: 81,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                lineNumber: 77,
+                lineNumber: 79,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$packages$2f$app$2f$src$2f$demos$2f$rsc$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["RscClient"], {
@@ -217,7 +225,7 @@ const data = use(useStore(store));`
                 at: new Date().toISOString().slice(11, 19) + " UTC"
             }, void 0, false, {
                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                lineNumber: 86,
+                lineNumber: 88,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -227,7 +235,7 @@ const data = use(useStore(store));`
                         children: "Where createStore belongs"
                     }, void 0, false, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                        lineNumber: 93,
+                        lineNumber: 95,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$packages$2f$app$2f$src$2f$prose$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Note"], {
@@ -235,12 +243,12 @@ const data = use(useStore(store));`
                             children: "What crosses the boundary is data, never the store. A store is mutable state with subscribers; a server component renders once and has neither, and a store at module scope on a server is shared by every request."
                         }, void 0, false, {
                             fileName: "[project]/packages/app/app/rsc/page.tsx",
-                            lineNumber: 95,
+                            lineNumber: 97,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                        lineNumber: 94,
+                        lineNumber: 96,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$packages$2f$app$2f$src$2f$prose$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Pitfall"], {
@@ -253,7 +261,7 @@ const data = use(useStore(store));`
                                         children: '"use client"'
                                     }, void 0, false, {
                                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                        lineNumber: 105,
+                                        lineNumber: 107,
                                         columnNumber: 13
                                     }, this),
                                     " directive, so reaching for",
@@ -262,14 +270,14 @@ const data = use(useStore(store));`
                                         children: "createStore"
                                     }, void 0, false, {
                                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                        lineNumber: 106,
+                                        lineNumber: 108,
                                         columnNumber: 13
                                     }, this),
                                     " in a server component fails the build instead of failing in front of someone:"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                lineNumber: 103,
+                                lineNumber: 105,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$packages$2f$app$2f$src$2f$Code$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["Code"], {
@@ -281,7 +289,7 @@ export default function Page() {
 }`
                             }, void 0, false, {
                                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                lineNumber: 109,
+                                lineNumber: 111,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$next$40$16$2e$3$2e$5_$40$types$2b$node$40$22$2e$20$2e$3_react$2d$dom$40$19$2e$3$2e$0_react$40$19$2e$3$2e$0$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("pre", {
@@ -293,24 +301,24 @@ it can only be rendered as a Component or passed to props of a Client
 Component.`
                                 }, void 0, false, {
                                     fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                    lineNumber: 116,
+                                    lineNumber: 118,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                                lineNumber: 115,
+                                lineNumber: 117,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/packages/app/app/rsc/page.tsx",
-                        lineNumber: 102,
+                        lineNumber: 104,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/packages/app/app/rsc/page.tsx",
-                lineNumber: 92,
+                lineNumber: 94,
                 columnNumber: 7
             }, this)
         ]

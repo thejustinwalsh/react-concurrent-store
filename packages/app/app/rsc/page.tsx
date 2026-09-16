@@ -48,15 +48,17 @@ export default async function Page() {
 const [store] = useState(() => createStore(rows));
 const data = use(useStore(store));`}</Code>
         <p>
-          Then press <b>Refetch in a Transition</b>. The rows you are reading
-          stay on screen while the next ones load, because the store was told
-          the update could wait.
+          Then press <b>Refetch in a Transition</b>. The fetch is held open, so
+          you can sit in the in-flight state: the column says the Transition is
+          pending and dims, and the rows you were reading stay on screen instead
+          of being replaced by a fallback. Press <b>New rows arrive</b> to let it
+          finish.
         </p>
       </div>
-      <div className="ab">
-        <div className="pair">
-          <Suspense
-            fallback={
+      <Suspense
+        fallback={
+          <div className="ab">
+            <div className="pair">
               <section className="side ours">
                 <div className="mock">
                   <div className="blocked">
@@ -67,12 +69,12 @@ const data = use(useStore(store));`}</Code>
                   </div>
                 </div>
               </section>
-            }
-          >
-            <StreamedClient rows={fetchAccounts()} />
-          </Suspense>
-        </div>
-      </div>
+            </div>
+          </div>
+        }
+      >
+        <StreamedClient rows={fetchAccounts()} />
+      </Suspense>
 
       <div className="lede">
         <h3>Or awaiting it first</h3>
