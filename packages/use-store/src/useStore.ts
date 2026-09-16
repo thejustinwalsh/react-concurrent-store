@@ -121,8 +121,6 @@ export interface ConcurrentStoreInternals<S, A>
   _onCommit(listener: (handle: StoreHandle<S>) => void): () => void;
   readonly _head: StoreHandle<S>;
   readonly _committed: StoreHandle<S>;
-  /** How many readers are subscribed; one reader has nothing to tear against. */
-  readonly _readers: number;
   /** The handle this store was created with. */
   readonly _initial: StoreHandle<S>;
   /**
@@ -296,9 +294,6 @@ export function createStore<S, A>(
     get _committed() {
       return committed;
     },
-    get _readers() {
-      return listeners.size;
-    },
     get _initial() {
       return initial;
     },
@@ -429,12 +424,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
     // priority. Keyed on the handle as well, so the decision is made here and
     // reported, rather than inside setHandle where the answer is not visible.
     const release = store._subscribe((next) => {
-      // Never backwards: versions rise with every handle a store makes,
-      // including the rebased one, so an older handle is one this reader has
-      // already moved past.
-      if (handle.version >= next.version || Object.is(handle.value, next.value)) {
-        return false;
-      }
+      if (Object.is(handle.value, next.value)) return false;
       setHandle(next);
       return true;
     }, handle);
@@ -452,19 +442,12 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       ) {
         // Behind what the tree shows: come up to that much, no further.
         setHandle(committed);
-      } else if (store._readers <= 1) {
-        // Level with the tree, a transition in flight, and no sibling to tear
-        // against. Waiting here would deadlock: the commit this reader is
-        // waiting for is the one only it can produce.
-        startTransition(() => {
-          setHandle(head);
-        });
       }
-      // Otherwise level with the tree while a transition is in flight and a
-      // sibling is still to commit it. Joining head here would start a second
-      // transition, which commits on its own as soon as nothing in it suspends
-      // while the first is still blocked, leaving this reader ahead of its
-      // siblings. Wait for _onCommit instead.
+      // Otherwise this reader is level with the tree while a transition is in
+      // flight and a sibling has still to commit it. Joining head here would
+      // start a second transition, which commits on its own as soon as nothing
+      // in it suspends while the first is still blocked, leaving this reader
+      // ahead of its siblings. _onCommit brings it forward instead.
     }
     store._markCommitted(handle);
     // This pass has committed, so nothing mounting later belongs to it.
@@ -604,11 +587,6 @@ export function createSelectorStore<S, A, T>(
     },
     get _committed() {
       return source._committed;
-    },
-    // The source's, not this view's: every reader holds its own view, so the
-    // source's subscriber count is the reader count.
-    get _readers() {
-      return source._readers;
     },
     get _initial() {
       return source._initial;
