@@ -90,12 +90,18 @@ const clientInternals = (React as …).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USE
 const transitionScope = (): unknown => clientInternals?.T ?? null;
 ```
 
-Read, never written, feature-detected, and the only unsupported thing this
-package does. No experimental React build is needed — but that is why.
+Read, never written, and the only unsupported thing this package does. No
+experimental React build is needed — but that is why.
 
-It is not incidental. With that field, 152 tests pass. Stub it out and 42 fail,
-including every transition case, and what is left behaves like
+It is not incidental. Make that read answer "never in a transition" and 43 of
+154 tests fail, including every transition case, and what is left behaves like
 `useSyncExternalStore`.
+
+So it does not degrade quietly: if React ever stops exposing the field, the
+first dispatch throws with a message pointing at this. The field's own name is
+the contract — a package that touches it warns its users they cannot upgrade
+freely — and silently losing every transition is a worse way to find out than a
+stack trace.
 
 There is no public replacement. A library can only be told by its caller, and
 being told misses every transition started on your behalf — which is most of

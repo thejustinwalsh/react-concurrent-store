@@ -1,4 +1,3 @@
-import * as ReactRuntime from "react";
 import {
   startTransition,
   use,
@@ -8,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { transitionScope } from "./transitionScope";
 import { Reducer } from "./types";
 
 /**
@@ -43,27 +43,6 @@ function makeHandle<S>(value: S, version: number): StoreHandle<S> {
   handle.catch(() => {});
   return handle;
 }
-
-/**
- * React's current transition scope, or null outside one.
- *
- * Nothing public tells a dispatch whether its caller is inside
- * startTransition, and a batch must not span the two: a transition dispatch
- * and a flushSync dispatch in the same call stack get different lanes, so they
- * cannot share one rebasing decision. This field is the only signal that
- * distinguishes them. It is read, never written, and feature-detected — if it
- * disappears every dispatch reads as scope null, which is the per-tick
- * batching this had before.
- */
-const clientInternals = (
-  ReactRuntime as unknown as {
-    __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-      T?: unknown;
-    };
-  }
-).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-const transitionScope = (): unknown => clientInternals?.T ?? null;
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (

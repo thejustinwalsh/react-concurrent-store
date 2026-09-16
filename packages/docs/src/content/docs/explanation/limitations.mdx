@@ -16,12 +16,21 @@ caller was inside `startTransition` when they dispatched. It reads that from
 React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.T
 ```
 
-Read, never written, feature-detected, and the only unsupported thing this
-package does. No experimental React build is needed — but that is why.
+Read, never written, and the only unsupported thing this package does. No
+experimental React build is needed — but that is why.
 
-It is not incidental. With the field, 152 tests pass. Stub it out and 42 fail,
-including every transition case, and what is left behaves like
+It is not incidental. Make that read answer "never in a transition" and 43 of
+154 tests fail, including every transition case, and what is left behaves like
 `useSyncExternalStore`.
+
+It does not degrade quietly. If React ever stops exposing the field the first
+dispatch throws, naming it and pointing here. The field's own name is the
+contract — a package that touches it warns its users they cannot upgrade
+freely — and silently losing every transition is a worse way to find that out
+than a stack trace.
+
+React's own proof of concept ([facebook/react#33215](https://github.com/facebook/react/pull/33215))
+reads the same field for the same reason.
 
 There is no public replacement. A library can only be told by its caller:
 
