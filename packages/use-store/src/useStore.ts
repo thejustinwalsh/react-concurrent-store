@@ -508,30 +508,34 @@ export function createSelectorStore<S, A, T>(
   initialSelector?: (state: S, previous: T | undefined) => T,
 ): SelectorView<S, A, T> {
   let selector = initialSelector;
-  let head = source._head;
-  // The last handle this view passed on. A bail-out still advances `head` so
-  // getState stays current, but must not advance this: readers hold the handle
-  // they were last given, and a gap between the two reads as a reader running
-  // behind, sending it chasing a version whose slice it already shows.
-  let forwarded = source._head;
-  let last: { value: T } | null = null;
+
+  // Two handles, and which is which is the whole of this view. `sourceHead` is
+  // the newest the store has; `readersAt` is the one this view's readers were
+  // lastSlice given. A bail-out moves the first and not the second, and reading
+  // them the wrong way round makes a reader chase a version whose slice it is
+  // already showing — or strands it on one it never saw.
+  let sourceHead = source._head;
+  let readersAt = source._head;
+
+  /** The slice the readers are showing, or null when there is no memory yet. */
+  let lastSlice: { value: T } | null = null;
   let release: (() => void) | null = null;
   const listeners = new Set<(handle: StoreHandle<S>) => boolean>();
   const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
 
   const pass = (published: StoreHandle<S>) => {
-    forwarded = published;
+    readersAt = published;
     let taken = 0;
     for (const listener of listeners) if (listener(published)) taken += 1;
     return taken > 0;
   };
 
   const publish = (published: StoreHandle<S>): boolean => {
-    head = published;
+    sourceHead = published;
     if (selector === undefined) return pass(published);
     let next: T;
     try {
-      next = selector(published.value, last?.value);
+      next = selector(published.value, lastSlice?.value);
     } catch {
       // Cannot decide: forward and let render settle it.
       return pass(published);
@@ -539,31 +543,31 @@ export function createSelectorStore<S, A, T>(
     // The slice did not move, so this view's readers render nothing. Saying so
     // is what lets the store tell "nobody is behind" from "somebody has not
     // caught up yet".
-    if (last !== null && Object.is(next, last.value)) return false;
-    last = { value: next };
+    if (lastSlice !== null && Object.is(next, lastSlice.value)) return false;
+    lastSlice = { value: next };
     return pass(published);
   };
 
   const attach = (from: StoreHandle<S>) => {
-    head = source._head;
+    sourceHead = source._head;
     // Seeded from the handle this reader is showing, not from what the store
-    // last published. A reader that mounted on committed state while a
+    // lastSlice published. A reader that mounted on committed state while a
     // transition was pending has never seen the published slice; recording it
     // as already delivered leaves that reader stranded when the transition
     // finally commits.
-    forwarded = from;
+    readersAt = from;
     try {
-      last =
+      lastSlice =
         selector === undefined ? null : { value: selector(from.value, undefined) };
     } catch {
-      last = null;
+      lastSlice = null;
     }
 
     const release = source._subscribe(publish, from);
 
     // Built during render but subscribed from a layout effect, so the source
     // can move in between. Catch up only as far as the tree has committed —
-    // going as far as head would be joining a transition this reader was never
+    // going as far as sourceHead would be joining a transition this reader was never
     // part of, which is what _onCommit is for.
     const committed = source._committed;
     if (committed.version > from.version) publish(committed);
@@ -575,7 +579,7 @@ export function createSelectorStore<S, A, T>(
     dispatch() {
       throw new Error("A selector view is read-only; dispatch to its source.");
     },
-    getState: () => head.value,
+    getState: () => sourceHead.value,
     // Read-only: dispatch throws, but subscribers still see the source's
     // actions.
     subscribe: source.subscribe,
@@ -592,7 +596,7 @@ export function createSelectorStore<S, A, T>(
       };
     },
     get _head() {
-      return forwarded;
+      return readersAt;
     },
     get _committed() {
       return source._committed;
@@ -615,15 +619,15 @@ export function createSelectorStore<S, A, T>(
         if (selector !== undefined) {
           let next: T;
           try {
-            next = selector(committed.value, last?.value);
+            next = selector(committed.value, lastSlice?.value);
           } catch {
             for (const l of commitListeners) l(committed);
             return;
           }
-          if (last !== null && Object.is(next, last.value)) return;
-          last = { value: next };
+          if (lastSlice !== null && Object.is(next, lastSlice.value)) return;
+          lastSlice = { value: next };
         }
-        forwarded = committed;
+        readersAt = committed;
         for (const l of commitListeners) l(committed);
       });
       return () => {
