@@ -106,7 +106,15 @@ export interface ConcurrentStoreInternals<S, A>
    * renders nothing, so there is nothing for the tree to catch up to and the
    * commit pointer can move with it.
    */
-  _subscribe(listener: (handle: StoreHandle<S>) => boolean): () => void;
+  _subscribe(
+    listener: (handle: StoreHandle<S>) => boolean,
+    /**
+     * The handle the subscribing reader is currently showing. A selector view
+     * has to know this: it is what its slice memory must be seeded from, and
+     * it is not always what the store last published.
+     */
+    from: StoreHandle<S>,
+  ): () => void;
   /**
    * Subscribe to the commit pointer moving forward. Separate from
    * `_subscribe` on purpose: this fires during commit, and routing it through
@@ -352,7 +360,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       }
       setHandle(next);
       return true;
-    });
+    }, handle);
   }, [store, handle]);
 
   useLayoutEffect(() => {
@@ -462,38 +470,29 @@ export function createSelectorStore<S, A, T>(
     return pass(published);
   };
 
-  const attach = () => {
-    // Seeded from the published handle rather than head: `last` names the
-    // slice readers are showing. Seeded from a pending transition's head, that
-    // slice would look already delivered and its commit would bail, stranding
-    // the reader behind its siblings.
+  const attach = (from: StoreHandle<S>) => {
+    head = source._head;
+    // Seeded from the handle this reader is showing, not from what the store
+    // last published. A reader that mounted on committed state while a
+    // transition was pending has never seen the published slice; recording it
+    // as already delivered leaves that reader stranded when the transition
+    // finally commits.
+    forwarded = from;
     try {
       last =
-        selector === undefined
-          ? null
-          : { value: selector(source._published.value, undefined) };
+        selector === undefined ? null : { value: selector(from.value, undefined) };
     } catch {
       last = null;
     }
-    const release = source._subscribe(publish);
+
+    const release = source._subscribe(publish, from);
 
     // Built during render but subscribed from a layout effect, so the source
-    // can move in between. Catch up to the last priority-inheriting publish,
-    // not to head, or a sync mount jumps to the pending transition's state.
-    if (source._head !== head) {
-      head = source._head;
-      const current = source._published;
-      try {
-        last =
-          selector === undefined
-            ? null
-            : { value: selector(current.value, last?.value) };
-      } catch {
-        last = null;
-      }
-      forwarded = current;
-      for (const listener of listeners) listener(current);
-    }
+    // can move in between. Catch up only as far as the tree has committed —
+    // going as far as head would be joining a transition this reader was never
+    // part of, which is what _onCommit is for.
+    const committed = source._committed;
+    if (committed.version > from.version) publish(committed);
 
     return release;
   };
@@ -507,9 +506,9 @@ export function createSelectorStore<S, A, T>(
     // actions.
     subscribe: source.subscribe,
 
-    _subscribe(listener) {
+    _subscribe(listener, from) {
       listeners.add(listener);
-      if (release === null) release = attach();
+      if (release === null) release = attach(from);
       return () => {
         listeners.delete(listener);
         if (listeners.size === 0 && release !== null) {

@@ -715,9 +715,9 @@ describe("Subscription cleanup", () => {
     const store: ConcurrentStoreInternals<S, A> & { live: () => number } = {
       ...inner,
       // The hooks subscribe to handles, not actions.
-      _subscribe(listener) {
+      _subscribe(listener, from) {
         live++;
-        const unsubscribe = inner._subscribe(listener);
+        const unsubscribe = inner._subscribe(listener, from);
         return () => {
           live--;
           unsubscribe();
@@ -4107,5 +4107,70 @@ describe("A batch is one tick at one priority", () => {
     held = false;
     await act(async () => release());
     expect(screen()).toEqual(["5"]);
+  });
+});
+
+describe("A selector reader that mounts during a pending transition", () => {
+  type Slice = { n: number };
+
+  afterEach(() => cleanup());
+
+  /**
+   * Its view's slice memory has to be seeded from the handle the reader is
+   * showing, not from what the store last published. A reader that mounted on
+   * committed state has never seen the published slice, and recording that
+   * slice as already delivered means the commit that finally lands is filtered
+   * out as a duplicate — leaving that reader behind its siblings for good.
+   */
+  it("is brought forward when the transition finally commits", async () => {
+    const store = createStore<Slice, number>({ n: 1 }, (_s, n) => ({ n }));
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+
+    function Gated() {
+      const n = useStore(store, (s: Slice) => s.n);
+      if (held && n === 2) use(gate);
+      return <span data-testid="g">{n}</span>;
+    }
+    function Late() {
+      const n = useStore(store, (s: Slice) => s.n);
+      return <span data-testid="l">{n}</span>;
+    }
+
+    let reveal!: () => void;
+    function App() {
+      const [show, setShow] = useState(false);
+      reveal = () => setShow(true);
+      return (
+        <Suspense fallback={<span>loading</span>}>
+          <Gated />
+          {show && <Late />}
+        </Suspense>
+      );
+    }
+
+    const { getAllByTestId, queryAllByTestId } = await act(async () =>
+      render(<App />),
+    );
+    const read = () => [
+      ...getAllByTestId("g").map((x) => x.textContent),
+      ...queryAllByTestId("l").map((x) => x.textContent),
+    ];
+    expect(read()).toEqual(["1"]);
+
+    await act(async () => {
+      startTransition(() => store.dispatch(2));
+    });
+    expect(read()).toEqual(["1"]);
+
+    // Mounts on what the tree shows, not on the pending transition.
+    await act(async () => reveal());
+    expect(read()).toEqual(["1", "1"]);
+
+    held = false;
+    await act(async () => release());
+    // Both move. Neither is left behind.
+    expect(read()).toEqual(["2", "2"]);
   });
 });
