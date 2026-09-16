@@ -125,9 +125,29 @@ function Counter() {
 }
 ```
 
-## Example
+## The gauntlet
 
-https://codesandbox.io/p/sandbox/react-concurrent-store-demo-hyqhws
+`packages/app` is a live demo of the behaviour this library exists for, in a
+real browser with real React and no test harness. Six panels, each driveable by
+hand, each with a **Run** that plays a scripted sequence slowly enough to watch
+and ends in a verdict showing every reading it took.
+
+```bash
+pnpm --filter @react-concurrent-store/app dev
+```
+
+| Panel | What you can watch |
+| --- | --- |
+| Rebasing | A sync action lands on what is on screen, then is re-ordered behind a held transition when that commits: the screen goes `bc` then `Abc` while the store reads `Ab` then `Abc` |
+| Nobody arrives early | A reader revealed mid-transition, and an `<Activity>` tree being shown, both wait for the tree instead of arriving on a version nothing else has |
+| Suspense | The fallback a sync update asks for, against the one a transition must not produce |
+| Error reset | Why resetting a boundary alone puts you straight back in the fallback, and what actually clears it |
+| Selectors | Committed render counts per reader, with no equality function |
+| Two roots | Separate `createRoot` trees sharing one store, one of them in StrictMode, with no provider |
+
+Readings come from a probe outside React, written from ref callbacks, layout
+effects and passive effects, so what a reader *committed* is distinguishable
+from what it merely rendered and from what was attached to the DOM.
 
 ## How It Works
 
