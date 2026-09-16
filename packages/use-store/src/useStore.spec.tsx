@@ -3245,3 +3245,102 @@ describe("Other concurrency surfaces", () => {
     expect(asFragment().textContent).toBe("5");
   });
 });
+
+describe("Commit tracking under a stalled render", () => {
+  afterEach(() => cleanup());
+
+  it("does not drop an action when a reader suspends between two sync dispatches", async () => {
+    const store = versioned.createStore<number, number>(0, (s, a) => s + a);
+    let release: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let gateArmed = false;
+
+    function Reader() {
+      const count = versioned.useStore(store);
+      // An unrelated reason to suspend, revealed by the first dispatch.
+      if (gateArmed && count > 0) use(gate);
+      return <div data-testid="out">{count}</div>;
+    }
+
+    const { getAllByTestId, asFragment } = await act(async () =>
+      render(
+        <Suspense fallback={<div data-testid="out">fallback</div>}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    expect(asFragment().textContent).toBe("0");
+
+    // First sync dispatch. The re-render suspends, so no layout effect runs
+    // and the store's commit pointer stays at 0 while head is 1.
+    gateArmed = true;
+    await act(async () => {
+      store.dispatch(1);
+    });
+    expect(asFragment().textContent).toContain("fallback");
+
+    // Second sync dispatch, still no transition anywhere. Head must be 3.
+    await act(async () => {
+      store.dispatch(2);
+    });
+    expect(store.getState()).toBe(3);
+
+    gateArmed = false;
+    await act(async () => release());
+
+    // The tree must show every dispatched action, not head-minus-the-stalled-one.
+    expect(getAllByTestId("out").map((n) => n.textContent)).toEqual(["3"]);
+  });
+});
+
+describe("Commit tracking with a stalled sibling", () => {
+  afterEach(() => cleanup());
+
+  it("never shows a state that skips an action when a sibling is suspended", async () => {
+    const store = versioned.createStore<number, number>(0, (s, a) => s + a);
+    let release: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let gateArmed = false;
+    const seen: number[] = [];
+
+    function Stalls() {
+      const count = versioned.useStore(store);
+      if (gateArmed && count > 0) use(gate);
+      return <div>{count}</div>;
+    }
+
+    function Watches() {
+      const count = versioned.useStore(store);
+      seen.push(count);
+      return <div data-testid="watch">{count}</div>;
+    }
+
+    const { getByTestId } = await act(async () =>
+      render(
+        <>
+          <Suspense fallback={<div>fallback</div>}>
+            <Stalls />
+          </Suspense>
+          <Watches />
+        </>,
+      ),
+    );
+    expect(seen).toEqual([0]);
+
+    gateArmed = true;
+    await act(async () => store.dispatch(1));
+    await act(async () => store.dispatch(2));
+
+    gateArmed = false;
+    await act(async () => release());
+
+    expect(getByTestId("watch").textContent).toBe("3");
+    // 2 would be 0 + the second action: a state in which the first never happened.
+    expect(seen).not.toContain(2);
+    expect(seen).toEqual([0, 1, 3]);
+  });
+});
