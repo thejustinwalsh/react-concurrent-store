@@ -225,7 +225,7 @@ nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
   gap: 5px;
   min-width: 0;
 }
-.side > header .row {
+.side > header .labels {
   display: flex;
   align-items: center;
   gap: 8px;
