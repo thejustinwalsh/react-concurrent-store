@@ -1,0 +1,68 @@
+---
+title: Server components and SSR
+description: Where a store can be created, what crosses the boundary, and what hydration costs.
+---
+
+Three different things get called "the server". A store behaves differently in
+each.
+
+## Server rendering a client component
+
+Nothing to do. A component reading a store renders its value into the HTML, and
+the client store is constructed from the same serialized state, so the first
+client render is the same render.
+
+```tsx
+"use client";
+
+export function Dashboard({ snapshot }: { snapshot: Stats }) {
+  const [store] = useState(() => createStore(snapshot));
+  const stats = useStore(store);
+  return <Orders value={stats.orders} />;
+}
+```
+
+There is no `getServerSnapshot` to supply. The value a store was created with
+already is one.
+
+## Creating a store in a server component
+
+`createStore` is not a Hook, and ships from its own entry so it can be imported
+where React's server build is:
+
+```tsx
+import { createStore } from "react-concurrent-store/store";
+
+export default async function Page() {
+  const totals = createStore({ orders: 0 }, (state, row) => ({
+    orders: state.orders + row.orders,
+  }));
+  for (const row of await fetchAccounts()) totals.dispatch(row);
+  return <Summary orders={totals.getState().orders} />;
+}
+```
+
+`useStore` is a Hook, so the main entry carries `"use client"` and cannot be
+pulled into a server graph.
+
+The store itself does not cross the boundary — it holds functions, so it is not
+serializable. A store created in a server component is for that render. One at
+module scope on a server is shared by every request.
+
+## Streaming a value the server has not finished fetching
+
+The store's *value* does cross, including as a promise the server never
+awaited. React serializes it, and the client puts it straight in:
+
+```tsx
+// a server component, with no await
+<Accounts rows={fetchAccounts()} />;
+
+// a client component
+const [store] = useState(() => createStore(rows));
+const data = use(useStore(store));
+```
+
+The shell is sent immediately and the rows arrive later in the same response. A
+refetch dispatched in a transition then keeps those rows on screen while the
+next ones load.

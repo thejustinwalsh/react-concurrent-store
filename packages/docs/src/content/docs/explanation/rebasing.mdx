@@ -1,0 +1,65 @@
+---
+title: Rebasing
+description: Why a blocking update lands on what is on screen, not on what the store knows.
+---
+
+A store keeps two versions of its state:
+
+- **everything** — every action applied, in the order it was dispatched.
+- **on screen** — only the ones a component is allowed to show right now.
+
+Every action goes into *everything*. An action dispatched inside
+`startTransition` does not go into *on screen*, and stays out until the screen
+catches up.
+
+## The situation it exists for
+
+A navigation is in flight and its page has not loaded. While the user waits,
+they like something.
+
+```tsx
+startTransition(() => store.dispatch({ type: "navigate", page: "profile" }));
+// ...the profile's data has not arrived...
+store.dispatch({ type: "like" });
+```
+
+The like has to be visible now. But the only state that contains it, in order,
+also contains a navigation to a page that cannot be rendered yet.
+
+Rebasing computes the third thing: the like applied to what is on screen.
+
+| | on screen | store |
+| --- | --- | --- |
+| navigating | `home/0` | `profile/0` |
+| after the like | `home/1` | `profile/1` |
+| after the page loads | `profile/1` | `profile/1` |
+
+The user sees their like immediately, never sees a half-loaded profile, and the
+final state has both actions in the order they were made.
+
+## Why the alternatives do not work
+
+**Show it applied to everything.** Showing the like would mean showing the
+navigation, and the page is not there. You get a fallback, or a screen the user
+did not ask for.
+
+**Hold it until the navigation lands.** The like does nothing for as long as the
+network takes. For a store the whole app shares, that is worse than it sounds:
+one slow Transition anywhere freezes every other update everywhere.
+
+**Read the store directly instead.** `getState()` returns *everything*, so a
+component that reads it sees `profile/0` the instant navigation starts — the
+page that has not loaded. To make that work you would need the version that has
+the like but not the navigation, which is the one rebasing computes.
+
+## What this costs
+
+An action dispatched outside a Transition, while one is in flight, is applied
+twice — once to each version — and the store notifies twice: what can be shown
+now, then the rest in a Transition. When nothing is in flight the two versions
+are the same and there is one notification.
+
+See [Limitations](/react-concurrent-store/explanation/limitations/) for the one
+thing this cannot do, and
+[React RFC #35449](https://github.com/facebook/react/issues/35449) for the API
+this follows.

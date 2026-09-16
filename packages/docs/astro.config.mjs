@@ -28,12 +28,33 @@ export default defineConfig({
       ],
       sidebar: [
         {
+          label: "Demo",
+          link: "https://react-use-store.tjw.dev",
+          attrs: { target: "_blank" },
+        },
+        {
           label: "Getting Started",
           items: [{ label: "Quick Start", slug: "quick-start" }],
         },
         {
+          label: "Guides",
+          items: [
+            { label: "Integrating an existing store", slug: "guides/integrating" },
+            { label: "Holding a promise in a store", slug: "guides/async" },
+            { label: "Server components and SSR", slug: "guides/server" },
+          ],
+        },
+        {
+          label: "Explanation",
+          items: [
+            { label: "Rebasing", slug: "explanation/rebasing" },
+            { label: "Selectors and re-renders", slug: "explanation/selectors" },
+            { label: "Limitations", slug: "explanation/limitations" },
+          ],
+        },
+        {
           label: "Reference",
-          items: [{ label: "API Reference", slug: "api" }],
+          items: [{ label: "API", slug: "reference/api" }],
         },
       ],
       plugins: [catppuccin()],

@@ -1,0 +1,110 @@
+---
+title: Limitations
+description: What a userland ponyfill cannot do, and what to expect instead.
+---
+
+React would implement this inside the reconciler, where it can add a reader to
+a transition that is already in flight. A library cannot, and that is the only
+thing on this page.
+
+## It reads one field out of React
+
+`useStore` needs to know one thing, and React does not expose it: whether the
+caller was inside `startTransition` when they dispatched. It reads that from
+
+```ts
+React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.T
+```
+
+Read, never written, and the only unsupported thing this package does. No
+experimental React build is needed — but that is why.
+
+It is not incidental. Make that read answer "never in a transition" and 43 of
+154 tests fail, including every transition case, and what is left behaves like
+`useSyncExternalStore`.
+
+It does not degrade quietly. If React ever stops exposing the field the first
+dispatch throws, naming it and pointing here. The field's own name is the
+contract — a package that touches it warns its users they cannot upgrade
+freely — and silently losing every transition is a worse way to find that out
+than a stack trace.
+
+React's own proof of concept ([facebook/react#33215](https://github.com/facebook/react/pull/33215))
+reads the same field for the same reason.
+
+There is no public replacement. A library can only be told by its caller:
+
+```tsx
+import { startTransition } from "react-concurrent-store"; // hypothetical
+startTransition(() => store.dispatch(navigate("/profile")));
+```
+
+That covers transitions you start, and misses every transition started on your
+behalf — which is most of them, because a router starts navigations inside
+itself. Being told is strictly weaker than being able to look.
+
+Which makes this the clearest case for the feature landing in React rather than
+against it. The information exists, the reconciler has it for free, and a
+userland store can only reach it by reaching somewhere it should not have to.
+
+## An effect keyed on the value runs twice when a reader lands behind
+
+A reader that appears while a transition is blocked shows what its siblings are
+showing, and corrects itself when the transition commits. The correction is
+made from a layout effect, which flushes before the browser paints, so it costs
+a render pass and not a frame — nothing torn is ever painted, and the demo
+asserts that by sampling every animation frame.
+
+What it does cost is a second run of any effect keyed on the value:
+
+```tsx
+const user = useStore(store);
+useEffect(() => {
+  // Runs for the value that was on screen, then again for the final one.
+  track(user.id);
+}, [user]);
+```
+
+If that matters for a particular effect, key it on the part you care about
+rather than the whole value, or do the work in an event handler instead.
+
+It is not removable from here. The fix is for that reader to join the
+transition already in flight and arrive with everyone else, and
+`startTransition` cannot do that: a transition started later commits as soon as
+nothing in it suspends, while the first is still blocked, which puts the reader
+*ahead* of its siblings instead. The suite shows that in plain React, with no
+store involved, under "Why a reader that lands behind cannot simply join the
+transition".
+
+Holding the component until it is correct removes the second Effect run, but
+one revealed by a blocking update then shows a Suspense fallback, and one with
+no sibling to commit for it never unblocks. Correcting from a layout Effect is
+the only option of the three with no correctness failure.
+
+## Rebasing applies actions to values, not to promises
+
+A store whose state is a promise has nothing for a blocking update to apply to:
+applying an action to a promise gives another promise, so the two versions
+rejoin and the update appears when the Transition does.
+
+Hold the resolved data in the store and let the promise be the transient:
+
+```tsx
+type State = Message[] | Promise<Message[]>;
+
+const store = createStore<State>(messages);
+
+// A refetch, in a transition. The list on screen stays up.
+startTransition(() => store.dispatch(fetchMessages()));
+
+// Blocking, and written against whichever version it lands on.
+store.dispatch((current: State) =>
+  current instanceof Promise ? current.then(markAllRead) : markAllRead(current),
+);
+```
+
+`createStore(fetchUser(1))` is fine as-is when each dispatch simply replaces the
+promise — see [Holding a promise in a store](/react-concurrent-store/guides/async/).
+The store warns in development if a blocking dispatch lands on promise state
+while a Transition is in flight, because that is the case where a rebase was
+probably expected.

@@ -1,183 +1,145 @@
 # react-concurrent-store
 
-Ponyfill of experimental React concurrent stores.
+A store for React 19 that works with Transitions, implementing the
+`createStore` / `useStore` API proposed in
+[React RFC #35449](https://github.com/facebook/react/issues/35449). No
+experimental React build.
 
-_Work In Progress_
-
-- [x] Update types and add support for stores without a reducer
-- [x] Add tests for Suspense and useTransition with async stores or stores of promises
-- [ ] Add docs site with interactive examples `(in-progress)`
-- [ ] Investigate SSR and streaming of promises and store values
-
-## Why
-
-Managing async resources with `useSyncExternalStore` breaks concurrency when [mutating the store during a non-blocking Transition](https://react.dev/reference/react/useSyncExternalStore#caveats). The React team has announced a new [concurrent store API](https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more#concurrent-stores) to resolve this issue.
-
-This package is a ponyfill based on the [initial stubs](https://github.com/facebook/react/pull/33215) of the concurrent store API as the `useStore` hook. The hook aims to implement this API in user land which allows for mutating during a non-blocking transition and does not de-opt to a synchronous update, avoiding the issue present in `useSyncExternalStore`.
-
-This ponyfill exists to generate feedback and to get a feel for the upcoming concurrent store API.
-This package will be deprecated once the concurrent store feature is released in the core React library.
-
-**You can use this package today as a ponyfill without using an experimental version of React.**
-
-## Usage
-
-```jsx
-import { createStore, useStore } from "react-use-store";
-import { Suspense, use } from "react";
-
-// Create a store that manages an async resource
-const fetchUser = async (id) => {
-  const response = await fetch(`/api/users/${id}`);
-  return response.json();
-};
-
-const userStore = createStore(fetchUser(1));
-
-function UserProfile() {
-  // useStore resolves and caches the value from calls to update between renders/transitions
-  // This behavior makes it trivial to work with promises and integrate with suspense
-  const userPromise = useStore(userStore);
-  const user = use(userPromise);
-
-  return (
-    <div>
-      <h1>{user.name}</h1>
-      <p>Email: {user.email}</p>
-      <button onClick={() => userStore.update(fetchUser(user.id + 1))}>
-        Load Next User
-      </button>
-    </div>
-  );
-}
-
-function App() {
-  return (
-    <Suspense fallback={<div>Loading user...</div>}>
-      <UserProfile />
-    </Suspense>
-  );
-}
-
-// You can also use stores with reducers, and the state doesn't have to be asynchronous
-const counterStore = createStore({ count: 0 }, (state, action) => {
-  switch (action.type) {
-    case "increment":
-      return { count: state.count + 1 };
-    case "decrement":
-      return { count: state.count - 1 };
-    default:
-      return state;
-  }
-});
-
-function Counter() {
-  const state = useStore(counterStore);
-
-  return (
-    <div>
-      <p>Count: {state.count}</p>
-      <button onClick={() => counterStore.update({ type: "increment" })}>
-        Increment
-      </button>
-      <button onClick={() => counterStore.update({ type: "decrement" })}>
-        Decrement
-      </button>
-    </div>
-  );
-}
+```bash
+npm install react-concurrent-store
 ```
 
-## Example
+## The problem
 
-https://codesandbox.io/p/sandbox/react-concurrent-store-demo-hyqhws
+React lets you mark an update as a Transition, so the current screen stays up
+while the next one gets ready. That works for state held in components. It does
+not work for state held in a store.
 
-## How It Works
+React's own documentation says why. A store changed during a Transition makes
+React [redo that update as a blocking one](https://react.dev/reference/react/useSyncExternalStore#caveats),
+and suspending on a value read through `useSyncExternalStore` replaces what is
+on screen with a fallback.
 
-This ponyfill uses the pattern of caching the initial state in a state initializer and registers
-for an update callback to update the cache within a transition when the state is updated. If the store value is a promise, passing that promise to the `use` hook will return the resolved value and integrate with concurrent react features and suspend.
+So a navigation that should have kept the current page up shows a spinner
+instead — and any update the user makes while waiting is stuck behind it.
 
-The implementation ensures that:
+## How it works
 
-- State updates are concurrent-safe
-- Components re-render when store values change
-- Store values are properly cached and life-cycled by React making it trivial to manage async resources optimally wth suspense.
-- The API matches the planned React concurrent stores feature
-- TypeScript types are properly inferred
+The store keeps two versions of its state:
 
-## Docs
+- **everything** — every action applied, in the order you dispatched them.
+- **on screen** — only the ones a component is allowed to show right now.
 
-Visit [https://thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store) for comprehensive documentation, API reference, and interactive examples.
+They are usually the same object. They come apart only while a Transition is in
+flight, and they rejoin when it commits.
 
-## API Reference
+What tells them apart is one thing, recorded when you dispatch: whether the
+caller was inside `startTransition`.
 
-### `createStore(initialValue, reducer?)`
+```tsx
+// Goes into "everything". Not shown until its data is ready.
+startTransition(() => store.dispatch({ type: "navigate", to: "/profile" }));
 
-Creates a new store with the given initial value and optional reducer function.
-
-**Parameters:**
-
-- `initialValue: T` - The initial value of the store
-- `reducer?: (currentValue: T, action: Action) => T` - Optional reducer function to handle state updates. For stores without actions, you can provide a reducer that takes only the current value: `(currentValue: T) => T`
-
-**Returns:** `ReactStore<T, Action>` - A store object with an `update` method
-
-### `useStore(store)`
-
-Hook that subscribes to a store and returns its current value. For stores managing async resources (promises), the returned value should be passed to React's `use()` hook within a Suspense boundary.
-
-**Parameters:**
-
-- `store: ReactStore<T, Action>` - The store to subscribe to
-
-**Returns:** `T` - The current value of the store (or Promise for async stores)
-
-#### `store.update(action?)`
-
-Updates the store with the given action. If a reducer was provided to `createStore`, it will be called with the current value and the action. If no reducer was provided, the action should be the new value. For reducers that don't take actions, you can call `update()` with no arguments.
-
-**Parameters:**
-
-- `action?: Action` - The action to dispatch, new value to set, or omitted for reducers without actions
-
-## Migration Path
-
-When React's concurrent stores feature becomes stable, you can migrate by:
-
-1. Replacing the import:
-
-```jsx
-// Before
-import { createStore, useStore } from "react-use-store";
-
-// After
-import { createStore, use } from "react";
+// Goes into both — and into "on screen" applied to the feed, not to the
+// profile that has not loaded.
+store.dispatch({ type: "like" });
 ```
 
-2. Replace `useStore` calls with direct `use` calls:
+A dispatch takes one of four paths:
 
-```jsx
-// Before (with this ponyfill)
-const userPromise = useStore(userStore);
-const user = use(userPromise);
+| when | what happens |
+| --- | --- |
+| nothing is in flight | both versions take it, one notification |
+| inside a Transition | only *everything* takes it, at Transition priority |
+| a blocking update while a Transition is in flight | *on screen* applies it to what is on screen; *everything* applies it in order. Two notifications: the first now, the second in a Transition |
+| a blocking update whose new value is a promise | the versions rejoin and the boundary shows a fallback — there is no version of a value that has not arrived |
 
-// After (with native React concurrent stores)
-const user = use(userStore);
+The third row is the whole point. The user's like is applied to the feed they
+are looking at rather than to the profile that is still loading, and when the
+profile arrives both actions are there in the order they were made.
+
+A component reads *on screen*. `getState()` returns *everything*. While a
+Transition is in flight those differ, deliberately.
+
+## How React would implement it
+
+Most of this package exists to reconstruct things the reconciler already knows.
+A version inside React keeps the idea and deletes the scaffolding.
+
+**It would read the Transition directly.** Knowing whether the caller was inside
+`startTransition` is the one thing this package cannot get from a public API —
+it reads an internal field, which is the only unsupported thing it does. React
+has that for free.
+
+**It would not need two versions of the state.** React already rebases its own
+update queue by lane: a `useState` update made during a Transition is replayed
+on top of whatever committed first. The two versions here are a hand-rolled
+copy of machinery React has.
+
+**It would let a component join a Transition already in flight.** This is the
+one behaviour userland cannot reproduce. `startTransition` can start a
+Transition but never join one, so a component that mounts while a Transition is
+blocked has to show what its siblings show and correct itself afterwards — which
+costs a second run of any Effect keyed on the value. React can add a fiber to a
+lane that already exists, and the problem disappears.
+
+**It would hand the render its value.** When a store changes, this package runs
+the selector once to decide whether to re-render and the component runs it again
+to produce the value. React schedules the render itself, so it can carry the
+value with it — one call instead of two.
+
+What is left is small: the decision above, which is about fifty lines.
+
+## What it reads from React
+
+```ts
+const clientInternals = (React as …).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+const transitionScope = (): unknown => clientInternals?.T ?? null;
 ```
 
-3. For synchronous stores, you may need to adjust based on the final React API, currently `use` will support anything that is a Usable, Context, or Store:
+Read, never written, and the only unsupported thing here. React's own proof of
+concept ([facebook/react#33215](https://github.com/facebook/react/pull/33215))
+reads the same field for the same reason.
 
-```jsx
-// Current ponyfill approach
-const state = useStore(counterStore);
+It is not incidental. Make that read answer "never in a Transition" and 44 of
+157 tests fail, including every Transition case, and what is left behaves like
+`useSyncExternalStore`. If React ever stops exposing it, the first dispatch
+throws rather than quietly losing every Transition.
 
-// Future native approach (TBD - API may differ)
-const state = use(counterStore);
+## API
+
+```ts
+createStore(initialValue)                    // an action is a value or an updater
+createStore(initialValue, reducer)           // an action is whatever the reducer takes
+
+useStore(store)                              // the whole value
+useStore(store, (state, previous) => slice)  // a slice; return `previous` to skip the render
+
+store.getState()
+store.dispatch(action)
+store.subscribe(action => {})
 ```
 
-The API is designed to be as close as possible to the proposed React concurrent stores feature. The main difference is that this ponyfill provides a `useStore` hook that returns a cached and life-cycled value, which you then pass to React's `use` hook for integration with suspense.
+`useStore` is a Hook, so the main entry carries `"use client"`. `createStore` is
+not, and ships separately for use in a Server Component:
 
-The `use` hook will accept a store directly in the expected final API.
+```ts
+import { createStore } from "react-concurrent-store/store";
+```
+
+[Full reference and guides](https://thejustinwalsh.com/react-concurrent-store)
+
+## The demo
+
+**[react-use-store.tjw.dev](https://react-use-store.tjw.dev)** — eight pages,
+each one live, covering navigation, mixed updates, selectors, refetching,
+server rendering and Server Components.
+
+Or run it yourself:
+
+```bash
+pnpm --filter @react-concurrent-store/app dev
+```
 
 ## License
 
