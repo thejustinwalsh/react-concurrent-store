@@ -24,16 +24,6 @@
         "types": "./dist/withEqualityFn.d.ts",
         "default": "./dist/withEqualityFn.cjs"
       }
-    },
-    "./urgent": {
-      "import": {
-        "types": "./dist/urgent.d.ts",
-        "default": "./dist/urgent.js"
-      },
-      "require": {
-        "types": "./dist/urgent.d.ts",
-        "default": "./dist/urgent.cjs"
-      }
     }
   },
   "files": [

@@ -182,18 +182,12 @@ store.dispatch(action)
 store.subscribe(action => {})                   // getState() is up to date inside the callback
 ```
 
-Two wrappers ship from their own entry points, so they cost nothing unless
-imported:
+An equality-function wrapper ships from its own entry point so it costs nothing
+unless imported:
 
 ```ts
 import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
-import { useStoreUrgent } from "react-concurrent-store/urgent";
 ```
-
-`useStore` honours what the caller said — a dispatch inside `startTransition`
-reaches its readers as a transition. `useStoreUrgent` is a deliberate opt out
-for one reader that cannot wait, and it reads the urgent fold rather than the
-chronological state, so it never lands on a transition that has not arrived.
 
 Full reference, guides, and the one thing a userland version cannot do:
 [thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store)
