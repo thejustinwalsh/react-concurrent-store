@@ -5186,3 +5186,74 @@ describe("Unsubscribing is constant time", () => {
     expect(array).toBeGreaterThan(store);
   });
 });
+
+describe("How many times a selector runs", () => {
+  /**
+   * In reduxjs/react-redux#2263 this ponyfill was swapped in under
+   * `useSelector` and every selector-call assertion had to be raised — "the
+   * new implementation is calling selectors a lot more". The counts are pinned
+   * here so that cannot regress silently again.
+   *
+   * Two calls per change, and they are different questions asked of different
+   * states: the publish asks whether this reader's slice moved at all, and the
+   * render asks what the value is. A change to a slice nobody selected costs
+   * the first and skips the second, which is the one that matters — it is why
+   * the cost is linear in readers rather than in readers times updates.
+   */
+  type Both = { a: number; b: number };
+
+  afterEach(() => cleanup());
+
+  const countCalls = async (wrap: (tree: React.ReactNode) => React.ReactNode) => {
+    const store = createStore<Both, Partial<Both>>(
+      { a: 0, b: 0 },
+      (state, patch) => ({ ...state, ...patch }),
+    );
+    let calls = 0;
+    // Declared once, as a real selector is: an inline arrow would be a
+    // different function on every render and could never be memoised.
+    const selectA = (state: Both) => {
+      calls++;
+      return state.a;
+    };
+    function Reader() {
+      return <span>{useStore(store, selectA)}</span>;
+    }
+
+    const counts: Record<string, number> = {};
+    const since = (label: string) => {
+      counts[label] = calls;
+      calls = 0;
+    };
+
+    await act(async () => render(wrap(<Reader />)));
+    since("mount");
+    await act(async () => store.dispatch({ a: 1 }));
+    since("selected");
+    await act(async () => store.dispatch({ b: 1 }));
+    since("unrelated");
+    await act(async () => startTransition(() => store.dispatch({ a: 2 })));
+    since("transition");
+    return counts;
+  };
+
+  it("runs twice for a change it selects and once for one it does not", async () => {
+    expect(await countCalls((tree) => tree)).toEqual({
+      mount: 2,
+      selected: 2,
+      unrelated: 1,
+      transition: 2,
+    });
+  });
+
+  it("costs one more per change under StrictMode, which double-renders", async () => {
+    expect(
+      await countCalls((tree) => <StrictMode>{tree}</StrictMode>),
+    ).toEqual({
+      mount: 3,
+      selected: 3,
+      unrelated: 1,
+      transition: 3,
+    });
+  });
+});
