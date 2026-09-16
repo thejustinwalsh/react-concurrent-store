@@ -5382,3 +5382,73 @@ describe("An urgent update while a fetch is outstanding", () => {
     expect(onScreen()).toBe("x!,y!");
   });
 });
+
+describe("Warning when there is nothing to rebase onto", () => {
+  /**
+   * `createStore(fetchUser(1))` is a supported and documented shape: each
+   * dispatch replaces the promise, `use` unwraps it, Suspense does the rest.
+   * Nothing about it needs rebasing.
+   *
+   * What does not work is expecting a rebase while the state on screen is
+   * itself a promise. Rebasing folds an action over a value, and there is no
+   * value — so the fold produces another promise, the two folds rejoin, and
+   * the urgent update quietly waits for the transition instead of landing.
+   * Correct, and impossible to guess from the outside, so it says so.
+   */
+  afterEach(() => cleanup());
+
+  it("says so when an urgent dispatch lands on promise state mid-transition", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = createStore<Promise<number>>(Promise.resolve(1));
+    let arrive!: (n: number) => void;
+    const fetching = new Promise<number>((resolve) => (arrive = resolve));
+
+    // A mounted reader, so the publish is taken and the folds stay parted.
+    // With nobody reading, a publish settles and there is no rebasing to warn
+    // about in the first place.
+    function Reader() {
+      return <span data-testid="v">{use(useStore(store))}</span>;
+    }
+    await act(async () =>
+      render(
+        <Suspense fallback={<span>loading</span>}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+
+    await act(async () => {
+      startTransition(() => store.dispatch(fetching));
+    });
+    expect(warn).not.toHaveBeenCalled();
+
+    await act(async () => {
+      store.dispatch((current: Promise<number>) =>
+        current.then((n) => n + 1),
+      );
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("nothing to rebase onto");
+
+    // Once per store, not once per dispatch.
+    await act(async () => {
+      store.dispatch((current: Promise<number>) => current.then((n) => n + 1));
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    await act(async () => arrive(9));
+    warn.mockRestore();
+  });
+
+  it("stays quiet for the ordinary promise-valued store", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = createStore<Promise<number>>(Promise.resolve(1));
+
+    await act(async () => store.dispatch(Promise.resolve(2)));
+    await act(async () => {
+      startTransition(() => store.dispatch(Promise.resolve(3)));
+    });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

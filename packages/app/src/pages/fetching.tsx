@@ -6,18 +6,19 @@ import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
 
 /**
- * Fate's read hooks are `use(useDeferredValue(promise))` and
- * `use(useDeferredValue(useSyncExternalStore(...)))`. TanStack Query spells the
- * same idea `placeholderData: keepPreviousData`. Both are a transition rebuilt
- * by hand at the read site, because the reading hook threw the real one away.
+ * fate's `useRequest` ends in `use(useDeferredValue(promise))`: a transition
+ * rebuilt by hand at the read site, because the request is read as a promise
+ * rather than as state. It works, and for a plain refetch there is nothing
+ * between it and this.
  *
- * They work, and for a plain refetch there is nothing between them and this.
  * The ceiling is that a deferred value can only hold the value that was there
- * before. It cannot hold the value that was there before plus the thing you
- * just did — there is one value and one urgency, so an optimistic patch and a
- * slow refetch cannot both win.
+ * before. It cannot hold that value with the thing you just did applied,
+ * because there is one value and one urgency.
  *
- * Both columns hold a promise of the same messages and refetch in the same way.
+ * Not a claim about TanStack Query, whose cache holds resolved data
+ * (`QueryState.data`) rather than a promise — `setQueryData` during a refetch
+ * of the same key lands fine. Its friction is the `useSyncExternalStore`
+ * de-opt, which is the Router page.
  */
 
 type Message = { id: string; from: string; subject: string; read: boolean };
@@ -153,7 +154,7 @@ export function FetchingPage() {
         <div className="pair">
           <Side
             how="use(useDeferredValue(promise))"
-            tag="fate · keepPreviousData"
+            tag="fate · useRequest"
             kind="today"
             fallback={<Blocked what="loading…" why="Nothing to show yet." />}
             note={

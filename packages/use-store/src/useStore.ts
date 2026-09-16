@@ -206,6 +206,9 @@ export function createStore<S, A>(
     if (handle.version > committed.version) committed = handle;
   };
 
+  // Said once per store rather than once per dispatch.
+  let warned = false;
+
   const store: ConcurrentStoreInternals<S, A> = {
     dispatch(action) {
       // Recorded where it is known, rather than re-derived later from whether
@@ -237,6 +240,21 @@ export function createStore<S, A>(
       // it a promise to suspend on — which is what lets an urgent update made
       // while a fetch is outstanding land on the list that is on screen.
       const collapsed = urgent && isThenable(syncValue);
+
+      if (collapsed && rebasing && isThenable(sync.value) && !warned) {
+        warned = true;
+        // Only reachable when the caller dispatched urgently, a transition was
+        // outstanding, and the state the tree is showing is itself a promise.
+        // Replacing a promise-valued store is ordinary and silent; this is the
+        // narrower case of expecting the urgent update to appear now.
+        console.warn(
+          "[react-concurrent-store] An urgent dispatch landed while the state " +
+            "on screen is still a promise, so there is nothing to rebase onto " +
+            "and it will appear when the pending transition does. Hold the " +
+            "resolved data in the store and dispatch the promise only while a " +
+            "refetch is in flight.",
+        );
+      }
 
       if (collapsed) {
         head = makeHandle(headValue, ++version);
