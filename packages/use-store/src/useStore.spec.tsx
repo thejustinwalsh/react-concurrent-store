@@ -1130,6 +1130,93 @@ describe("Server rendering", () => {
     expect(container.querySelector("#out")?.textContent).toBe("count: 8");
   });
 
+  /**
+   * The question behind issue #23: useSyncExternalStore takes a
+   * getServerSnapshot so a reader can render the server's value during
+   * hydration even though the client store has moved on. There is no such
+   * option here, because the initial value IS the snapshot — so what happens
+   * when the store moves before React gets to run?
+   *
+   * It mismatches, and React recovers by rendering the client's value. The
+   * boundary is the hydration commit rather than the hydrateRoot call, so a
+   * dispatch racing hydration mismatches as well. Both are recorded below.
+   * Nothing userland can reach says "this render is a hydration", so the
+   * answer is the sequencing, not an option on the hook: let hydration commit
+   * before the store moves.
+   */
+  it("mismatches if the store moves between the server render and hydration", async () => {
+    const make = (initial: State) => createStore<State, Action>(initial, reducer);
+    function App({ store }: { store: ReturnType<typeof make> }) {
+      const count = useStore(store, (state: State) => state.count);
+      return <div id="out">count: {count}</div>;
+    }
+
+    const html = renderToString(<App store={make({ count: 7 })} />);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const errors: string[] = [];
+    const spy = vi
+      .spyOn(console, "error")
+      .mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      });
+
+    const client = make({ count: 7 });
+    client.dispatch({ type: "INCREMENT" });
+
+    await act(async () => {
+      hydrateRoot(container, <App store={client} />);
+    });
+    spy.mockRestore();
+
+    expect(
+      errors.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
+    ).toBeGreaterThan(0);
+    // Recovered, rather than stuck on the stale server text.
+    expect(container.querySelector("#out")?.textContent).toBe("count: 8");
+  });
+
+  it("mismatches for a dispatch made before the hydration commit, too", async () => {
+    const make = (initial: State) => createStore<State, Action>(initial, reducer);
+    function App({ store }: { store: ReturnType<typeof make> }) {
+      const count = useStore(store, (state: State) => state.count);
+      return <div id="out">count: {count}</div>;
+    }
+
+    const html = renderToString(<App store={make({ count: 7 })} />);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const errors: string[] = [];
+    const spy = vi
+      .spyOn(console, "error")
+      .mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      });
+
+    const client = make({ count: 7 });
+    await act(async () => {
+      hydrateRoot(container, <App store={client} />);
+      // An event fires before hydration has finished — the realistic case, and
+      // the one a getServerSnapshot would cover.
+      client.dispatch({ type: "INCREMENT" });
+    });
+    spy.mockRestore();
+
+    // The boundary is the hydration commit, not the hydrateRoot call.
+    expect(
+      errors.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
+    ).toBeGreaterThan(0);
+    expect(container.querySelector("#out")?.textContent).toBe("count: 8");
+
+    // Live and correct from there on, which is the part that matters.
+    await act(async () => client.dispatch({ type: "INCREMENT" }));
+    expect(container.querySelector("#out")?.textContent).toBe("count: 9");
+  });
+
   it("renders to string with the plain useStore hook", () => {
     const store = createStore<State, Action>({ count: 3 }, reducer);
     function App() {
