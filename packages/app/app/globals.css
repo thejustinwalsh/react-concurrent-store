@@ -17,6 +17,8 @@
      to the same edges, so nothing hugs the left when the window is wide. */
   --page: 1024px;
   --gutter: max(20px, calc((100% - var(--page)) / 2));
+  /* Reading measure, in absolute units so every block ends on the same line. */
+  --prose: 680px;
 
   /* Tints, derived rather than hand-picked, so the palette stays one thing. */
   --tint-ok: color-mix(in srgb, var(--ok) 28%, var(--line));
@@ -169,12 +171,10 @@ nav.tabs .tab:hover { color: var(--ink); }
 nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
 
 .lede { padding: 22px var(--gutter) 4px; }
-/* Prose keeps a readable measure while its block aligns with everything else. */
-.lede p,
-.lede .youwill,
-.lede .callout,
-.lede .tryit,
-.lede pre { max-width: 74ch; }
+/* One measure for everything in a lede. `ch` resolves against each element's
+   own font-size, so the same ch value gives a paragraph and a callout
+   different widths and a ragged right edge. */
+.lede > * { max-width: var(--prose); }
 .lede h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
 .lede p { margin: 0 0 12px; color: var(--dim); font-size: 13.5px; line-height: 1.6; }
 .lede code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
