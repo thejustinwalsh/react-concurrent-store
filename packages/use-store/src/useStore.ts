@@ -78,8 +78,13 @@ export interface ReactConcurrentStore<S, A> {
  */
 export interface ConcurrentStoreInternals<S, A>
   extends ReactConcurrentStore<S, A> {
-  /** Subscribe to published handles; readers need to know *which* was sent. */
-  _subscribe(listener: (handle: StoreHandle<S>) => void): () => void;
+  /**
+   * Subscribe to published handles; readers need to know *which* was sent.
+   * A listener returns whether it took the handle. A publish nobody takes
+   * renders nothing, so there is nothing for the tree to catch up to and the
+   * commit pointer can move with it.
+   */
+  _subscribe(listener: (handle: StoreHandle<S>) => boolean): () => void;
   /**
    * Subscribe to the commit pointer moving forward. Separate from
    * `_subscribe` on purpose: this fires during commit, and routing it through
@@ -133,11 +138,14 @@ export function createStore<S, A>(
   let committed = head;
   let published = head;
 
-  const listeners = new Set<(handle: StoreHandle<S>) => void>();
+  const listeners = new Set<(handle: StoreHandle<S>) => boolean>();
   const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
   const actionListeners = new Set<(action: A) => void>();
+  /** Returns how many readers took the handle. */
   const notify = (handle: StoreHandle<S>) => {
-    for (const listener of listeners) listener(handle);
+    let taken = 0;
+    for (const listener of listeners) if (listener(handle)) taken += 1;
+    return taken;
   };
   const notifyAction = (action: A) => {
     for (const callback of actionListeners) callback(action);
@@ -169,9 +177,13 @@ export function createStore<S, A>(
         sync = head;
         published = head;
         notifyAction(action);
-        // Nothing mounted means nothing to tear against.
-        if (listeners.size === 0) committed = head;
-        notify(head);
+        const taken = notify(head);
+        // Nobody took it: either nothing is mounted, or every reader's slice
+        // is unchanged. No render is coming, so the tree is already showing
+        // everything this state says, and the pointer must move with it.
+        // Leaving it behind makes the next dispatch look like a rebase and
+        // rebuild from a state this action was never applied to.
+        if (taken === 0) committed = head;
         return;
       }
 
@@ -298,17 +310,19 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
 
   useLayoutEffect(() => {
     // No startTransition: the update inherits the dispatching caller's priority.
+    // Keyed on the handle as well, so the decision can be made here and
+    // reported, rather than inside setHandle where the answer is not visible.
     return store._subscribe((next) => {
-      setHandle((prev) =>
-        // Never backwards: versions rise with every handle a store makes,
-        // including the rebased one, so an older handle is one this reader has
-        // already moved past.
-        prev.version >= next.version || Object.is(prev.value, next.value)
-          ? prev
-          : next,
-      );
+      // Never backwards: versions rise with every handle a store makes,
+      // including the rebased one, so an older handle is one this reader has
+      // already moved past.
+      if (handle.version >= next.version || Object.is(handle.value, next.value)) {
+        return false;
+      }
+      setHandle(next);
+      return true;
     });
-  }, [store]);
+  }, [store, handle]);
 
   useLayoutEffect(() => {
     const head = store._head;
@@ -389,31 +403,32 @@ export function createSelectorStore<S, A, T>(
   let forwarded = source._head;
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
-  const listeners = new Set<(handle: StoreHandle<S>) => void>();
+  const listeners = new Set<(handle: StoreHandle<S>) => boolean>();
   const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
 
-  const publish = (published: StoreHandle<S>) => {
+  const pass = (published: StoreHandle<S>) => {
+    forwarded = published;
+    let taken = 0;
+    for (const listener of listeners) if (listener(published)) taken += 1;
+    return taken > 0;
+  };
+
+  const publish = (published: StoreHandle<S>): boolean => {
     head = published;
-    if (selector === undefined) {
-      forwarded = published;
-      for (const listener of listeners) listener(published);
-      return;
-    }
+    if (selector === undefined) return pass(published);
     let next: T;
     try {
       next = selector(published.value, last?.value);
     } catch {
       // Cannot decide: forward and let render settle it.
-      forwarded = published;
-      for (const listener of listeners) listener(published);
-      return;
+      return pass(published);
     }
-    if (last !== null && Object.is(next, last.value)) {
-      return;
-    }
+    // The slice did not move, so this view's readers render nothing. Saying so
+    // is what lets the store tell "nobody is behind" from "somebody has not
+    // caught up yet".
+    if (last !== null && Object.is(next, last.value)) return false;
     last = { value: next };
-    forwarded = published;
-    for (const listener of listeners) listener(published);
+    return pass(published);
   };
 
   const attach = () => {

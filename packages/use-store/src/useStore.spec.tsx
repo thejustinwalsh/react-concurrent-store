@@ -1156,23 +1156,20 @@ describe("Server rendering", () => {
     container.innerHTML = html;
     document.body.appendChild(container);
 
-    const errors: string[] = [];
-    const spy = vi
-      .spyOn(console, "error")
-      .mockImplementation((...args: unknown[]) => {
-        errors.push(args.map(String).join(" "));
-      });
-
+    // React reports hydration mismatches on the recoverable-error channel. A
+    // console spy does not consume them, and an unconsumed one fails the run.
+    const recoverable: string[] = [];
     const client = make({ count: 7 });
     client.dispatch({ type: "INCREMENT" });
 
     await act(async () => {
-      hydrateRoot(container, <App store={client} />);
+      hydrateRoot(container, <App store={client} />, {
+        onRecoverableError: (error) => recoverable.push(String(error)),
+      });
     });
-    spy.mockRestore();
 
     expect(
-      errors.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
+      recoverable.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
     ).toBeGreaterThan(0);
     // Recovered, rather than stuck on the stale server text.
     expect(container.querySelector("#out")?.textContent).toBe("count: 8");
@@ -1190,25 +1187,20 @@ describe("Server rendering", () => {
     container.innerHTML = html;
     document.body.appendChild(container);
 
-    const errors: string[] = [];
-    const spy = vi
-      .spyOn(console, "error")
-      .mockImplementation((...args: unknown[]) => {
-        errors.push(args.map(String).join(" "));
-      });
-
+    const recoverable: string[] = [];
     const client = make({ count: 7 });
     await act(async () => {
-      hydrateRoot(container, <App store={client} />);
+      hydrateRoot(container, <App store={client} />, {
+        onRecoverableError: (error) => recoverable.push(String(error)),
+      });
       // An event fires before hydration has finished — the realistic case, and
       // the one a getServerSnapshot would cover.
       client.dispatch({ type: "INCREMENT" });
     });
-    spy.mockRestore();
 
     // The boundary is the hydration commit, not the hydrateRoot call.
     expect(
-      errors.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
+      recoverable.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
     ).toBeGreaterThan(0);
     expect(container.querySelector("#out")?.textContent).toBe("count: 8");
 
@@ -4007,5 +3999,58 @@ describe("Reordering keys", () => {
     await act(async () => release());
     // The chronological order folds the transition's value onto the sync one.
     expect(read()).toEqual(["c:3", "b:2", "a:1"]);
+  });
+});
+
+describe("A publish nobody takes", () => {
+  type Pair = { a: number; b: number };
+
+  afterEach(() => cleanup());
+
+  /**
+   * Ordinary selector use, no transition anywhere. When every reader's slice
+   * is unchanged, nothing re-renders, so nothing reports a commit. If the
+   * commit pointer is left behind on that, the next dispatch is misread as a
+   * rebase and rebuilds from a state the earlier action was never applied to —
+   * and that state is what a later reader mounts on.
+   */
+  it("still moves the commit pointer, so the next dispatch is not misread", async () => {
+    const store = createStore<Pair, "a" | "b">({ a: 0, b: 0 }, (s, which) =>
+      which === "a" ? { ...s, a: s.a + 1 } : { ...s, b: s.b + 1 },
+    );
+
+    function OnlyB() {
+      const b = useStore(store, (s: Pair) => s.b);
+      return <span data-testid="b">{`b=${b}`}</span>;
+    }
+    function Full() {
+      const s = useStore(store);
+      return <span data-testid="full">{`${s.a}/${s.b}`}</span>;
+    }
+
+    let reveal!: () => void;
+    function App() {
+      const [showFull, setShowFull] = useState(false);
+      reveal = () => setShowFull(true);
+      return (
+        <>
+          <OnlyB />
+          {showFull && <Full />}
+        </>
+      );
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+
+    // Nobody selects `a`, so this renders nothing at all.
+    await act(async () => store.dispatch("a"));
+    await act(async () => store.dispatch("b"));
+    expect(getByTestId("b").textContent).toBe("b=1");
+    expect(store.getState()).toEqual({ a: 1, b: 1 });
+
+    // A reader mounting now must see both actions, not just the one its
+    // sibling happened to care about.
+    await act(async () => reveal());
+    expect(getByTestId("full").textContent).toBe("1/1");
   });
 });
