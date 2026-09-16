@@ -1,149 +1,83 @@
 ---
 title: API Reference
-description: Complete API reference for React Concurrent Store
+description: createStore, useStore, and the store object.
 ---
 
-import { Tabs, TabItem } from "@astrojs/starlight/components";
+## `createStore(initialValue, reducer?)`
 
-## createStore
-
-Creates a new concurrent store that can hold values or promises.
-
-### Signatures
-
-<Tabs>
-  <TabItem label="Simple Store">
-    ```tsx
-    function createStore<Value>(
-      initialValue: Value
-    ): ReactConcurrentStore<Value, Value>
-    ```
-    
-    Creates a store where updates replace the current value directly.
-    
-    **Example:**
-    ```tsx
-    const counterStore = createStore(0);
-    counterStore.dispatch(5); // Sets value to 5
-    ```
-  </TabItem>
-  
-  <TabItem label="With Reducer (No Action)">
-    ```tsx
-    function createStore<Value>(
-      initialValue: Value,
-      reducer: (currentValue: Value) => Value
-    ): ReactConcurrentStore<Value, void>
-    ```
-    
-    Creates a store with a reducer function that doesn't accept actions.
-    
-    **Example:**
-    ```tsx
-    const incrementStore = createStore(0, (current) => current + 1);
-    incrementStore.dispatch(); // Increments by 1
-    ```
-  </TabItem>
-  
-  <TabItem label="With Reducer and Actions">
-    ```tsx
-    function createStore<Value, Action>(
-      initialValue: Value,
-      reducer: (currentValue: Value, action: Action) => Value
-    ): ReactConcurrentStore<Value, Action>
-    ```
-    
-    Creates a store with a reducer function that accepts actions.
-    
-    **Example:**
-    ```tsx
-    type CounterAction = { type: 'increment' } | { type: 'decrement' } | { type: 'set'; value: number };
-    
-    const counterStore = createStore(0, (current, action: CounterAction) => {
-      switch (action.type) {
-        case 'increment': return current + 1;
-        case 'decrement': return current - 1;
-        case 'set': return action.value;
-      }
-    });
-    
-    counterStore.dispatch({ type: 'increment' });
-    counterStore.dispatch({ type: 'set', value: 10 });
-    ```
-  </TabItem>
-</Tabs>
-
-### Parameters
-
-- **`initialValue`**: The initial value or promise for the store
-- **`reducer`** _(optional)_: A function that determines how the store value should be updated
-
-### Returns
-
-A `ReactConcurrentStore` object with a `dispatch` method for updating the store.
-
----
-
-## useStore
-
-A React hook that subscribes to a store and returns its current value.
-
-### Signature
+Creates a store. Call it outside a component, or once per mount with
+`useState`.
 
 ```tsx
-function useStore<S>(store: ReactConcurrentStore<S, A>): S;
-function useStore<S, T>(
-  store: ReactConcurrentStore<S, A>,
-  selector: (state: S, previous: T | undefined) => T,
-): T;
+const counter = createStore(0);
+const todos = createStore([], (state, action) => reduce(state, action));
 ```
 
 ### Parameters
 
-- **`store`**: A store created with `createStore`
-- **`selector`** _(optional)_: Narrows the state to a slice. It receives the
-  current state and its own previous result; returning that previous value
-  unchanged tells `useStore` nothing has changed and skips the render.
-
-### Equality functions
-
-`useStore` takes no equality function, the same way React ships
-`useSyncExternalStore` without one. Returning the previous result from a
-selector is the built-in mechanism, and an equality-function wrapper is
-provided from its own entry point so it costs nothing unless imported:
-
-```tsx
-import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
-
-const slice = useStoreWithEqualityFn(
-  store,
-  (state) => ({ id: state.id, name: state.name }),
-  shallowEqual,
-);
-```
+- **`initialValue`**: the store's starting value. It may be a promise.
+- **optional** **`reducer`**: `(state, action) => nextState`. Without one, an
+  action is either a replacement value or an updater, `(previous) => next`,
+  like the setter from `useState`.
 
 ### Returns
 
-The current value of the store. If the store contains a promise, the component will suspend until the promise resolves.
+A store with `getState`, `dispatch` and `subscribe`.
 
-### Example
+### Caveats
 
-```tsx
-function UserProfile() {
-  const userPromise = useStore(userStore);
-  const user = use(userPromise); // Will suspend if promise is pending
-
-  return <h1>{user.name}</h1>;
-}
-```
+- `createStore` is not a Hook, so it can be called in a Server Component —
+  import it from `react-concurrent-store/store`, because the main entry also
+  exports `useStore` and carries a `"use client"` directive. See
+  [Server components and SSR](/react-concurrent-store/guides/server/).
+- The store itself is not serializable, so it cannot be passed from a Server
+  Component to a Client Component. Its value can.
+- A store at module scope on a server is shared by every request.
 
 ---
 
-## ReactConcurrentStore
+## `useStore(store, selector?)`
 
-The store object returned by `createStore`.
+Subscribes a component to a store.
 
-### Type Definition
+```tsx
+const count = useStore(counter);
+const name = useStore(user, (state) => state.name);
+```
+
+### Parameters
+
+- **`store`**: a store from `createStore`.
+- **optional** **`selector`**: `(state, previous) => slice`. It receives the
+  current state and its own previous result. Return that previous value and
+  the render is skipped.
+
+### Returns
+
+The store's current value, or the selected slice.
+
+If the value is a promise, `useStore` returns the promise — it does not unwrap
+it. Pass it to `use` to suspend:
+
+```tsx
+const user = use(useStore(userStore));
+```
+
+### Caveats
+
+- `useStore` is a Hook, so it only runs in a Client Component.
+- The value a component reads is what the tree is allowed to show, which is not
+  always what `getState()` returns. While a Transition is in flight they differ
+  on purpose — see [Rebasing](/react-concurrent-store/explanation/rebasing/).
+- An Effect keyed on the value runs twice when a component mounts while a
+  Transition is blocked. See
+  [Limitations](/react-concurrent-store/explanation/limitations/).
+- There is no equality argument. See
+  [Selectors and re-renders](/react-concurrent-store/explanation/selectors/).
+
+---
+
+## The store object
 
 ```tsx
 type ReactConcurrentStore<S, A> = {
@@ -153,73 +87,34 @@ type ReactConcurrentStore<S, A> = {
 };
 ```
 
-### Methods
+### `dispatch(action)`
 
-#### `dispatch(action)`
+Applies an action. Whether it is urgent is decided by the caller, the same way
+it is for any other update:
 
-Updates the store's value. The behavior depends on how the store was created:
+```tsx
+store.dispatch(action);                        // visible now
+startTransition(() => store.dispatch(action)); // may wait
+```
 
-- **No reducer**: the action is either a replacement value or an updater,
-  `(previous) => next`, like `useState`'s setter
-- **With a reducer**: the reducer is called with the current value and the action
+### `getState()`
 
-#### `getState()`
+Returns every action in dispatch order — the chronological value, which is not
+necessarily what any component is showing. For reading outside React.
+Components use `useStore`.
 
-Returns the current value. For reading outside React — components should use
-`useStore`.
-
-#### `subscribe(callback)`
+### `subscribe(callback)`
 
 Calls `callback` after each update with the action that caused it, and returns
-an unsubscribe function. This is what lets an external store stay in step
-without exposing its reducer.
-
-The store has applied the action by the time the callback runs, so `getState()`
-inside it reports the state that action produced:
+an unsubscribe function. The action has already been applied, so `getState()`
+inside the callback includes it:
 
 ```tsx
-store.subscribe(() => {
-  persist(store.getState()); // the state including the action just dispatched
-});
-```
-
-That guarantee is what lets this pair drive `useSyncExternalStore` directly,
-which is the way to read a store urgently while everything else is waiting on a
-transition:
-
-```tsx
-// Updates at the caller's priority rather than waiting for a pending
-// transition. That is a deliberate divergence from the rest of the tree —
-// this reader has opted out of the transition, the way useDeferredValue opts
-// into lagging behind one.
-const value = useSyncExternalStore(store.subscribe, store.getState);
-```
-
-Note that `getState()` reports the chronological state — every action in
-dispatch order — not what the tree is currently showing. Inside components,
-`useStore` is what shows what the tree shows.
-
-**Parameters:**
-
-- **`action`**: The new value or action to apply to the store
-
-**Example:**
-
-```tsx
-// Simple store
-const simpleStore = createStore("hello");
-simpleStore.dispatch("world"); // Value becomes "world"
-
-// Store with reducer
-const counterStore = createStore(
-  0,
-  (current, action: number) => current + action,
-);
-counterStore.dispatch(5); // Adds 5 to current value
+store.subscribe(() => persist(store.getState()));
 ```
 
 ---
 
 ## Requirements
 
-React >=19.0.0.
+React 19 or later.

@@ -1,21 +1,19 @@
 ---
 title: Integrating an existing store
-description: What to do when your store library breaks under startTransition.
+description: Adopting this from Redux, Zustand or TanStack Store.
 ---
 
-Redux, Zustand and TanStack Store all read state through
-`useSyncExternalStore`. That hook is [documented to de-opt](https://react.dev/reference/react/useSyncExternalStore#caveats):
-when the store changes during a non-blocking transition, React redoes the
-update as blocking. Your `startTransition` becomes a synchronous render, and a
-slow tree blocks input — or drops to a Suspense fallback.
+Redux, Zustand and TanStack Store all read through `useSyncExternalStore`,
+which is [documented to de-opt](https://react.dev/reference/react/useSyncExternalStore#caveats):
+a store mutated during a Transition makes React redo that update as a blocking
+one. Your `startTransition` becomes a synchronous render, and the tree drops to
+a Suspense fallback rather than waiting.
 
-This store is the concurrent-safe alternative. How you adopt it depends on
-whether you own the reducer.
+How you adopt this depends on whether you own the reducer.
 
-## If you own the reducer — Redux
+## If you own the reducer
 
-You gave `configureStore` a reducer, so you can hand the same one here and get
-a store that folds the same actions:
+You already gave `configureStore` a reducer. Hand the same one here:
 
 ```ts
 import { createStore } from "react-concurrent-store";
@@ -23,9 +21,9 @@ import { createStore } from "react-concurrent-store";
 const store = createStore(preloadedState, rootReducer);
 ```
 
-That store is complete: `getState`, `dispatch`, `subscribe`. If you only need
-Redux for middleware and devtools, keep the Redux store and dispatch to both;
-they fold the same actions from the same starting state, so they stay in step.
+That store is complete — `getState`, `dispatch`, `subscribe`. If you keep Redux
+for middleware and devtools, dispatch to both. They fold the same actions from
+the same starting state, so they stay in step:
 
 ```ts
 const dispatch = (action) => {
@@ -36,25 +34,27 @@ const dispatch = (action) => {
 
 Two copies of state is a real cost. Prefer one store where you can.
 
-## If the store owns its state — Zustand, TanStack Store
+## If the store owns its state
 
-These publish whole snapshots and do not expose a reducer, so from outside the
-library the only option is to mirror each snapshot:
+Zustand and TanStack Store publish whole snapshots and do not expose a reducer,
+so from outside the library the only option is to mirror each snapshot:
 
 ```ts
 const store = createStore(zustand.getState());
 zustand.subscribe((state) => store.dispatch(state));
 ```
 
-This works — dispatching a value replaces state when there is no reducer — and
-transitions survive. But it keeps two copies of your state and depends on the
-library's subscribe staying snapshot-shaped.
+Dispatching a value replaces state when there is no reducer, so this works and
+Transitions survive. It also keeps two copies of your state and depends on that
+`subscribe` staying snapshot-shaped.
 
-**The better fix is upstream.** A store library that reads through this instead
-of `useSyncExternalStore` gets transition-safe reads for all of its users, with
-no mirror. That is the conversation in
+:::note
+The better fix is upstream. A library that reads through this instead of
+`useSyncExternalStore` gets Transition-safe reads for all of its users with no
+mirror — the conversation in
 [pmndrs/zustand#3125](https://github.com/pmndrs/zustand/discussions/3125) and
 [reduxjs/react-redux#2263](https://github.com/reduxjs/react-redux/pull/2263).
+:::
 
 ## Reading a slice
 
@@ -62,46 +62,21 @@ no mirror. That is the conversation in
 const total = useStore(store, (state) => state.cart.total);
 ```
 
-A selector that builds an object returns a new reference each call, so compare
-it yourself — the selector receives its own previous result:
+A selector that builds an object returns a new reference every call. The
+selector receives its own previous result so you can say nothing changed — see
+[Selectors and re-renders](/react-concurrent-store/explanation/selectors/),
+which also covers the shallow-equality wrapper and structural sharing.
 
-```tsx
-const summary = useStore(store, (state, previous) => {
-  const next = { count: state.items.length, total: state.total };
-  return previous && shallowEqual(previous, next) ? previous : next;
-});
-```
+## What changes
 
-Or use the wrapper, which ships from its own entry point:
+- A dispatch inside `startTransition` stays a Transition.
+- An urgent dispatch made while a Transition is in flight applies to what is on
+  screen, and both land in dispatch order once the Transition commits.
+- A component mounting mid-Transition shows what its siblings show.
+- Several `createRoot` trees can read one store, with no provider.
+- Server rendering needs no `getServerSnapshot`.
 
-```tsx
-import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+## What to know first
 
-const summary = useStoreWithEqualityFn(
-  store,
-  (state) => ({ count: state.items.length, total: state.total }),
-  shallowEqual,
-);
-```
-
-Any comparison works — `shallowEqual` from `react-redux`, `shallow` from
-`zustand/shallow`, or your own.
-
-## What you get
-
-A dispatch inside `startTransition` stays a transition. An urgent dispatch that
-lands while a transition is still in flight applies on top of what is on
-screen, and when the transition resolves both are reflected in the order you
-dispatched them. A component mounting mid-transition shows what its siblings
-show rather than tearing.
-
-Selectors run during render, so the props they close over and the state they
-read come from the same moment — the "zombie child" case does not break your
-dispatch.
-
-## What you do not get
-
-See [Limitations](/react-concurrent-store/explanation/limitations/). The ones
-that matter most here: sharing a store across multiple React roots is not
-guaranteed, and mirroring an opaque store means maintaining two copies of
-state.
+One Effect behaves differently, and one line reaches into React. Both are in
+[Limitations](/react-concurrent-store/explanation/limitations/).
