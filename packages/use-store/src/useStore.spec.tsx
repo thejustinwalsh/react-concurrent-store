@@ -1137,14 +1137,13 @@ describe("Server rendering", () => {
    * option here, because the initial value IS the snapshot — so what happens
    * when the store moves before React gets to run?
    *
-   * It mismatches, and React recovers by rendering the client's value. The
-   * boundary is the hydration commit rather than the hydrateRoot call, so a
-   * dispatch racing hydration mismatches as well. Both are recorded below.
-   * Nothing userland can reach says "this render is a hydration", so the
-   * answer is the sequencing, not an option on the hook: let hydration commit
-   * before the store moves.
+   * No option is needed. The client store is built from the same serialized
+   * state the server rendered from, so the store already holds that value: it
+   * is the handle it was created with. A reader hydrates on that handle and
+   * then catches up, which is what getServerSnapshot buys, from state the
+   * store has anyway.
    */
-  it("mismatches if the store moves between the server render and hydration", async () => {
+  it("hydrates on the server's value when the store moved first, then catches up", async () => {
     const make = (initial: State) => createStore<State, Action>(initial, reducer);
     function App({ store }: { store: ReturnType<typeof make> }) {
       const count = useStore(store, (state: State) => state.count);
@@ -1169,13 +1168,13 @@ describe("Server rendering", () => {
     });
 
     expect(
-      recoverable.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
-    ).toBeGreaterThan(0);
-    // Recovered, rather than stuck on the stale server text.
+      recoverable.filter((e) => /hydrat|did not match|mismatch/i.test(e)),
+    ).toEqual([]);
+    // Caught up to the client's value, without ever mismatching to get there.
     expect(container.querySelector("#out")?.textContent).toBe("count: 8");
   });
 
-  it("mismatches for a dispatch made before the hydration commit, too", async () => {
+  it("handles a dispatch that races the hydration commit", async () => {
     const make = (initial: State) => createStore<State, Action>(initial, reducer);
     function App({ store }: { store: ReturnType<typeof make> }) {
       const count = useStore(store, (state: State) => state.count);
@@ -1198,13 +1197,12 @@ describe("Server rendering", () => {
       client.dispatch({ type: "INCREMENT" });
     });
 
-    // The boundary is the hydration commit, not the hydrateRoot call.
     expect(
-      recoverable.filter((e) => /hydrat|did not match|mismatch/i.test(e)).length,
-    ).toBeGreaterThan(0);
+      recoverable.filter((e) => /hydrat|did not match|mismatch/i.test(e)),
+    ).toEqual([]);
     expect(container.querySelector("#out")?.textContent).toBe("count: 8");
 
-    // Live and correct from there on, which is the part that matters.
+    // Live and correct from there on.
     await act(async () => client.dispatch({ type: "INCREMENT" }));
     expect(container.querySelector("#out")?.textContent).toBe("count: 9");
   });
@@ -4225,5 +4223,62 @@ describe("A selector that changes in the same commit as a dispatch", () => {
     await act(async () => bump());
     expect(store.getState()).toEqual({ a: 0, b: 1 });
     expect(getByTestId("out").textContent).toBe("b=1");
+  });
+});
+
+describe("The hydration check costs nothing when it is not needed", () => {
+  type State = { count: number };
+  type Action = { type: "INCREMENT" };
+  const reducer = (state: State): State => ({ count: state.count + 1 });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  const hydrateCounting = async (moveFirst: boolean) => {
+    const make = (initial: State) => createStore<State, Action>(initial, reducer);
+    let renders = 0;
+
+    function App({ store }: { store: ReturnType<typeof make> }) {
+      const count = useStore(store, (state: State) => state.count);
+      renders += 1;
+      return <div id="out">count: {count}</div>;
+    }
+
+    const html = renderToString(<App store={make({ count: 7 })} />);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const client = make({ count: 7 });
+    if (moveFirst) client.dispatch({ type: "INCREMENT" });
+
+    renders = 0;
+    const recoverable: string[] = [];
+    await act(async () => {
+      hydrateRoot(container, <App store={client} />, {
+        onRecoverableError: (error) => recoverable.push(String(error)),
+      });
+    });
+    return { renders, recoverable, text: container.querySelector("#out")?.textContent };
+  };
+
+  it("renders once for an ordinary hydration", async () => {
+    const { renders, recoverable, text } = await hydrateCounting(false);
+    expect(recoverable).toEqual([]);
+    expect(text).toBe("count: 7");
+    // The server and client snapshots of the hydration check are both false
+    // when the store has not moved, so nothing ever differs and React has no
+    // reason to render again.
+    expect(renders).toBe(1);
+  });
+
+  it("spends one extra render only when the store moved first", async () => {
+    const { renders, recoverable, text } = await hydrateCounting(true);
+    expect(recoverable).toEqual([]);
+    expect(text).toBe("count: 8");
+    // Hydrate on the server's value, then catch up. That second render is the
+    // whole price, and it is only paid in the case that needs it.
+    expect(renders).toBe(2);
   });
 });

@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { Reducer } from "./types";
 
@@ -128,6 +129,15 @@ export interface ConcurrentStoreInternals<S, A>
   readonly _published: StoreHandle<S>;
   /** How many readers are subscribed; one reader has nothing to tear against. */
   readonly _readers: number;
+  /** The handle this store was created with. */
+  readonly _initial: StoreHandle<S>;
+  /**
+   * Whether the store moved before anything read it. On the client that is the
+   * only situation in which the value a reader would mount on differs from the
+   * one the server rendered from, since both are built from the same
+   * serialized state.
+   */
+  readonly _drifted: boolean;
   /**
    * The store the handles come from. Every reader builds its own selector view,
    * so the view is the wrong thing to key per-pass bookkeeping by: two readers
@@ -165,6 +175,8 @@ export function createStore<S, A>(
   // committed: what the tree shows. sync: committed plus sync-only actions.
   // head: every action in order. Equal unless a transition is in flight.
   let head = Handle.of(initialValue, version);
+  const initial = head;
+  let settled = false;
   let sync = head;
   let committed = head;
   let published = head;
@@ -287,10 +299,17 @@ export function createStore<S, A>(
     get _readers() {
       return listeners.size;
     },
+    get _initial() {
+      return initial;
+    },
+    get _drifted() {
+      return head !== initial && !settled;
+    },
     get _source() {
       return store;
     },
     _markCommitted(handle) {
+      settled = true;
       // Monotonic: a reader still catching up must not drag the pointer back.
       if (handle.version > committed.version) {
         committed = handle;
@@ -334,6 +353,11 @@ function recordRendered(store: object, handle: StoreHandle<unknown>): void {
   });
 }
 
+// Stable identities for the hydration check below.
+const noSubscribe = () => () => {};
+const notHydrating = () => false;
+const isHydrating = () => true;
+
 /** Concurrent-safe subscription to a store's current version. */
 function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> {
 
@@ -341,10 +365,28 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
   // Keyed by the source, not this reader's view: the handles are the source's,
   // and two readers of one store each hold a view of their own.
   const source = store._source;
-  const [handle, setHandle] = useState(
-    () =>
-      (renderedThisPass.get(source) as StoreHandle<S> | undefined) ??
-      store._committed,
+
+  // Whether this is the hydration render. useSyncExternalStore is the only
+  // hook React tells that, through getServerSnapshot, and with a subscribe
+  // that does nothing it can never schedule an update — so none of the
+  // de-optimisation that made this hook unusable for the store's value
+  // applies. It is asked only when the store moved before anything read it,
+  // which is the only case where the answer changes anything; otherwise both
+  // snapshots read false, nothing ever differs, and no render is spent.
+  const hydrating = useSyncExternalStore(
+    noSubscribe,
+    notHydrating,
+    store._drifted ? isHydrating : notHydrating,
+  );
+
+  const [handle, setHandle] = useState(() =>
+    hydrating
+      ? // The value the server rendered from. The client store is built from
+        // the same serialized state, so this is it — no second snapshot has to
+        // be handed in.
+        store._initial
+      : ((renderedThisPass.get(source) as StoreHandle<S> | undefined) ??
+        store._committed),
   );
   recordRendered(source, handle as StoreHandle<unknown>);
 
@@ -531,6 +573,12 @@ export function createSelectorStore<S, A, T>(
     // source's subscriber count is the reader count.
     get _readers() {
       return source._readers;
+    },
+    get _initial() {
+      return source._initial;
+    },
+    get _drifted() {
+      return source._drifted;
     },
     get _source() {
       return source._source;
