@@ -4054,3 +4054,58 @@ describe("A publish nobody takes", () => {
     expect(getByTestId("full").textContent).toBe("1/1");
   });
 });
+
+describe("A batch is one tick at one priority", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * Dispatches in one tick share a rebasing decision, because the commit
+   * pointer cannot move until React renders and a second sync dispatch would
+   * otherwise read its own predecessor as a pending transition. That sharing
+   * must not span priorities: startTransition and flushSync in one call stack
+   * get different lanes from React.
+   */
+  it("does not let a flushSync inherit a pending transition's decision", async () => {
+    const store = createStore(2, (n: number, a: "double" | "inc") =>
+      a === "double" ? n * 2 : n + 1,
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+    const seen: number[] = [];
+
+    function Gated() {
+      const n = useStore(store);
+      seen.push(n);
+      if (held && n >= 4) use(gate);
+      return <span data-testid="out">{n}</span>;
+    }
+
+    const { getAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="out">loading</span>}>
+          <Gated />
+        </Suspense>,
+      ),
+    );
+    const screen = () => getAllByTestId("out").map((n) => n.textContent);
+    expect(screen()).toEqual(["2"]);
+    seen.length = 0;
+
+    await act(async () => {
+      startTransition(() => store.dispatch("double"));
+      // Same call stack, same tick, different lane.
+      flushSync(() => store.dispatch("inc"));
+    });
+
+    // Rebased onto what is on screen: 2 + 1. Never straight to 5, which would
+    // put the transition nobody has seen on screen, and never the fallback.
+    expect(seen[0]).toBe(3);
+    expect(screen()).toEqual(["3"]);
+    expect(store.getState()).toBe(5);
+
+    held = false;
+    await act(async () => release());
+    expect(screen()).toEqual(["5"]);
+  });
+});

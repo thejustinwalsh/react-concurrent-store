@@ -1,3 +1,4 @@
+import * as ReactRuntime from "react";
 import {
   startTransition,
   use,
@@ -44,6 +45,27 @@ class Handle<S> extends Promise<S> {
     return handle as StoreHandle<S>;
   }
 }
+
+/**
+ * React's current transition scope, or null outside one.
+ *
+ * Nothing public tells a dispatch whether its caller is inside
+ * startTransition, and a batch must not span the two: a transition dispatch
+ * and a flushSync dispatch in the same call stack get different lanes, so they
+ * cannot share one rebasing decision. This field is the only signal that
+ * distinguishes them. It is read, never written, and feature-detected — if it
+ * disappears every dispatch reads as scope null, which is the per-tick
+ * batching this had before.
+ */
+const clientInternals = (
+  ReactRuntime as unknown as {
+    __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+      T?: unknown;
+    };
+  }
+).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+const transitionScope = (): unknown => clientInternals?.T ?? null;
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (
@@ -157,17 +179,26 @@ export function createStore<S, A>(
   // across ticks that are genuinely separate.
   let batching = false;
   let batchRebasing = false;
+  let batchScope: unknown = null;
 
   const store: ConcurrentStoreInternals<S, A> = {
     dispatch(action) {
       const chronological = fold(head.value, action);
 
-      const rebasing = batching ? batchRebasing : committed !== head;
-      if (!batching) {
+      // A batch covers dispatches made in one tick *at one priority*. Leaving
+      // the scope out made a flushSync inside a pending transition's tick
+      // inherit that transition's decision, publish the chronological state at
+      // sync priority, and put the pending transition on screen.
+      const scope = transitionScope();
+      const sameBatch = batching && scope === batchScope;
+      const rebasing = sameBatch ? batchRebasing : committed !== head;
+      if (!sameBatch) {
         batching = true;
+        batchScope = scope;
         batchRebasing = rebasing;
         queueMicrotask(() => {
           batching = false;
+          batchScope = null;
         });
       }
 
