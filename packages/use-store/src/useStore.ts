@@ -2,6 +2,7 @@ import * as ReactRuntime from "react";
 import {
   startTransition,
   use,
+  useInsertionEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -592,11 +593,14 @@ export function useStore<S, A, T>(
     [internals, selected],
   );
 
-  // Before useHandle's own effects, so the view has a selector by the time it
-  // subscribes. No dependency array: the selector changes identity every
-  // render and this is what keeps the view current without a render-phase
-  // write.
-  useLayoutEffect(() => {
+  // Installed from an insertion effect, not a layout effect. Every insertion
+  // effect in a commit runs before any layout effect, so a dispatch made from
+  // another component's layout effect cannot be evaluated against the selector
+  // this render replaced. With a layout effect here, an earlier sibling
+  // dispatching left the view judging the new render's slice with the old
+  // selector, bailing out, and stranding the reader on a stale value with
+  // nothing scheduled to repair it.
+  useInsertionEffect(() => {
     if (view !== null && selector !== undefined) view._setSelector(selector);
   });
 

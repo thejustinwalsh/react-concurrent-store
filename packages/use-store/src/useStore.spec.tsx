@@ -4174,3 +4174,56 @@ describe("A selector reader that mounts during a pending transition", () => {
     expect(read()).toEqual(["2", "2"]);
   });
 });
+
+describe("A selector that changes in the same commit as a dispatch", () => {
+  type Pair = { a: number; b: number };
+
+  afterEach(() => cleanup());
+
+  /**
+   * The new selector applies to the render immediately, but the view holding
+   * the subscription has to be told about it too. If that hand-off happens in
+   * a layout effect, a dispatch from an earlier sibling's layout effect is
+   * judged against the selector this render replaced: it bails out, and
+   * nothing is scheduled that would ever repair the reader.
+   */
+  it("does not judge that dispatch with the selector it replaced", async () => {
+    const store = createStore<Pair, Partial<Pair>>({ a: 0, b: 0 }, (s, patch) => ({
+      ...s,
+      ...patch,
+    }));
+
+    let bump!: () => void;
+
+    // Earlier in the tree, so its layout effect runs before the reader's.
+    function Sibling({ armed }: { armed: boolean }) {
+      useLayoutEffect(() => {
+        if (armed) store.dispatch({ b: 1 });
+      }, [armed]);
+      return null;
+    }
+
+    function Reader({ which }: { which: "a" | "b" }) {
+      const value = useStore(store, (s: Pair) => s[which]);
+      return <span data-testid="out">{`${which}=${value}`}</span>;
+    }
+
+    function App() {
+      const [which, setWhich] = useState<"a" | "b">("a");
+      bump = () => setWhich("b");
+      return (
+        <>
+          <Sibling armed={which === "b"} />
+          <Reader which={which} />
+        </>
+      );
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+    expect(getByTestId("out").textContent).toBe("a=0");
+
+    await act(async () => bump());
+    expect(store.getState()).toEqual({ a: 0, b: 1 });
+    expect(getByTestId("out").textContent).toBe("b=1");
+  });
+});
