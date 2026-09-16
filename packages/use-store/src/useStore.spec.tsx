@@ -2922,12 +2922,12 @@ describe("Handle is a real Promise", () => {
 });
 
 /**
- * Known bugs, reproduced. Both come from the same wall: userland cannot see
- * render priority or root identity, so the store infers them from a global
- * commit pointer. Marked `it.fails` so they are recorded rather than hidden —
- * a fix flips them to `it`.
+ * Both of these came from the same wall: userland cannot see render priority
+ * or root identity, so the store infers them from a global commit pointer and
+ * a slot recording what the current pass rendered. Both inferences leaked —
+ * one past the pass that wrote it, one past the readers it spoke for.
  */
-describe("Known concurrency bugs", () => {
+describe("Inferred priority and identity", () => {
   type Slice = { count: number; other: number };
   type SliceAction = { type: "increment" | "double" | "touch" };
   const sliceReducer = (s: Slice, a: SliceAction): Slice => {
@@ -2992,37 +2992,33 @@ describe("Known concurrency bugs", () => {
     expect(readAll()).toEqual(["1", "2"]);
   });
 
-  // A selector view that bails out marks the source committed, so `committed`
-  // can name a version no reader ever rendered. A later sync update then folds
-  // onto the pending transition instead of rebasing onto what is on screen:
-  // the watcher jumps to 5 without ever showing 3.
-  //
-  // The mark is a symptom. An inline selector has a new identity every render,
-  // so `useStore` rebuilds the view every render, and a rebuilt view cannot
-  // know which slice its readers already show. It guesses from the source, and
-  // the mark exists to stop that guess from sending readers chasing a pending
-  // transition. Separating "last handle forwarded" from "source head" fixes
-  // this case, but a rebuilt view then opens behind a reader that has already
-  // advanced, and the identity-based catch-up drags that reader backwards.
-  // Ordering the catch-up by version fixes that in turn and breaks switching
-  // between stores, whose version counters are independent. The fix is to stop
-  // rebuilding the view: give it a stable identity per store and feed it the
-  // current selector, the way react-redux keeps its subscription stable.
-  it.fails("rebases a sync update onto what is on screen, not the pending transition", async () => {
+  // A selector view that bails out used to mark the source committed, so
+  // `committed` could name a version no reader ever rendered and a later sync
+  // update folded onto the pending transition instead of rebasing onto what is
+  // on screen. The mark was a symptom: an inline selector has a new identity
+  // every render, so the view was rebuilt every render and could not know
+  // which slice its readers already showed.
+  it("rebases a sync update onto what is on screen, not the pending transition", async () => {
     const store = createStore({ count: 2, other: 0 }, sliceReducer);
+    const renders: string[] = [];
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
 
     function Suspender() {
       const count = useStore(store, (s: Slice) => s.count);
+      renders.push(`s${count}`);
       if (count === 4) use(gate);
       return <div data-reader="">s{count}</div>;
     }
     function Other() {
-      return <div data-reader="">o{useStore(store, (s: Slice) => s.other)}</div>;
+      const other = useStore(store, (s: Slice) => s.other);
+      renders.push(`o${other}`);
+      return <div data-reader="">o{other}</div>;
     }
     function Watcher() {
-      return <div data-reader="">w{useStore(store, (s: Slice) => s.count)}</div>;
+      const count = useStore(store, (s: Slice) => s.count);
+      renders.push(`w${count}`);
+      return <div data-reader="">w{count}</div>;
     }
 
     await act(async () =>
@@ -3034,15 +3030,25 @@ describe("Known concurrency bugs", () => {
         </Suspense>,
       ),
     );
+    expect(readAll()).toEqual(["s2", "o0", "w2"]);
+
     await act(async () => {
       startTransition(() => store.dispatch({ type: "double" }));
     });
+    // The suspender gates on 4, so the transition cannot commit.
     expect(readAll()).toEqual(["s2", "o0", "w2"]);
 
-    // Rebased onto what is on screen: 2 + 1 = 3, not 4 + 1. The suspender
-    // gates on 4 alone, so it renders 3 rather than holding at 2.
+    renders.length = 0;
     await act(async () => store.dispatch({ type: "increment" }));
-    expect(readAll()).toEqual(["s3", "o0", "w3"]);
+
+    // Rebased onto what is on screen first: 2 + 1 = 3, never straight to 5.
+    // Then the chronological order, 4 + 1 = 5, which clears the gate and so
+    // lands in the same flush.
+    expect(renders.indexOf("w3")).toBeGreaterThanOrEqual(0);
+    expect(renders.indexOf("w3")).toBeLessThan(renders.indexOf("w5"));
+    // The slice nobody changed never re-renders.
+    expect(renders.filter((r) => r.startsWith("o"))).toEqual([]);
+    expect(readAll()).toEqual(["s5", "o0", "w5"]);
 
     await act(async () => release());
     expect(readAll()).toEqual(["s5", "o0", "w5"]);

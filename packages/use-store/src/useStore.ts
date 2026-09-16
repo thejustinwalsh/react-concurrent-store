@@ -295,37 +295,58 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
  * decide", so we forward and let render decide. Subscribes lazily so the view
  * can be built during render without leaking.
  */
+export interface SelectorView<S, A, T> extends ConcurrentStoreInternals<S, A> {
+  /**
+   * Install the current selector. An inline selector has a new identity every
+   * render, so the view outlives the selector that built it; it is replaced
+   * from a layout effect rather than rebuilding the view and losing which
+   * slice the readers already show.
+   */
+  _setSelector(next: (state: S, previous: T | undefined) => T): void;
+}
+
 export function createSelectorStore<S, A, T>(
   source: ConcurrentStoreInternals<S, A>,
-  selector: (state: S, previous: T | undefined) => T,
-): ConcurrentStoreInternals<S, A> {
+  initialSelector?: (state: S, previous: T | undefined) => T,
+): SelectorView<S, A, T> {
+  let selector = initialSelector;
   let head = source._head;
+  // The last handle this view passed on. A bail-out still advances `head` so
+  // getState stays current, but must not advance this: readers hold the handle
+  // they were last given, and a gap between the two reads as a reader running
+  // behind, sending it chasing a version whose slice it already shows.
+  let forwarded = source._head;
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
   const listeners = new Set<(handle: StoreHandle<S>) => void>();
 
   const publish = (published: StoreHandle<S>) => {
     head = published;
+    if (selector === undefined) {
+      forwarded = published;
+      for (const listener of listeners) listener(published);
+      return;
+    }
     let next: T;
     try {
       next = selector(published.value, last?.value);
     } catch {
+      // Cannot decide: forward and let render settle it.
+      forwarded = published;
       for (const listener of listeners) listener(published);
       return;
     }
     if (last !== null && Object.is(next, last.value)) {
-      // Readers already show equivalent content; say so, or the source's
-      // commit pointer lags and every later dispatch sees a phantom transition.
-      source._markCommitted(published);
       return;
     }
     last = { value: next };
+    forwarded = published;
     for (const listener of listeners) listener(published);
   };
 
   const attach = () => {
     try {
-      last = { value: selector(head.value, undefined) };
+      last = selector === undefined ? null : { value: selector(head.value, undefined) };
     } catch {
       last = null;
     }
@@ -338,10 +359,14 @@ export function createSelectorStore<S, A, T>(
       head = source._head;
       const current = source._published;
       try {
-        last = { value: selector(current.value, last?.value) };
+        last =
+          selector === undefined
+            ? null
+            : { value: selector(current.value, last?.value) };
       } catch {
         last = null;
       }
+      forwarded = current;
       for (const listener of listeners) listener(current);
     }
 
@@ -369,7 +394,7 @@ export function createSelectorStore<S, A, T>(
       };
     },
     get _head() {
-      return head;
+      return forwarded;
     },
     get _committed() {
       return source._committed;
@@ -378,6 +403,9 @@ export function createSelectorStore<S, A, T>(
       return source._published;
     },
     _markCommitted: (handle) => source._markCommitted(handle),
+    _setSelector(next) {
+      selector = next;
+    },
   };
 }
 
@@ -399,13 +427,22 @@ export function useStore<S, A, T>(
   selector?: (state: S, previous: T | undefined) => T,
 ): S | T {
   const internals = store as ConcurrentStoreInternals<S, A>;
+  // Keyed on the store, not the selector: an inline selector is a new function
+  // every render, and rebuilding the view each time throws away which slice
+  // its readers already show.
+  const selected = selector !== undefined;
   const view = useMemo(
-    () =>
-      selector === undefined
-        ? internals
-        : createSelectorStore(internals, selector),
-    [internals, selector],
+    () => (selected ? createSelectorStore<S, A, T>(internals) : null),
+    [internals, selected],
   );
+
+  // Before useHandle's own effects, so the view has a selector by the time it
+  // subscribes. No dependency array: the selector changes identity every
+  // render and this is what keeps the view current without a render-phase
+  // write.
+  useLayoutEffect(() => {
+    if (view !== null && selector !== undefined) view._setSelector(selector);
+  });
 
   // The selector's previous result lives in closure variables local to this
   // memoized instance, not a ref: a ref is shared across concurrent copies of
@@ -422,6 +459,6 @@ export function useStore<S, A, T>(
     };
   }, []);
 
-  const state = use(useHandle(view));
+  const state = use(useHandle(view ?? internals));
   return selector === undefined ? state : select(state, selector);
 }
