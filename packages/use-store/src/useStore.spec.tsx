@@ -4782,3 +4782,65 @@ describe("The promise rules are React's, not this store's", () => {
     expect(container.textContent).toBe("c");
   });
 });
+
+describe("React rebases its own queue", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * With state held in React and updates expressed as updater functions, React
+   * already does what this store does: an urgent update renders against the
+   * committed base, skipping the transition's update, and the transition then
+   * replays the whole queue in order.
+   *
+   *   rendered [3, 5] from a base of 2 — 2 + 1 first, then 2 * 2 + 1
+   *
+   * It does that by lane, and it can only do it for updates it owns. A store's
+   * state lives outside React, so the queue never sees the actions and none of
+   * this applies to it. That is the whole reason the store computes the two
+   * folds itself, and it is worth having written down: the machinery is not
+   * novel, it is React's, reimplemented where React cannot reach.
+   */
+  it("does it for updater functions, which is what a store cannot hand it", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+    let update!: (fn: (n: number) => number) => void;
+    const rendered: number[] = [];
+
+    function Counter() {
+      const [n, set] = useState(2);
+      update = set;
+      rendered.push(n);
+      if (held && n === 4) use(gate);
+      return <span data-testid="out">{n}</span>;
+    }
+
+    const { queryAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Counter />
+        </Suspense>,
+      ),
+    );
+    rendered.length = 0;
+
+    await act(async () => {
+      startTransition(() => update((n) => n * 2));
+    });
+    // Rendered 4 and suspended, so nothing was committed.
+    expect(rendered).toEqual([4]);
+    expect(queryAllByTestId("out").map((n) => n.textContent)[0]).toBe("2");
+    rendered.length = 0;
+
+    await act(async () => update((n) => n + 1));
+
+    // 3 is the urgent update against the committed base, with the transition's
+    // update skipped. 5 is the queue replayed in order.
+    expect(rendered).toEqual([3, 5]);
+    expect(queryAllByTestId("fb")).toEqual([]);
+
+    held = false;
+    await act(async () => release());
+    expect(queryAllByTestId("out").map((n) => n.textContent)[0]).toBe("5");
+  });
+});
