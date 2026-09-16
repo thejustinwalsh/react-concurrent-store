@@ -5121,3 +5121,68 @@ describe("Router-shaped navigation (MiniRouter)", () => {
     ).toEqual(["/profile", "/profile"]);
   });
 });
+
+describe("Unsubscribing is constant time", () => {
+  /**
+   * Issue #17 asks for "constant time unsubscription like a linked list
+   * instead of an array". The cost being avoided is not the removal itself but
+   * the teardown of a whole tree: an array unsubscribe is an `indexOf` scan
+   * plus a `splice` shift, both linear, so removing every listener is
+   * quadratic. Listeners live in a Set here, where a delete is a hash lookup.
+   *
+   * Measured rather than asserted, and measured against an array built in the
+   * same run, so the comparison calibrates itself to whatever machine and JIT
+   * state the suite happens to be running under.
+   */
+  const removeInOrder = (add: (l: () => void) => () => void, n: number) => {
+    const unsubscribes: Array<() => void> = [];
+    for (let i = 0; i < n; i++) unsubscribes.push(add(() => {}));
+    const started = performance.now();
+    // First-registered first: the worst order for an array, irrelevant to a Set.
+    for (const off of unsubscribes) off();
+    return performance.now() - started;
+  };
+
+  const storeListeners = () => {
+    const store = createStore(0, (state: number, step: number) => state + step);
+    const internals = store as unknown as ConcurrentStoreInternals<
+      number,
+      number
+    >;
+    return (listener: () => void) =>
+      internals._subscribe(() => (listener(), false), internals._head);
+  };
+
+  const arrayListeners = () => {
+    const listeners: Array<() => void> = [];
+    return (listener: () => void) => {
+      listeners.push(listener);
+      return () => {
+        const at = listeners.indexOf(listener);
+        if (at !== -1) listeners.splice(at, 1);
+      };
+    };
+  };
+
+  it("grows linearly with the number of readers, where an array grows quadratically", () => {
+    const small = 1000;
+    const large = 16000;
+
+    removeInOrder(storeListeners(), small); // warm both paths
+    removeInOrder(arrayListeners(), small);
+
+    const growth = (make: () => (l: () => void) => () => void) => {
+      const at1 = Math.max(removeInOrder(make(), small), 0.01);
+      const at16 = removeInOrder(make(), large);
+      return at16 / at1;
+    };
+
+    const store = growth(storeListeners);
+    const array = growth(arrayListeners);
+
+    // 16x the listeners: ~16x for a Set, ~256x for an array. The midpoint
+    // separates them by a wide margin in both directions.
+    expect(store).toBeLessThan(64);
+    expect(array).toBeGreaterThan(store);
+  });
+});
