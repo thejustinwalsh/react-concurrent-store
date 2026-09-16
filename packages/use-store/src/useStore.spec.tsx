@@ -19,6 +19,7 @@ import {
   useRoute,
   useScratch,
 } from "../test/MiniRouter";
+import { counting, held, mount, readerFor } from "../test/harness";
 import Logger from "../test/TestLogger";
 import {
   Provider,
@@ -714,34 +715,12 @@ describe("Subscription cleanup", () => {
   type State = number;
   type Action = { type: "INCREMENT" };
   const reducer = (state: State): State => state + 1;
-
-  /** Wraps a store to count live subscriptions without adding public API. */
-  function counting<S, A>(inner: ConcurrentStoreInternals<S, A>) {
-    let live = 0;
-    const store: ConcurrentStoreInternals<S, A> & { live: () => number } = {
-      ...inner,
-      // The hooks subscribe to handles, not actions.
-      _subscribe(listener, from) {
-        live++;
-        const unsubscribe = inner._subscribe(listener, from);
-        return () => {
-          live--;
-          unsubscribe();
-        };
-      },
-      live: () => live,
-    };
-    return store;
-  }
+  const make = () => counting(internals(createStore<State, Action>(1, reducer)));
 
   it("releases the store subscription when a reader unmounts", async () => {
-    const store = counting(internals(createStore<State, Action>(1, reducer)));
-
-    function Reader() {
-      return <div>{useStore(store)}</div>;
-    }
-
-    const { unmount } = await act(async () => render(<Reader />));
+    const store = make();
+    const Reader = readerFor(store);
+    const { unmount } = await mount(<Reader />);
     expect(store.live()).toBe(1);
 
     unmount();
@@ -749,27 +728,20 @@ describe("Subscription cleanup", () => {
   });
 
   it("releases every subscription when many readers unmount", async () => {
-    const store = counting(internals(createStore<State, Action>(1, reducer)));
-
-    function Reader() {
-      return <div>{useStore(store)}</div>;
-    }
-    function App({ count }: { count: number }) {
-      return (
-        <>
-          {Array.from({ length: count }, (_, i) => (
-            <Reader key={i} />
-          ))}
-        </>
-      );
-    }
-
-    const { unmount, rerender } = await act(async () =>
-      render(<App count={3} />),
+    const store = make();
+    const Reader = readerFor(store);
+    const App = ({ count }: { count: number }) => (
+      <>
+        {Array.from({ length: count }, (_, i) => (
+          <Reader key={i} />
+        ))}
+      </>
     );
+
+    const { unmount, show } = await mount(<App count={3} />);
     expect(store.live()).toBe(3);
 
-    await act(async () => rerender(<App count={1} />));
+    await show(<App count={1} />);
     expect(store.live()).toBe(1);
 
     unmount();
@@ -777,13 +749,9 @@ describe("Subscription cleanup", () => {
   });
 
   it("releases the subscription when a selector reader unmounts", async () => {
-    const store = counting(internals(createStore<State, Action>(1, reducer)));
-
-    function Reader() {
-      return <div>{useStore(store, (state: State) => state)}</div>;
-    }
-
-    const { unmount } = await act(async () => render(<Reader />));
+    const store = make();
+    const Reader = readerFor(store, (state: State) => state);
+    const { unmount } = await mount(<Reader />);
     expect(store.live()).toBe(1);
 
     unmount();
@@ -795,31 +763,32 @@ describe("Subscription cleanup", () => {
   });
 
   it("does not leak when a reader unmounts mid transition", async () => {
-    const store = counting(internals(createStore<State, Action>(1, reducer)));
+    const store = make();
+    const gate = held();
+    const Reader = () => {
+      const value = useStore(store);
+      if (value === 2) use(gate.promise);
+      return <div>{value}</div>;
+    };
 
-    function Reader() {
-      return <div>{useStore(store)}</div>;
-    }
-    let setShow: (value: boolean) => void;
-    function App() {
-      const [show, _setShow] = useState(true);
-      setShow = _setShow;
-      return <>{show && <Reader />}</>;
-    }
-
-    const { unmount } = await act(async () => render(<App />));
+    const { unmount } = await mount(
+      <Suspense fallback={<div>waiting</div>}>
+        <Reader />
+      </Suspense>,
+    );
     expect(store.live()).toBe(1);
 
     await act(async () => {
-      store.dispatch({ type: "INCREMENT" });
-      setShow(false);
+      startTransition(() => store.dispatch({ type: "INCREMENT" }));
     });
-    expect(store.live()).toBe(0);
-
     unmount();
+    gate.release();
+    await act(async () => {});
+
     expect(store.live()).toBe(0);
   });
 });
+
 
 describe("Data-level tearing", () => {
   type State = number;
