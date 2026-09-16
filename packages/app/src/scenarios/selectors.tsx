@@ -151,12 +151,13 @@ export function SelectorScenario() {
 
   return (
     <Card
-      title="Skipping a render without an equality function"
-      proves={
-        "A slice nobody selected moves nothing. A selector receives its own " +
-        "previous result: return it and the render is skipped, so a change to " +
-        "a slice this component does not read costs it nothing. Renders are " +
-        "counted on commit, so a render React started and discarded is not " +
+      title="Selectors"
+        rule="A selector can skip its own render"
+proves={
+        "A selector receives its own previous result. Return it and React " +
+        "skips that component, so a change to a slice it does not read " +
+        "costs it nothing and no equality function is needed. Renders are " +
+        "counted on commit, so a render React started and threw away is not " +
         "counted against it."
       }
       recorder={recorder}

@@ -511,7 +511,7 @@ function VerdictRow({ verdict: signal }: { verdict: Signal<Verdict> }) {
       : verdict.kind === "done"
         ? (verdict.error ??
           (verdict.ok ? "every reading matched" : "a reading did not match"))
-        : "drive it by hand, or press Run";
+        : "Click the buttons, or press Run";
   return (
     <>
       <div className="verdict">
@@ -539,13 +539,18 @@ function VerdictRow({ verdict: signal }: { verdict: Signal<Verdict> }) {
 
 export function Card({
   title,
+  rule,
   proves,
   stage,
   controls,
   recorder,
   verdict,
 }: {
+  /** What this panel is about, in a word or two, so the page can be scanned. */
   title: string;
+  /** The guarantee it demonstrates, in one sentence. */
+  rule: string;
+  /** Why the guarantee holds, and what to press to see it. */
   proves: string;
   stage: ReactNode;
   controls: ReactNode;
@@ -556,6 +561,7 @@ export function Card({
     <section className="card">
       <header>
         <h2>{title}</h2>
+        <p className="rule">{rule}</p>
         <p className="proves">{proves}</p>
       </header>
       <div className="stage">

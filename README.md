@@ -55,7 +55,15 @@ store.dispatch(action)
 store.subscribe(action => {})                   // getState() is up to date inside the callback
 ```
 
-An equality-function wrapper ships from its own entry point, so it costs
+`useStore` is a Hook, so the main entry carries a `"use client"` directive.
+`createStore` is not, and ships separately so it can be used in a React Server
+Component:
+
+```ts
+import { createStore } from "react-concurrent-store/store";
+```
+
+An equality-function wrapper ships from its own entry point too, so it costs
 nothing unless imported:
 
 ```ts

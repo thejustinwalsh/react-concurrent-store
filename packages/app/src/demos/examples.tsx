@@ -41,8 +41,8 @@ function Panel({ children }: { children: ReactNode }) {
 }
 
 /**
- * Every panel is live: drive it with the buttons, or press Run to watch the
- * scripted sequence play out slowly and end in a verdict. Nothing here is
+ * Every panel is live: click through it with the buttons, or press Run to
+ * watch a scripted sequence play out slowly and end in a verdict. Nothing here is
  * mocked and there is no act() — this is the browser's own scheduler.
  */
 export function ExamplesPage() {
@@ -54,23 +54,32 @@ export function ExamplesPage() {
   return (
     <>
       <Lede
-        title="Examples"
+        title="What a store guarantees under concurrent React"
         learn={[
-          "What each panel asserts, and how to drive it yourself",
-          "How the readings are taken",
+          "Where an urgent update lands while a Transition is still in flight",
+          "What a component mounting mid-Transition is allowed to display",
+          "When a promise in a store shows a fallback, and when it must not",
+          "What actually clears a rejected promise behind an error boundary",
         ]}
       >
         <p>
-          Six panels. Drive each one with its buttons, or press <b>Run</b> to
-          play a scripted sequence slowly and end in a verdict listing every
-          reading it took.
+          Six behaviours you can try yourself. Click through a panel with its
+          buttons, or press <b>Run</b> to watch the same sequence play out
+          slowly and finish with a list of every value it read.
+        </p>
+        <p>
+          These are the guarantees a store has to make once React can render in
+          the background, abandon that work and start again. Four of the six
+          are guarantees <code>useSyncExternalStore</code> cannot make, because
+          a store update during a Transition opts that Transition out.
         </p>
         <Note>
           <p>
             Readings come from a probe outside React, written from ref
             callbacks, layout Effects and Effects. That is what makes what a
             component <i>committed</i> distinguishable from what it merely
-            rendered, and from what reached the DOM.
+            rendered, and from what reached the DOM — a value React renders and
+            then throws away is not a tear.
           </p>
         </Note>
         <button className="run" onClick={runAll}>

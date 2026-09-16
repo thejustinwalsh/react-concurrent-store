@@ -167,14 +167,15 @@ export function TearingScenario() {
   return (
     <div data-scenario="tearing">
       <Card
-        title="Mounting a component during a Transition"
-        proves={
-          "Reveal a second reader, or show a hidden Activity tree, while a " +
-          "Transition is blocked. Notice that the new one displays what the " +
-          "rest of the page displays rather than the value the Transition is " +
-          "waiting on. Readings are taken in all three phases, so a value " +
-          "that was rendered but never committed is not counted as agreement."
-        }
+        title="Tearing"
+        rule="A component mounting mid-Transition shows what its siblings show"
+proves={
+        "A component that appears while a Transition is blocked must " +
+        "display what the rest of the page is displaying, not the value the " +
+        "Transition is waiting on. Otherwise one part of the screen is " +
+        "ahead of the rest, which is a tear. Reveal a second reader, or an " +
+        "Activity tree, while the Transition is held."
+      }
         recorder={recorder}
         stage={
           <>

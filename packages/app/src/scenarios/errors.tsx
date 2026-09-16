@@ -125,14 +125,15 @@ export function ErrorResetScenario() {
   return (
     <div data-scenario="error-reset">
       <Card
-        title="Resetting an error boundary"
-        proves={
-          "use() rethrows the same rejection every time it reads it, so " +
-          "resetting the boundary on its own renders the same rejected " +
-          "promise again — watch the catch count climb. The store's current " +
-          "value works as a reset key, because what actually clears the error " +
-          "is the store moving on."
-        }
+        title="Error boundaries"
+        rule="Resetting one needs the store to move on"
+proves={
+        "use() rethrows the same rejection every time it reads it, so " +
+        "resetting the boundary renders the same rejected promise and " +
+        "throws again — watch the catch count climb. What clears it is the " +
+        "store holding something else, which makes the store's current " +
+        "value a workable reset key."
+      }
         recorder={recorder}
         stage={
           <div className="readers">
