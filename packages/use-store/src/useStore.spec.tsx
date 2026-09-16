@@ -4733,3 +4733,52 @@ describe("flushSync with promise state is a dead end, not a tradeoff", () => {
     expect(container.textContent).toBe("b");
   });
 });
+
+describe("The promise rules are React's, not this store's", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * The same readings, with plain useState and use() and no store anywhere.
+   * An urgent update to a promise that has not settled commits the fallback;
+   * the same update in a transition keeps the current content. Whatever ships
+   * this API — this package, or React itself — inherits both, because they are
+   * properties of use() and update priority rather than of a store.
+   */
+  it("plain useState behaves identically", async () => {
+    let setValue!: (p: Promise<string>) => void;
+
+    function Reader({ value }: { value: Promise<string> }) {
+      return <span>{use(value)}</span>;
+    }
+    function App() {
+      const [value, set] = useState<Promise<string>>(Promise.resolve("a"));
+      setValue = set;
+      return (
+        <Suspense fallback={<span>SPINNER</span>}>
+          <Reader value={value} />
+        </Suspense>
+      );
+    }
+
+    const { container } = await act(async () => render(<App />));
+    expect(container.textContent).toBe("a");
+
+    let settle!: (value: string) => void;
+    const pending = new Promise<string>((r) => (settle = r));
+    flushSync(() => setValue(pending));
+    // The spinner, exactly as with the store.
+    expect(container.textContent).toContain("SPINNER");
+    await act(async () => settle("b"));
+    expect(container.textContent).toBe("b");
+
+    let settleAgain!: (value: string) => void;
+    const alsoPending = new Promise<string>((r) => (settleAgain = r));
+    await act(async () => {
+      startTransition(() => setValue(alsoPending));
+    });
+    // Current content kept, no fallback — again exactly as with the store.
+    expect(container.textContent).toBe("b");
+    await act(async () => settleAgain("c"));
+    expect(container.textContent).toBe("c");
+  });
+});

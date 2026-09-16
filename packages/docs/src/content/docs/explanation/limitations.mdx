@@ -41,9 +41,13 @@ with no correctness failure.
 
 ## An urgent update to unsettled promise state shows the fallback
 
-This one is correct rather than a defect, but it surprises people, so it is
-worth stating plainly. What decides it is the priority of the update, not which
-API you used:
+This one is not a limitation of this package at all, and it is filed here only
+because people hit it here first. It is what `use()` does with an urgent update
+to a promise that has not settled, and you get the identical readings from plain
+`useState` with no store anywhere — the suite holds both side by side. Whatever
+ships this API, including React, inherits it.
+
+What decides it is the priority of the update, not which API you used:
 
 | dispatching a promise that has not settled | fallback |
 | --- | --- |
