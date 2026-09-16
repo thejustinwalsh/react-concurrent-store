@@ -50,6 +50,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useOptimistic,
   useState,
   useSyncExternalStore,
@@ -4846,5 +4847,80 @@ describe("React rebases its own queue", () => {
     held = false;
     await act(async () => release());
     expect(queryAllByTestId("out").map((n) => n.textContent)[0]).toBe("5");
+  });
+});
+
+describe("The one limitation, pinned", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * A reader that lands behind shows what its siblings show and corrects
+   * itself when the transition commits, so an effect keyed on the value runs
+   * twice — once for the value the tree was showing. This is the only thing
+   * the documentation claims cannot be fixed from userland, and until now
+   * nothing held it: it could have regressed, or quietly improved, unnoticed.
+   *
+   * What is asserted is the shape, not a happy number. Mount-only effects run
+   * once and memos with stable dependencies are not recomputed; it is
+   * specifically things keyed on the value that run again.
+   */
+  it("an effect keyed on the value runs twice, mount-only effects do not", async () => {
+    const store = createStore(1);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+
+    const seen = { renders: 0, onValue: [] as number[], onMount: 0, stableMemo: 0 };
+
+    function Gated() {
+      const n = useStore(store);
+      if (held && n === 2) use(gate);
+      return <span>{n}</span>;
+    }
+    function Late() {
+      const n = useStore(store);
+      seen.renders += 1;
+      useMemo(() => {
+        seen.stableMemo += 1;
+      }, []);
+      useEffect(() => {
+        seen.onValue.push(n);
+      }, [n]);
+      useEffect(() => {
+        seen.onMount += 1;
+      }, []);
+      return <span data-testid="late">{n}</span>;
+    }
+
+    let reveal!: () => void;
+    function App() {
+      const [shown, setShown] = useState(false);
+      reveal = () => setShown(true);
+      return (
+        <Suspense fallback={<span>loading</span>}>
+          <Gated />
+          {shown && <Late />}
+        </Suspense>
+      );
+    }
+
+    await act(async () => render(<App />));
+    await act(async () => {
+      startTransition(() => store.dispatch(2));
+    });
+
+    // Revealed while the transition is blocked: it opens on what the tree shows.
+    await act(async () => reveal());
+    expect(seen.onValue).toEqual([1]);
+
+    held = false;
+    await act(async () => release());
+
+    // The correction. This is the cost, and it is only paid by effects keyed
+    // on the value.
+    expect(seen.onValue).toEqual([1, 2]);
+    expect(seen.renders).toBe(2);
+    expect(seen.onMount).toBe(1);
+    expect(seen.stableMemo).toBe(1);
   });
 });
