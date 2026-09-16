@@ -54,9 +54,9 @@ export function counting<S, A>(inner: ConcurrentStoreInternals<S, A>) {
   let live = 0;
   return {
     ...inner,
-    _subscribe(listener: Parameters<typeof inner._subscribe>[0], from: Parameters<typeof inner._subscribe>[1]) {
+    _subscribe(...args: Parameters<typeof inner._subscribe>) {
       live++;
-      const unsubscribe = inner._subscribe(listener, from);
+      const unsubscribe = inner._subscribe(...args);
       return () => {
         live--;
         unsubscribe();

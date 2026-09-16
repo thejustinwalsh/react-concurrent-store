@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useInsertionEffect,
   useLayoutEffect,
   useMemo,
@@ -97,6 +98,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
   // Adjusted during render rather than from an effect, so the first render
   // under the new store is already its own.
   const [seenSource, setSeenSource] = useState(source);
+  const [reader] = useState(() => ({}));
   if (seenSource !== source) {
     handle =
       (renderedThisPass.get(source) as StoreHandle<S> | undefined) ??
@@ -160,12 +162,12 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       setHandle(next);
     };
 
-    const release = store._subscribe(takePublish, handle);
+    const release = store._subscribe(takePublish, handle, reader);
     placeThisReader();
-    store._markCommitted(handle);
+    store._markCommitted(handle, reader);
     // This pass has committed, so nothing mounting later belongs to it.
     forgetPass(source);
-    const releaseCommit = store._onCommit(followTheTree);
+    const releaseCommit = store._onCommit(followTheTree, reader);
 
     return () => {
       release();
@@ -173,7 +175,9 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
     };
     // `source` is read off `store`, so it cannot move while `store` holds, but
     // listing it keeps the whole rule set clean rather than nearly clean.
-  }, [store, source, handle]);
+  }, [store, source, handle, reader]);
+
+  useEffect(() => () => store._forget(reader), [store, reader]);
 
   return handle;
 }
@@ -237,6 +241,7 @@ export function createSelectorStore<S, A, T>(
     return pass(published);
   };
 
+  let viewReader: object = {};
   const attach = (from: StoreHandle<S>) => {
     sourceHead = source._head;
     // Seeded from the handle this reader is showing, not from what the store
@@ -252,7 +257,7 @@ export function createSelectorStore<S, A, T>(
       lastSlice = null;
     }
 
-    const release = source._subscribe(publish, from);
+    const release = source._subscribe(publish, from, viewReader);
 
     // Built during render but subscribed from a layout effect, so the source
     // can move in between. Catch up only as far as the tree has committed —
@@ -273,7 +278,8 @@ export function createSelectorStore<S, A, T>(
     // actions.
     subscribe: source.subscribe,
 
-    _subscribe(listener, from) {
+    _subscribe(listener, from, reader) {
+      viewReader = reader;
       listeners.add(listener);
       if (release === null) release = attach(from);
       return () => {
@@ -306,8 +312,9 @@ export function createSelectorStore<S, A, T>(
     get _source() {
       return source._source;
     },
-    _markCommitted: (handle) => source._markCommitted(handle),
-    _onCommit(listener) {
+    _markCommitted: (handle, reader) => source._markCommitted(handle, reader),
+    _forget: (reader) => source._forget(reader),
+    _onCommit(listener, reader) {
       commitListeners.add(listener);
       // Filtered the same way a publish is: a reader whose slice did not move
       // has nothing new to show and stays where it is, which is not a tear.
@@ -325,7 +332,7 @@ export function createSelectorStore<S, A, T>(
         }
         readersAt = committed;
         for (const l of commitListeners) l(committed);
-      });
+      }, reader);
       return () => {
         commitListeners.delete(listener);
         releaseCommit();

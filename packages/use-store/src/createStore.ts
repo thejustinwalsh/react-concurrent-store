@@ -52,12 +52,17 @@ export interface ConcurrentStoreInternals<S, A>
     listener: (handle: StoreHandle<S>) => boolean,
     /** What this reader is showing. A view seeds its slice memory from it. */
     from: StoreHandle<S>,
+    /** Stable for the reader's lifetime, unlike the listener. */
+    reader: object,
   ): () => void;
   /**
    * The commit pointer moving forward. A separate channel because this fires
    * during commit, where the publish path would re-enter rebasing.
    */
-  _onCommit(listener: (handle: StoreHandle<S>) => void): () => void;
+  _onCommit(
+    listener: (handle: StoreHandle<S>) => void,
+    reader: object,
+  ): () => void;
   readonly _head: StoreHandle<S>;
   readonly _committed: StoreHandle<S>;
   /** The handle this store was created with. */
@@ -72,7 +77,9 @@ export interface ConcurrentStoreInternals<S, A>
    * keying by the view would hide two readers of one store from each other.
    */
   readonly _source: object;
-  _markCommitted(handle: StoreHandle<S>): void;
+  _markCommitted(handle: StoreHandle<S>, reader: object): void;
+  /** The reader unmounted: it will never commit what it took. */
+  _forget(reader: object): void;
 }
 
 /**
@@ -119,13 +126,28 @@ export function createStore<S, A>(
   let sync = head;
   let committed = head;
 
-  const listeners = new Set<(handle: StoreHandle<S>) => boolean>();
-  const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
+  const listeners = new Map<(handle: StoreHandle<S>) => boolean, object>();
+  const commitListeners = new Map<(handle: StoreHandle<S>) => void, object>();
   const actionListeners = new Set<(action: A) => void>();
+  /**
+   * While the two versions are apart: readers that took a Transition toward
+   * head and have not committed it, and readers that have. The versions rejoin
+   * only when nobody is behind, so one root committing cannot settle the store
+   * for a root still waiting on the same Transition.
+   */
+  const behind = new Set<object>();
+  const ahead = new Set<object>();
+  /** Rebased versions, which committing does not move a reader to head. */
+  const rebased = new WeakSet<StoreHandle<S>>();
+
   /** Returns how many readers took the handle. */
-  const notify = (handle: StoreHandle<S>) => {
+  const notify = (handle: StoreHandle<S>, inTransition: boolean) => {
     let taken = 0;
-    for (const listener of listeners) if (listener(handle)) taken += 1;
+    for (const [listener, reader] of listeners) {
+      if (!listener(handle)) continue;
+      taken += 1;
+      if (inTransition) behind.add(reader);
+    }
     return taken;
   };
   const notifyAction = (action: A) => {
@@ -134,6 +156,8 @@ export function createStore<S, A>(
 
   /** The tree has caught up: the two folds are the same again. */
   const settle = (handle: StoreHandle<S>) => {
+    behind.clear();
+    ahead.clear();
     sync = handle;
     head = handle;
     if (handle.version > committed.version) committed = handle;
@@ -180,8 +204,7 @@ export function createStore<S, A>(
         head = makeHandle(headValue, ++version);
         sync = head;
         notifyAction(action);
-        const taken = notify(head);
-        if (taken === 0) settle(head);
+        if (notify(head, false) === 0) settle(head);
         return;
       }
 
@@ -190,8 +213,8 @@ export function createStore<S, A>(
         // the caller's transition. This is where the two part.
         head = makeHandle(headValue, ++version);
         notifyAction(action);
-        const taken = notify(head);
-        if (taken === 0) settle(head);
+        notify(head, true);
+        if (behind.size === 0) settle(head);
         return;
       }
 
@@ -200,21 +223,27 @@ export function createStore<S, A>(
         head = makeHandle(headValue, ++version);
         sync = head;
         notifyAction(action);
-        const taken = notify(head);
         // Nobody took it, so no render is coming and nothing is outstanding.
-        if (taken === 0) settle(head);
+        if (notify(head, false) === 0) settle(head);
         return;
       }
 
       // Both folds take it, from different places: the tree gets what it can
       // show now, and the chronological order follows in a transition.
       sync = makeHandle(syncValue, ++version);
+      rebased.add(sync);
       head = makeHandle(headValue, ++version);
       notifyAction(action);
-      notify(sync);
+      const onScreen = sync;
       const chronological = head;
+      // A reader that committed the Transition shows head, so it rebases there.
+      for (const [listener, reader] of listeners) {
+        listener(ahead.has(reader) ? chronological : onScreen);
+      }
       deferToTransition(() => {
-        notify(chronological);
+        for (const [listener, reader] of listeners) {
+          if (!ahead.has(reader) && listener(chronological)) behind.add(reader);
+        }
       });
     },
 
@@ -226,14 +255,14 @@ export function createStore<S, A>(
       };
     },
 
-    _subscribe(listener) {
-      listeners.add(listener);
+    _subscribe(listener, _from, reader) {
+      listeners.set(listener, reader);
       return () => {
         listeners.delete(listener);
       };
     },
-    _onCommit(listener) {
-      commitListeners.add(listener);
+    _onCommit(listener, reader) {
+      commitListeners.set(listener, reader);
       return () => {
         commitListeners.delete(listener);
       };
@@ -253,8 +282,12 @@ export function createStore<S, A>(
     get _source() {
       return store;
     },
-    _markCommitted(handle) {
+    _markCommitted(handle, reader) {
       settled = true;
+      if (sync !== head && !rebased.has(handle) && handle.version > sync.version) {
+        behind.delete(reader);
+        ahead.add(reader);
+      }
       // Monotonic: a reader still catching up must not drag the pointer back.
       if (handle.version > committed.version) {
         committed = handle;
@@ -262,12 +295,24 @@ export function createStore<S, A>(
         // waited here rather than starting a transition of its own. The tree
         // has now shown this, so bring it forward. Readers already at or past
         // it ignore the call.
-        for (const listener of commitListeners) listener(committed);
+        for (const [listener, reader] of commitListeners) {
+          // Behind: it arrives with its own Transition, not as a blocking
+          // update. Ahead: it already shows head, so a rebased version is older.
+          if (behind.has(reader)) continue;
+          if (ahead.has(reader) && rebased.has(committed)) continue;
+          listener(committed);
+        }
       }
       // The tree has reached the chronological end, so the two folds are the
       // same again. A reader committing only the *sync* view settles nothing:
       // the transition's action is still outstanding.
-      if (committed === head) settle(head);
+      if (committed === head && behind.size === 0) settle(head);
+    },
+    _forget(reader) {
+      ahead.delete(reader);
+      if (behind.delete(reader) && behind.size === 0 && committed === head) {
+        settle(head);
+      }
     },
   };
 

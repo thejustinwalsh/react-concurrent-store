@@ -3486,6 +3486,44 @@ describe("Multiple roots committing at different rates", () => {
     expect(b.textContent).toBe("11");
     expect(a.textContent).toBe("1");
   });
+
+  it("keeps a root on its old state while it waits for a Transition another root committed", async () => {
+    const store = createStore<number, number>(0, (s, a) => s + a);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+
+    function Fast() {
+      return <i>{useStore(store)}</i>;
+    }
+    function Stalls() {
+      const v = useStore(store);
+      if (v >= 10) use(gate);
+      return <i>{v}</i>;
+    }
+
+    const a = document.createElement("div");
+    const b = document.createElement("div");
+    document.body.append(a, b);
+    await act(async () => {
+      createRoot(a).render(<Fast />);
+      createRoot(b).render(
+        <Suspense fallback={<i>F</i>}>
+          <Stalls />
+        </Suspense>,
+      );
+    });
+
+    // Root A commits the Transition; root B waits on data for it.
+    await act(async () => startTransition(() => store.dispatch(10)));
+    expect(`${a.textContent}/${b.textContent}`).toBe("10/0");
+
+    // A blocking update lands on what each root shows.
+    await act(async () => store.dispatch(1));
+    expect(`${a.textContent}/${b.textContent}`).toBe("11/1");
+
+    await act(async () => release());
+    expect(`${a.textContent}/${b.textContent}`).toBe("11/11");
+  });
 });
 
 describe("Selector memory across an abandoned render", () => {
@@ -5028,7 +5066,7 @@ describe("Unsubscribing is constant time", () => {
       number
     >;
     return (listener: () => void) =>
-      internals._subscribe(() => (listener(), false), internals._head);
+      internals._subscribe(() => (listener(), false), internals._head, {});
   };
 
   const arrayListeners = () => {
