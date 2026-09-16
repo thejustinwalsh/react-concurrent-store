@@ -420,51 +420,60 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
   // Both halves were already keyed on the same pair, and splitting them only
   // added a hook boundary to step over.
   useLayoutEffect(() => {
-    // No startTransition: the update inherits the dispatching caller's
-    // priority. Keyed on the handle as well, so the decision is made here and
-    // reported, rather than inside setHandle where the answer is not visible.
-    const release = store._subscribe((next) => {
+    /** Take a published handle, unless it says what this reader already shows. */
+    const takePublish = (next: StoreHandle<S>) => {
       if (Object.is(handle.value, next.value)) return false;
       setHandle(next);
       return true;
-    }, handle);
+    };
 
-    const head = store._head;
-    const committed = store._committed;
-    if (handle !== head) {
+    /**
+     * Where this reader belongs now. It rendered from what it knew during
+     * render; by the time this runs, siblings have rendered too and the store
+     * may have moved again.
+     */
+    const placeThisReader = () => {
+      const head = store._head;
+      const committed = store._committed;
+      if (handle === head) return;
+
       if (committed === head) {
-        // Siblings already committed head this pass. A setState from a layout
-        // effect flushes before the commit returns, so nothing torn is painted.
+        // Siblings already committed head in this pass. A setState from a
+        // layout effect flushes before the commit returns, so this costs a
+        // render pass and not a paint, and nothing torn is shown.
         if (!Object.is(handle.value, head.value)) setHandle(head);
-      } else if (
-        handle.version < committed.version &&
-        !Object.is(handle.value, committed.value)
-      ) {
-        // Behind what the tree shows: come up to that much, no further.
-        setHandle(committed);
+        return;
       }
-      // Otherwise this reader is level with the tree while a transition is in
-      // flight and a sibling has still to commit it. Joining head here would
-      // start a second transition, which commits on its own as soon as nothing
-      // in it suspends while the first is still blocked, leaving this reader
-      // ahead of its siblings. _onCommit brings it forward instead.
-    }
+
+      const behindTheTree =
+        handle.version < committed.version &&
+        !Object.is(handle.value, committed.value);
+      if (behindTheTree) {
+        // Come up to what the tree shows, and no further.
+        setHandle(committed);
+        return;
+      }
+
+      // Level with the tree while a transition is in flight and a sibling has
+      // still to commit it. Joining head here would start a *second*
+      // transition, which commits as soon as nothing in it suspends while the
+      // first is still blocked — arriving ahead of every sibling. Wait for
+      // followTheTree instead.
+    };
+
+    /** The tree committed past this reader, so it is safe to follow. */
+    const followTheTree = (next: StoreHandle<S>) => {
+      if (handle.version >= next.version) return;
+      if (Object.is(handle.value, next.value)) return;
+      setHandle(next);
+    };
+
+    const release = store._subscribe(takePublish, handle);
+    placeThisReader();
     store._markCommitted(handle);
     // This pass has committed, so nothing mounting later belongs to it.
     forgetPass(source);
-
-    // Brought forward when the tree commits past this reader: this is how a
-    // reader that waited, rather than starting a transition of its own,
-    // catches up. Compared here rather than inside setHandle, because calling
-    // setHandle with an unchanged value still costs a render pass.
-    const releaseCommit = store._onCommit((next) => {
-      if (
-        handle.version < next.version &&
-        !Object.is(handle.value, next.value)
-      ) {
-        setHandle(next);
-      }
-    });
+    const releaseCommit = store._onCommit(followTheTree);
 
     return () => {
       release();
