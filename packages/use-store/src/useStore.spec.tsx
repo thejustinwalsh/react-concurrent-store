@@ -39,6 +39,7 @@ import { configureStore, createSlice } from "@reduxjs/toolkit";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { type UpdateInfo } from "@welldone-software/why-did-you-render";
 import {
+  Activity,
   memo,
   StrictMode,
   Suspense,
@@ -3548,5 +3549,131 @@ describe("Selector memory across an abandoned render", () => {
     // Every reading belongs to the committed tree, which is still label A.
     expect(seen.every((s) => s.startsWith("A"))).toBe(true);
     expect(document.body.textContent).toContain("A#1");
+  });
+});
+
+describe("Activity", () => {
+  afterEach(() => cleanup());
+
+  it("a hidden reader agrees with a visible one when it is revealed", async () => {
+    const store = createStore(0, (n: number, step: number) => n + step);
+
+    function Reader({ id }: { id: string }) {
+      return <div data-testid={id}>{useStore(store)}</div>;
+    }
+    function App({ mode }: { mode: "hidden" | "visible" }) {
+      return (
+        <>
+          <Reader id="visible" />
+          <Activity mode={mode}>
+            <Reader id="hidden" />
+          </Activity>
+        </>
+      );
+    }
+
+    const { rerender, getByTestId } = await act(async () =>
+      render(<App mode="hidden" />),
+    );
+    expect(getByTestId("visible").textContent).toBe("0");
+
+    // The hidden tree has no layout effects, so it cannot report a commit.
+    await act(async () => store.dispatch(1));
+    await act(async () => store.dispatch(1));
+    expect(getByTestId("visible").textContent).toBe("2");
+
+    await act(async () => rerender(<App mode="visible" />));
+    expect(getByTestId("hidden").textContent).toBe("2");
+    expect(getByTestId("visible").textContent).toBe("2");
+  });
+
+  it("a hidden reader does not strand the commit pointer behind a visible one", async () => {
+    const store = createStore(0, (n: number, step: number) => n + step);
+    const seen: number[] = [];
+
+    function Visible() {
+      const n = useStore(store);
+      seen.push(n);
+      return <div data-testid="visible">{n}</div>;
+    }
+    function App() {
+      return (
+        <>
+          <Visible />
+          <Activity mode="hidden">
+            <div>{useStoreInHidden(store)}</div>
+          </Activity>
+        </>
+      );
+    }
+    function useStoreInHidden(s: typeof store) {
+      return useStore(s);
+    }
+
+    const { getByTestId } = await act(async () => render(<App />));
+    seen.length = 0;
+
+    // A hidden reader that never commits must not make every later dispatch
+    // look like a pending transition and publish twice.
+    await act(async () => store.dispatch(1));
+    expect(getByTestId("visible").textContent).toBe("1");
+    expect(seen).toEqual([1]);
+
+    await act(async () => store.dispatch(1));
+    expect(getByTestId("visible").textContent).toBe("2");
+    expect(seen).toEqual([1, 2]);
+  });
+
+  // A reader that is already level with the tree when a transition is in
+  // flight has no way to join that transition from userland: setHandle inside
+  // startTransition starts a second one, which commits on its own as soon as
+  // nothing in it suspends, while the first is still blocked. Waiting at
+  // committed instead needs the store to nudge stragglers when the pointer
+  // advances, and that notify reaches every reader, not just the one behind,
+  // so it re-enters the publish path and unpicks rebasing. Recorded rather
+  // than hidden; this is the case the RFC exists to solve inside React.
+  it.fails("a reader revealed during a pending transition lands with the tree", async () => {
+    const store = createStore(1, (n: number, step: number) => n + step);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+
+    function Gated() {
+      const n = useStore(store);
+      if (n === 2) use(gate);
+      return <div data-testid="gated">{n}</div>;
+    }
+    function Peer() {
+      return <div data-testid="peer">{useStore(store)}</div>;
+    }
+    function App({ mode }: { mode: "hidden" | "visible" }) {
+      return (
+        <Suspense fallback={<div>loading</div>}>
+          <Gated />
+          <Activity mode={mode}>
+            <Peer />
+          </Activity>
+        </Suspense>
+      );
+    }
+
+    const { rerender, getByTestId } = await act(async () =>
+      render(<App mode="hidden" />),
+    );
+    expect(getByTestId("gated").textContent).toBe("1");
+
+    await act(async () => {
+      startTransition(() => store.dispatch(1));
+    });
+    expect(getByTestId("gated").textContent).toBe("1");
+
+    // Revealed while the transition is still held: it must show what the tree
+    // shows, not the version the transition is waiting on.
+    await act(async () => rerender(<App mode="visible" />));
+    expect(getByTestId("peer").textContent).toBe("1");
+    expect(getByTestId("gated").textContent).toBe("1");
+
+    await act(async () => release());
+    expect(getByTestId("peer").textContent).toBe("2");
+    expect(getByTestId("gated").textContent).toBe("2");
   });
 });
