@@ -324,20 +324,47 @@ export function createStore<S, A>(
 // Values are `Handle<S>` for that store's own S; the map spans stores, so
 // the read asserts once.
 const renderedThisPass = new WeakMap<object, StoreHandle<unknown>>();
-const expiring = new Set<object>();
+const expiring = new WeakMap<object, number>();
+let epoch = 0;
 
-// A render pass runs to completion within one task, so a microtask queued
-// during it fires once the pass is over. Without this the slot outlives the
-// pass that wrote it: a render that is abandoned never renders again to
-// overwrite it, and the next root to mount adopts a handle no tree showed.
+/**
+ * Record what this reader is rendering, for a reader that mounts later in the
+ * same pass.
+ *
+ * The slot has to end when the pass does, and userland cannot see a pass
+ * boundary. Two things close it. A commit clears it, which covers every pass
+ * that finishes — see `forgetPass`. A microtask clears it otherwise, which
+ * covers a pass that is abandoned and never commits; without that, a render
+ * abandoned in one root stayed visible to a mount in another, and the next
+ * root opened on a handle no tree had shown.
+ *
+ * The microtask is guarded by a token so only the newest write can expire the
+ * slot. That matters because a concurrent render is not guaranteed to finish
+ * in one task: React can yield and resume from another scheduler task, and a
+ * microtask queued before the yield runs in between. The guard means a slot
+ * stays alive as long as readers keep rendering into it.
+ *
+ * It can still expire mid-pass if React yields after the last reader writes
+ * and before a mounting one reads. That failure is the conservative one: the
+ * mounting reader falls back to the commit pointer, which is what the tree is
+ * showing, and its catch-up runs in the same commit. The opposite failure —
+ * keeping the slot too long — hands out a value no tree ever showed.
+ */
 function recordRendered(store: object, handle: StoreHandle<unknown>): void {
   renderedThisPass.set(store, handle);
-  if (expiring.has(store)) return;
-  expiring.add(store);
+  const token = ++epoch;
+  expiring.set(store, token);
   queueMicrotask(() => {
+    if (expiring.get(store) !== token) return;
     expiring.delete(store);
     renderedThisPass.delete(store);
   });
+}
+
+/** Called from a commit: the pass this slot belonged to is over. */
+function forgetPass(store: object): void {
+  expiring.delete(store);
+  renderedThisPass.delete(store);
 }
 
 // Stable identities for the hydration check below.
@@ -424,6 +451,8 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       // siblings. Wait for _onCommit instead.
     }
     store._markCommitted(handle);
+    // This pass has committed, so nothing mounting later belongs to it.
+    forgetPass(source);
 
     // Brought forward when the tree commits past this reader: this is how a
     // reader that waited, rather than starting a transition of its own,
