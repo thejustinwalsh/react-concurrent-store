@@ -22,7 +22,13 @@ import {
   RelayStore,
   useFragment,
 } from "../test/MiniRelay";
-import { VersionedStore, createSelectorStore, createStore, useStore } from "./useStore";
+import {
+  createStore,
+  useStore,
+  type ConcurrentStoreInternals,
+  createSelectorStore,
+  type ReactConcurrentStore,
+} from "./useStore";
 import { configureStore, createSlice } from "@reduxjs/toolkit";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { type UpdateInfo } from "@welldone-software/why-did-you-render";
@@ -87,6 +93,17 @@ declare module "react" {
   export const __IS_WDYR__: boolean;
 }
 
+
+/**
+ * `createStore` hands back the public surface. Tests that assert on commit
+ * bookkeeping narrow to the internals deliberately, in one named place, so it
+ * is obvious where a test is reaching past the API a consumer gets.
+ */
+function internals<S, A>(
+  store: ReactConcurrentStore<S, A>,
+): ConcurrentStoreInternals<S, A> {
+  return store as ConcurrentStoreInternals<S, A>;
+}
 
 describe("Handles and tearing", () => {
   type State = number;
@@ -197,7 +214,7 @@ describe("Handles and tearing", () => {
       // `status`/`value` alone. The moment it falls back to `then`, we lose
       // synchronous unwrapping and a blocking-lane read hits the fallback.
       const store = createStore(1, reducer);
-      const head = store._getHead();
+      const head = internals(store)._getHead();
       let thenCalls = 0;
       const originalThen = head.then.bind(head);
       head.then = ((onfulfilled) => {
@@ -649,7 +666,7 @@ describe("Selector composition", () => {
 
   it("releases its source subscription when the last reader unmounts", async () => {
     const store = createStore({ a: 1, b: 1 }, reducer);
-    const view = createSelectorStore(store, (state: State) => state.a);
+    const view = createSelectorStore(internals(store), (state: State) => state.a);
 
     const first = view.subscribe(() => {});
     const second = view.subscribe(() => {});
@@ -669,7 +686,7 @@ describe("Selector composition", () => {
 
   it("is read-only", () => {
     const store = createStore({ a: 1, b: 1 }, reducer);
-    const view = createSelectorStore(store, (state: State) => state.a);
+    const view = createSelectorStore(internals(store), (state: State) => state.a);
     expect(() => view.dispatch(undefined as never)).toThrow(/read-only/);
   });
 });
@@ -682,9 +699,9 @@ describe("Subscription cleanup", () => {
   afterEach(() => cleanup());
 
   /** Wraps a store to count live subscriptions without adding public API. */
-  function counting<S, A>(inner: VersionedStore<S, A>) {
+  function counting<S, A>(inner: ConcurrentStoreInternals<S, A>) {
     let live = 0;
-    const store: VersionedStore<S, A> & { live: () => number } = {
+    const store: ConcurrentStoreInternals<S, A> & { live: () => number } = {
       ...inner,
       // The hooks subscribe to handles, not actions.
       _subscribe(listener) {
@@ -701,7 +718,7 @@ describe("Subscription cleanup", () => {
   }
 
   it("releases the store subscription when a reader unmounts", async () => {
-    const store = counting(createStore<State, Action>(1, reducer));
+    const store = counting(internals(createStore<State, Action>(1, reducer)));
 
     function Reader() {
       return <div>{useStore(store)}</div>;
@@ -715,7 +732,7 @@ describe("Subscription cleanup", () => {
   });
 
   it("releases every subscription when many readers unmount", async () => {
-    const store = counting(createStore<State, Action>(1, reducer));
+    const store = counting(internals(createStore<State, Action>(1, reducer)));
 
     function Reader() {
       return <div>{useStore(store)}</div>;
@@ -743,7 +760,7 @@ describe("Subscription cleanup", () => {
   });
 
   it("releases the subscription when a selector reader unmounts", async () => {
-    const store = counting(createStore<State, Action>(1, reducer));
+    const store = counting(internals(createStore<State, Action>(1, reducer)));
 
     function Reader() {
       return <div>{useStore(store, (state: State) => state)}</div>;
@@ -757,7 +774,7 @@ describe("Subscription cleanup", () => {
   });
 
   it("does not leak when a reader unmounts mid transition", async () => {
-    const store = counting(createStore<State, Action>(1, reducer));
+    const store = counting(internals(createStore<State, Action>(1, reducer)));
 
     function Reader() {
       return <div>{useStore(store)}</div>;
@@ -867,7 +884,7 @@ describe("Dynamic stores", () => {
     const left = createStore<State, Action>(1, reducer);
     const right = createStore<State, Action>(100, reducer);
 
-    function Reader({ store }: { store: VersionedStore<State, Action> }) {
+    function Reader({ store }: { store: ReactConcurrentStore<State, Action> }) {
       return <div>{useStore(store)}</div>;
     }
 
@@ -1226,7 +1243,7 @@ describe("Selector error policy", () => {
       name: "versioned",
       createStore: (initial: State) => versioned.createStore<State, Action>(initial, reducer),
       useSelector: (store, selector) =>
-        versioned.useStore(store as versioned.VersionedStore<State, Action>, selector),
+        versioned.useStore(store as versioned.ConcurrentStoreInternals<State, Action>, selector),
       Wrapper: ({ children }: { children: React.ReactNode }) => <>{children}</>,
       // Selector runs during render, so props and state are always coherent.
       zombieChild: false,
@@ -1319,7 +1336,7 @@ describe("Suspend on mount", () => {
       name: "versioned",
       createStore: (initial) => versioned.createStore<State, Action>(initial, reducer),
       useStore: (store) =>
-        versioned.useStore(store as versioned.VersionedStore<State, Action>),
+        versioned.useStore(store as versioned.ConcurrentStoreInternals<State, Action>),
       Wrapper: ({ children }) => <>{children}</>,
       // Mounts at the committed version, so a suspending head is never rendered.
       stuckInSuspense: false,

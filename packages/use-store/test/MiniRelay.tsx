@@ -6,7 +6,7 @@
  * in `_source`. Ours owns the state, so the reducer applies the updater
  * directly and the mirror is gone.
  */
-import { VersionedStore, createStore, useStore } from "../src/useStore";
+import { ReactConcurrentStore, createStore, useStore } from "../src/useStore";
 import { createContext, useContext, useMemo } from "react";
 
 /**
@@ -82,7 +82,7 @@ export type FragmentAstNode =
 type Updater = (source: RecordSource) => RecordSource;
 
 export class RelayStore {
-  reactStore: VersionedStore<RecordSource, Updater>;
+  reactStore: ReactConcurrentStore<RecordSource, Updater>;
   constructor() {
     // Our store owns the state and folds the updater itself, so there is no
     // separate source object to keep in step — the reducer is the updater.

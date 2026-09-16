@@ -19,7 +19,7 @@ import { Reducer } from "./types";
  * calls `then` on a fulfilled thenable, so a tagged box satisfies `use()`
  * while passing `S` through untouched.
  */
-export type Handle<S> = PromiseLike<S> & {
+export type StoreHandle<S> = PromiseLike<S> & {
   status: "fulfilled";
   value: S;
   version: number;
@@ -31,7 +31,7 @@ export type Handle<S> = PromiseLike<S> & {
  * every version, which reads as a render-causing difference to anything
  * comparing handles field by field.
  */
-const handlePrototype = {
+const storeHandlePrototype = {
   // React never reaches this: `use` unwraps a fulfilled thenable through
   // `status`/`value` and never calls `then`. It exists to satisfy the
   // `PromiseLike` contract for callers who chain off a handle directly.
@@ -40,7 +40,7 @@ const handlePrototype = {
   // would adopt a thenable `S`, which is the whole failure mode this handle
   // exists to avoid.
   then<S, TResult1 = S, TResult2 = never>(
-    this: Handle<S>,
+    this: StoreHandle<S>,
     onfulfilled?: ((value: S) => TResult1 | PromiseLike<TResult1>) | null,
   ): PromiseLike<TResult1 | TResult2> {
     const value = this.value;
@@ -58,8 +58,8 @@ function isThenable(value: unknown): boolean {
   );
 }
 
-function createHandle<S>(value: S, version: number): Handle<S> {
-  const handle = Object.create(handlePrototype) as Handle<S> & {
+function createStoreHandle<S>(value: S, version: number): StoreHandle<S> {
+  const handle = Object.create(storeHandlePrototype) as StoreHandle<S> & {
     status: "fulfilled";
     value: S;
     version: number;
@@ -71,9 +71,12 @@ function createHandle<S>(value: S, version: number): Handle<S> {
 }
 
 /**
- * The public surface, matching RFC #35449's `ReactStore`.
+ * The public surface, matching the shape of `ReactStore` in RFC #35449.
+ *
+ * Named for the package rather than `ReactStore` so it cannot collide with a
+ * type React may ship if the concurrent store feature lands.
  */
-export interface ReactStore<S, A> {
+export interface ReactConcurrentStore<S, A> {
   /** The current head state. */
   getState(): S;
   dispatch(action: A): void;
@@ -86,20 +89,20 @@ export interface ReactStore<S, A> {
 
 /**
  * Bookkeeping React keeps privately on its own `StoreWrapper` and a ponyfill
- * has to keep on the store. Underscored because it is not API: consumers
- * should depend on `ReactStore` above.
+ * has to keep on the store. `createStore` returns the public type above, so a
+ * consumer never sees these; the hooks and the tests narrow to them by cast.
  */
-export interface VersionedStore<S, A> extends ReactStore<S, A> {
+export interface ConcurrentStoreInternals<S, A> extends ReactConcurrentStore<S, A> {
   /** Live handle subscribers. Exposed so tests can assert there are no leaks. */
-  readonly _listeners: ReadonlySet<(handle: Handle<S>) => void>;
+  readonly _listeners: ReadonlySet<(handle: StoreHandle<S>) => void>;
   /**
    * Subscribe to published handles rather than actions. The hooks need to know
    * *which* handle was published — `sync` or `head` — a distinction React does
    * not need because the reconciler has lane information instead.
    */
-  _subscribe(listener: (handle: Handle<S>) => void): () => void;
-  _getHead(): Handle<S>;
-  _getCommitted(): Handle<S>;
+  _subscribe(listener: (handle: StoreHandle<S>) => void): () => void;
+  _getHead(): StoreHandle<S>;
+  _getCommitted(): StoreHandle<S>;
   /** The committed value, for callers that want state rather than a handle. */
   _getCommittedState(): S;
   /**
@@ -108,8 +111,8 @@ export interface VersionedStore<S, A> extends ReactStore<S, A> {
    * too late to receive a notification must catch up to this, not to `head`,
    * or it jumps to the transition's state.
    */
-  _getPublished(): Handle<S>;
-  _markCommitted(handle: Handle<S>): void;
+  _getPublished(): StoreHandle<S>;
+  _markCommitted(handle: StoreHandle<S>): void;
 }
 
 /**
@@ -119,11 +122,11 @@ export interface VersionedStore<S, A> extends ReactStore<S, A> {
  */
 export function createStore<S>(
   initialValue: S,
-): VersionedStore<S, S | ((previous: S) => S)>;
+): ReactConcurrentStore<S, S | ((previous: S) => S)>;
 export function createStore<S, A>(
   initialValue: S,
   reducer: Reducer<S, A>,
-): VersionedStore<S, A>;
+): ReactConcurrentStore<S, A>;
 
 /**
  * Signature follows RFC #35449: value first, reducer optional. With no
@@ -132,7 +135,8 @@ export function createStore<S, A>(
 export function createStore<S, A>(
   initialValue: S,
   reducer?: Reducer<S, A>,
-): VersionedStore<S, A> {
+): ReactConcurrentStore<S, A> {
+  // Built as the full internal shape, returned as the public one.
   // With no reducer the action follows useState's setter convention: either a
   // replacement value or an updater, `(prev: S) => S`. RFC #35449's own suite
   // dispatches both forms against a store created without one.
@@ -159,13 +163,13 @@ export function createStore<S, A>(
   // a transition is pending. So the pending-transition signal stays
   // `committed !== head`, and `sync` is what we hand a reader that needs the
   // sync-relative value without recomputing it.
-  let head = createHandle(initialValue, version);
+  let head = createStoreHandle(initialValue, version);
   let sync = head;
   let committed = head;
 
-  const listeners = new Set<(handle: Handle<S>) => void>();
+  const listeners = new Set<(handle: StoreHandle<S>) => void>();
   const actionListeners = new Set<(action: A) => void>();
-  const notify = (handle: Handle<S>) => {
+  const notify = (handle: StoreHandle<S>) => {
     for (const listener of listeners) listener(handle);
   };
   // RFC #35449: "called after the state has updated and includes the action
@@ -185,7 +189,7 @@ export function createStore<S, A>(
   // shares the caller's priority, so they all take the same path.
   let batchRebasing = false;
 
-  return {
+  const store: ConcurrentStoreInternals<S, A> = {
     dispatch(action) {
       // Chronological: every action in the order it was dispatched.
       const chronological = fold(head.value, action);
@@ -201,7 +205,7 @@ export function createStore<S, A>(
 
       if (!rebasing) {
         if (Object.is(chronological, head.value)) return;
-        head = createHandle(chronological, ++version);
+        head = createStoreHandle(chronological, ++version);
         sync = head;
         published = head;
         notifyAction(action);
@@ -219,7 +223,7 @@ export function createStore<S, A>(
       // the reducer twice, allocating two distinct promises where the caller
       // wrote one.
       if (isThenable(chronological)) {
-        head = createHandle(chronological, ++version);
+        head = createStoreHandle(chronological, ++version);
         sync = head;
         published = head;
         notifyAction(action);
@@ -236,8 +240,8 @@ export function createStore<S, A>(
       // every one after it chains along the `sync` timeline, or the second
       // update in a batch would land on the transition's state instead.
       const base = sync === head ? committed : sync;
-      sync = createHandle(fold(base.value, action), ++version);
-      head = createHandle(chronological, ++version);
+      sync = createStoreHandle(fold(base.value, action), ++version);
+      head = createStoreHandle(chronological, ++version);
       published = sync;
       notifyAction(action);
       notify(sync);
@@ -272,7 +276,9 @@ export function createStore<S, A>(
       if (handle.version > committed.version) committed = handle;
       if (committed === head) sync = head;
     },
-  };
+  }
+  return store;
+;
 }
 
 /**
@@ -296,12 +302,13 @@ const renderedThisPass = new WeakMap<object, unknown>();
  *
  * Shared by both forms of `useStore`; the selector form passes a derived view.
  */
-function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
+function useHandle<S, A>(publicStore: ReactConcurrentStore<S, A>): StoreHandle<S> {
+  const store = publicStore as ConcurrentStoreInternals<S, A>;
   // Mount at whatever an earlier reader is rendering in this pass, falling
   // back to the committed version when we are the first.
   const [handle, setHandle] = useState(
     () =>
-      (renderedThisPass.get(store as object) as Handle<S> | undefined) ??
+      (renderedThisPass.get(store as object) as StoreHandle<S> | undefined) ??
       store._getCommitted(),
   );
 
@@ -347,6 +354,9 @@ function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
 }
 
 /**
+ * Internal: the derived view backing `useStore(store, selector)`. Not part of
+ * the API — it takes and returns internals, and RFC #35449 has no equivalent.
+ *
  * A read-only view of `source` that forwards the source's own handles, but
  * only when the selected slice changes. The selector acts as the view's
  * reducer and the equality check is its bail-out, so the layer needs no new
@@ -360,16 +370,16 @@ function useHandle<S, A>(store: VersionedStore<S, A>): Handle<S> {
  * subscriber, so the view can be constructed during render without leaking.
  */
 export function createSelectorStore<S, A, T>(
-  source: VersionedStore<S, A>,
+  source: ConcurrentStoreInternals<S, A>,
   selector: (state: S) => T,
   isEqual: (a: T, b: T) => boolean = Object.is,
-): VersionedStore<S, never> {
+): ConcurrentStoreInternals<S, never> {
   let head = source._getHead();
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
-  const listeners = new Set<(handle: Handle<S>) => void>();
+  const listeners = new Set<(handle: StoreHandle<S>) => void>();
 
-  const publish = (published: Handle<S>) => {
+  const publish = (published: StoreHandle<S>) => {
     head = published;
     let next: T;
     try {
@@ -427,7 +437,7 @@ export function createSelectorStore<S, A, T>(
       throw new Error("A selector view is read-only; dispatch to its source.");
     },
     // A read-only view has no actions of its own; forward the source's.
-    subscribe: source.subscribe as VersionedStore<S, never>["subscribe"],
+    subscribe: source.subscribe as ConcurrentStoreInternals<S, never>["subscribe"],
     _subscribe(listener) {
       listeners.add(listener);
       if (release === null) release = attach();
@@ -449,9 +459,9 @@ export function createSelectorStore<S, A, T>(
   };
 }
 
-export function useStore<S, A>(store: VersionedStore<S, A>): S;
+export function useStore<S, A>(store: ReactConcurrentStore<S, A>): S;
 export function useStore<S, A, T>(
-  store: VersionedStore<S, A>,
+  store: ReactConcurrentStore<S, A>,
   selector: (state: S) => T,
   isEqual?: (a: T, b: T) => boolean,
 ): T;
@@ -461,7 +471,7 @@ export function useStore<S, A, T>(
  * a bail-out layer over the same primitive, never a separate read path.
  */
 export function useStore<S, A, T>(
-  store: VersionedStore<S, A>,
+  store: ReactConcurrentStore<S, A>,
   selector?: (state: S) => T,
   isEqual: (a: T, b: T) => boolean = Object.is,
 ): S | T {
@@ -469,10 +479,11 @@ export function useStore<S, A, T>(
     () =>
       selector === undefined
         ? store
-        : (createSelectorStore(store, selector, isEqual) as VersionedStore<
-            S,
-            A
-          >),
+        : (createSelectorStore(
+            store as ConcurrentStoreInternals<S, A>,
+            selector,
+            isEqual,
+          ) as ReactConcurrentStore<S, A>),
     [store, selector, isEqual],
   );
 
