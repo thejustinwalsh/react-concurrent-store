@@ -1,86 +1,65 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 import { Boundary } from "./Boundary";
-import { runEveryScenario } from "./ui";
-import { RebasingScenario } from "./scenarios/rebasing";
-import { SuspenseScenario } from "./scenarios/suspense";
-import { ErrorResetScenario } from "./scenarios/errors";
-import { TearingScenario } from "./scenarios/tearing";
-import { SelectorScenario } from "./scenarios/selectors";
-import { RootsScenario } from "./scenarios/roots";
+import { navigate, pages, usePage } from "./router";
+import { GauntletPage } from "./pages/gauntlet";
+import { RouterPage } from "./pages/router";
 
-/** One panel throwing must not take the page with it. */
-function Panel({ children }: { children: ReactNode }) {
+function Nav() {
+  const here = usePage();
   return (
-    <Boundary
-      fallback={(error, reset) => (
-        <section className="card">
-          <header>
-            <h2>This panel threw</h2>
-            <p className="proves">{error.message}</p>
-          </header>
-          <div className="controls">
-            <button onClick={reset}>retry</button>
-          </div>
-        </section>
-      )}
-    >
-      <Suspense
-        fallback={
-          <section className="card">
-            <header>
-              <h2>loading…</h2>
-            </header>
-          </section>
-        }
-      >
-        {children}
-      </Suspense>
-    </Boundary>
+    <nav className="tabs">
+      {pages.map((page) => (
+        <button
+          key={page.id}
+          className={page.id === here ? "tab here" : "tab"}
+          aria-current={page.id === here ? "page" : undefined}
+          onClick={() => navigate(page.id)}
+        >
+          <span className="t">{page.title}</span>
+          <span className="b">{page.blurb}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
-/**
- * Every panel is live: drive it with the buttons, or press Run to watch the
- * scripted sequence play out slowly and end in a verdict. Nothing here is
- * mocked and there is no act() — this is the browser's own scheduler.
- */
-export function App() {
-  // One after another: see runEveryScenario for why not all at once.
-  const runAll = () => {
-    void runEveryScenario();
-  };
+function Routed() {
+  const page = usePage();
+  switch (page) {
+    case "gauntlet":
+      return <GauntletPage />;
+    case "router":
+      return <RouterPage />;
+    default:
+      return (
+        <div className="lede">
+          <h2>Not built yet</h2>
+        </div>
+      );
+  }
+}
 
+export function App() {
   return (
     <>
       <header className="top">
-        <h1>Concurrent Store — the gauntlet</h1>
-        <span className="sub">real React 19.3, real roots, no test harness</span>
-        <span className="tally">
-          <button className="run" onClick={runAll}>
-            Run all
-          </button>
-        </span>
+        <h1>Concurrent Store</h1>
+        <span className="sub">react 19.3 · no test harness</span>
       </header>
-      <main>
-        <Panel>
-          <RebasingScenario />
-        </Panel>
-        <Panel>
-          <TearingScenario />
-        </Panel>
-        <Panel>
-          <SuspenseScenario />
-        </Panel>
-        <Panel>
-          <ErrorResetScenario />
-        </Panel>
-        <Panel>
-          <SelectorScenario />
-        </Panel>
-        <Panel>
-          <RootsScenario />
-        </Panel>
-      </main>
+      <Nav />
+      <Boundary
+        fallback={(error, reset) => (
+          <div className="lede">
+            <h2>This page threw</h2>
+            <p>{error.message}</p>
+            <button onClick={reset}>retry</button>
+          </div>
+        )}
+      >
+        <Suspense fallback={<div className="lede">loading…</div>}>
+          <Routed />
+        </Suspense>
+      </Boundary>
     </>
   );
 }

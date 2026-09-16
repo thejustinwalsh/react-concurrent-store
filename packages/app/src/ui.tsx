@@ -134,7 +134,6 @@ export function createProbe(): Probe {
   const frames: Array<Record<string, unknown>> = [];
   let queued = false;
   let version = 0;
-  let watching = 0;
 
   const cell = (phase: Phase) => cells.get(phase)!;
   const key = (name: string, phase: Phase) => `${phase}:${name}`;
@@ -175,7 +174,6 @@ export function createProbe(): Probe {
     tears: () => tears,
     frames: () => frames,
     watchFrames() {
-      watching += 1;
       let live = true;
       let previous = "";
       const sample = () => {
@@ -191,7 +189,6 @@ export function createProbe(): Probe {
       requestAnimationFrame(sample);
       return () => {
         live = false;
-        watching -= 1;
       };
     },
     report(name, phase, value, reader) {
