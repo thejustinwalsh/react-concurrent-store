@@ -2947,10 +2947,12 @@ describe("Inferred priority and identity", () => {
 
   afterEach(() => cleanup());
 
-  // The pass slot is module-level, so a render abandoned in one root was
-  // visible to a mount in another: the mounting reader adopted a handle that
-  // no tree had committed. Within one root the parent re-render overwrites the
-  // slot, which is why this only showed across roots.
+  // Two leaks met here. The pass slot is module-level, so a render abandoned
+  // in one root was visible to a mount in another, and the mounting reader
+  // adopted a handle no tree had committed. Within one root the parent
+  // re-render overwrites the slot, which is why it only showed across roots.
+  // Then the reader that did mount at committed started a transition of its
+  // own to reach head, and reached it while the first root was still blocked.
   it("does not mount another root from an abandoned render's handle", async () => {
     const store = createStore(1);
     const never = new Promise<void>(() => {});
@@ -2984,13 +2986,11 @@ describe("Inferred priority and identity", () => {
       render(<B />);
     });
 
-    // B must mount at the committed state, then reach head the way any late
-    // reader does. It must never open on 2, which no tree ever showed.
-    expect(bRenders[0]).toBe(1);
-    expect(bRenders).toEqual([1, 2]);
-    // The roots then diverge only because A is suspended forever; React makes
-    // no cross-root commit guarantee, so this is not a tear.
-    expect(readAll()).toEqual(["1", "2"]);
+    // B mounts at the committed state and stays there. It never opens on 2,
+    // which no tree ever showed, and it does not start a transition of its own
+    // to reach a head that root A is still blocked on.
+    expect(bRenders).toEqual([1]);
+    expect(readAll()).toEqual(["1", "1"]);
   });
 
   // A selector view that bails out used to mark the source committed, so
@@ -3632,7 +3632,7 @@ describe("Activity", () => {
   // advances, and that notify reaches every reader, not just the one behind,
   // so it re-enters the publish path and unpicks rebasing. Recorded rather
   // than hidden; this is the case the RFC exists to solve inside React.
-  it.fails("a reader revealed during a pending transition lands with the tree", async () => {
+  it("a reader revealed during a pending transition lands with the tree", async () => {
     const store = createStore(1, (n: number, step: number) => n + step);
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

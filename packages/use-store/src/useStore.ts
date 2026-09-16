@@ -80,10 +80,18 @@ export interface ConcurrentStoreInternals<S, A>
   extends ReactConcurrentStore<S, A> {
   /** Subscribe to published handles; readers need to know *which* was sent. */
   _subscribe(listener: (handle: StoreHandle<S>) => void): () => void;
+  /**
+   * Subscribe to the commit pointer moving forward. Separate from
+   * `_subscribe` on purpose: this fires during commit, and routing it through
+   * the publish channel would re-enter rebasing and the selector bail-out.
+   */
+  _onCommit(listener: (handle: StoreHandle<S>) => void): () => void;
   readonly _head: StoreHandle<S>;
   readonly _committed: StoreHandle<S>;
   /** Last handle published at the caller's priority; a late subscriber's target. */
   readonly _published: StoreHandle<S>;
+  /** How many readers are subscribed; one reader has nothing to tear against. */
+  readonly _readers: number;
   _markCommitted(handle: StoreHandle<S>): void;
 }
 
@@ -119,6 +127,7 @@ export function createStore<S, A>(
   let published = head;
 
   const listeners = new Set<(handle: StoreHandle<S>) => void>();
+  const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
   const actionListeners = new Set<(action: A) => void>();
   const notify = (handle: StoreHandle<S>) => {
     for (const listener of listeners) listener(handle);
@@ -201,6 +210,12 @@ export function createStore<S, A>(
         listeners.delete(listener);
       };
     },
+    _onCommit(listener) {
+      commitListeners.add(listener);
+      return () => {
+        commitListeners.delete(listener);
+      };
+    },
     get _head() {
       return head;
     },
@@ -210,9 +225,19 @@ export function createStore<S, A>(
     get _published() {
       return published;
     },
+    get _readers() {
+      return listeners.size;
+    },
     _markCommitted(handle) {
       // Monotonic: a reader still catching up must not drag the pointer back.
-      if (handle.version > committed.version) committed = handle;
+      if (handle.version > committed.version) {
+        committed = handle;
+        // A reader that was level with the tree while this was in flight
+        // waited here rather than starting a transition of its own. The tree
+        // has now shown this, so bring it forward. Readers already at or past
+        // it ignore the call.
+        for (const listener of commitListeners) listener(committed);
+      }
       if (committed === head) sync = head;
     },
   };
@@ -261,26 +286,59 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
   useLayoutEffect(() => {
     // No startTransition: the update inherits the dispatching caller's priority.
     return store._subscribe((next) => {
-      setHandle((prev) => (Object.is(prev.value, next.value) ? prev : next));
+      setHandle((prev) =>
+        // Never backwards: versions rise with every handle a store makes,
+        // including the rebased one, so an older handle is one this reader has
+        // already moved past.
+        prev.version >= next.version || Object.is(prev.value, next.value)
+          ? prev
+          : next,
+      );
     });
   }, [store]);
 
   useLayoutEffect(() => {
     const head = store._head;
+    const committed = store._committed;
     if (handle !== head) {
-      if (store._committed === head) {
+      if (committed === head) {
         // Siblings already committed head this pass. A setState from a layout
         // effect flushes before the commit returns, so nothing torn is painted.
-        setHandle(head);
-      } else {
-        // Still pending: join it rather than landing ahead of the tree. Bare
-        // startTransition, since useTransition's isPending is unused here.
+        if (!Object.is(handle.value, head.value)) setHandle(head);
+      } else if (
+        handle.version < committed.version &&
+        !Object.is(handle.value, committed.value)
+      ) {
+        // Behind what the tree shows: come up to that much, no further.
+        setHandle(committed);
+      } else if (store._readers <= 1) {
+        // Level with the tree, a transition in flight, and no sibling to tear
+        // against. Waiting here would deadlock: the commit this reader is
+        // waiting for is the one only it can produce.
         startTransition(() => {
           setHandle(head);
         });
       }
+      // Otherwise level with the tree while a transition is in flight and a
+      // sibling is still to commit it. Joining head here would start a second
+      // transition, which commits on its own as soon as nothing in it suspends
+      // while the first is still blocked, leaving this reader ahead of its
+      // siblings. Wait for _onCommit instead.
     }
     store._markCommitted(handle);
+
+    // Brought forward when the tree commits past this reader: this is how a
+    // reader that waited, rather than starting a transition of its own,
+    // catches up. Compared here rather than inside setHandle, because calling
+    // setHandle with an unchanged value still costs a render pass.
+    return store._onCommit((next) => {
+      if (
+        handle.version < next.version &&
+        !Object.is(handle.value, next.value)
+      ) {
+        setHandle(next);
+      }
+    });
   }, [store, handle]);
 
   return handle;
@@ -319,6 +377,7 @@ export function createSelectorStore<S, A, T>(
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
   const listeners = new Set<(handle: StoreHandle<S>) => void>();
+  const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
 
   const publish = (published: StoreHandle<S>) => {
     head = published;
@@ -345,8 +404,15 @@ export function createSelectorStore<S, A, T>(
   };
 
   const attach = () => {
+    // Seeded from the published handle rather than head: `last` names the
+    // slice readers are showing. Seeded from a pending transition's head, that
+    // slice would look already delivered and its commit would bail, stranding
+    // the reader behind its siblings.
     try {
-      last = selector === undefined ? null : { value: selector(head.value, undefined) };
+      last =
+        selector === undefined
+          ? null
+          : { value: selector(source._published.value, undefined) };
     } catch {
       last = null;
     }
@@ -402,7 +468,36 @@ export function createSelectorStore<S, A, T>(
     get _published() {
       return source._published;
     },
+    // The source's, not this view's: every reader holds its own view, so the
+    // source's subscriber count is the reader count.
+    get _readers() {
+      return source._readers;
+    },
     _markCommitted: (handle) => source._markCommitted(handle),
+    _onCommit(listener) {
+      commitListeners.add(listener);
+      // Filtered the same way a publish is: a reader whose slice did not move
+      // has nothing new to show and stays where it is, which is not a tear.
+      const releaseCommit = source._onCommit((committed) => {
+        if (selector !== undefined) {
+          let next: T;
+          try {
+            next = selector(committed.value, last?.value);
+          } catch {
+            for (const l of commitListeners) l(committed);
+            return;
+          }
+          if (last !== null && Object.is(next, last.value)) return;
+          last = { value: next };
+        }
+        forwarded = committed;
+        for (const l of commitListeners) l(committed);
+      });
+      return () => {
+        commitListeners.delete(listener);
+        releaseCommit();
+      };
+    },
     _setSelector(next) {
       selector = next;
     },
