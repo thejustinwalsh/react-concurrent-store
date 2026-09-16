@@ -86,8 +86,10 @@ export interface ReactConcurrentStore<S, A> {
   /** Apply an action. */
   dispatch(action: A): void;
   /**
-   * Called after each update with the action that caused it. Returns an
-   * unsubscribe function.
+   * Called after each update with the action that caused it, once the store
+   * has applied it — `getState` inside the callback reports the state that
+   * action produced. That is what lets this pair drive a
+   * useSyncExternalStore bridge. Returns an unsubscribe function.
    */
   subscribe(callback: (action: A) => void): () => void;
 }
@@ -224,11 +226,10 @@ export function createStore<S, A>(
       // "without the transition" version of it and the folds rejoin.
       const collapsed = isThenable(headValue);
 
-      notifyAction(action);
-
       if (collapsed) {
         head = makeHandle(headValue, ++version);
         sync = head;
+        notifyAction(action);
         const taken = notify(head);
         if (taken === 0) settle(head);
         return;
@@ -239,6 +240,7 @@ export function createStore<S, A>(
         // it, and the notification inherits the caller's transition. This is
         // where the two part.
         head = makeHandle(headValue, ++version);
+        notifyAction(action);
         const taken = notify(head);
         if (taken === 0) settle(head);
         return;
@@ -248,6 +250,7 @@ export function createStore<S, A>(
         // Nothing outstanding: one fold serves both.
         head = makeHandle(headValue, ++version);
         sync = head;
+        notifyAction(action);
         const taken = notify(head);
         // Nobody took it: nothing is mounted, or every reader's slice is
         // unchanged. No render is coming, so the tree already shows everything
@@ -261,6 +264,7 @@ export function createStore<S, A>(
       // priority, and the chronological order follows in a transition.
       sync = makeHandle(fold(sync.value, action), ++version);
       head = makeHandle(headValue, ++version);
+      notifyAction(action);
       notify(sync);
       const chronological = head;
       startTransition(() => {

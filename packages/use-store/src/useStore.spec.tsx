@@ -52,6 +52,7 @@ import {
   useLayoutEffect,
   useOptimistic,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from "react";
 import { flushSync } from "react-dom";
@@ -4576,5 +4577,47 @@ describe("Why a reader that lands behind cannot simply join the transition", () 
     await act(async () => release());
     expect(at("blocked")).toBe("1");
     expect(at("free")).toBe("9");
+  });
+});
+
+describe("subscribe reports state, not just the action", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * `subscribe` is documented as called after each update. A subscriber that
+   * reads getState in the callback is the whole point of it — devtools,
+   * persistence, logging, and anything bridging to useSyncExternalStore, which
+   * pairs subscribe with a snapshot and re-reads on every notification.
+   */
+  it("has applied the action by the time it calls back", () => {
+    const store = createStore(1, (n: number, step: number) => n + step);
+    const seen: number[] = [];
+    store.subscribe(() => seen.push(store.getState()));
+
+    store.dispatch(1);
+    store.dispatch(1);
+
+    expect(seen).toEqual([2, 3]);
+    expect(store.getState()).toBe(3);
+  });
+
+  it("drives a useSyncExternalStore reader built on the public pair", async () => {
+    const store = createStore(1, (n: number, step: number) => n + step);
+
+    function Bridged() {
+      const n = useSyncExternalStore(store.subscribe, store.getState);
+      return <span data-testid="bridged">{n}</span>;
+    }
+
+    const { getByTestId } = await act(async () => render(<Bridged />));
+    expect(getByTestId("bridged").textContent).toBe("1");
+
+    await act(async () => store.dispatch(1));
+    expect(getByTestId("bridged").textContent).toBe("2");
+
+    await act(async () => {
+      startTransition(() => store.dispatch(1));
+    });
+    expect(getByTestId("bridged").textContent).toBe("3");
   });
 });
