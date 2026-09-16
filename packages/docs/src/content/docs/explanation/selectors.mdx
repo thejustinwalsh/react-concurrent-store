@@ -71,6 +71,41 @@ const user = useStoreWithEqualityFn(
 It ships from its own entry point, so it adds nothing to your bundle unless you
 import it. Any comparison function works.
 
+## When a selector throws
+
+A selector is called in two quite different situations, and a throw means
+something different in each.
+
+**During render**, the selector is producing the value the component is about
+to show. A throw there is a real error and is left alone — it reaches your
+error boundary, exactly as it would from any other code in the component body.
+
+**Speculatively**, the store calls the selector to decide whether a reader needs
+to re-render at all: when an update is published, when a view first attaches,
+and when the tree commits past it. A throw there is not necessarily an error.
+It is usually the zombie-child case — the selector is being asked about a state
+its component is not going to be rendered with, because a parent has already
+removed it. So the store swallows it and forwards the update, letting the
+render decide. If the component really is about to render with that state, the
+selector throws again during render and the boundary catches it.
+
+```tsx
+// If `id` has just been deleted from the store, this throws while the store is
+// only asking whether this reader is affected. That is not an error. It throws
+// again during render only if this component is still mounted and reading it,
+// and then it reaches the boundary.
+const item = useStore(store, (state) => {
+  const found = state.items[id];
+  if (found === undefined) throw new Error(`missing ${id}`);
+  return found;
+});
+```
+
+The rule, in one line: **a speculative throw is a question the store cannot
+answer, so it asks render instead; a throw in render is an error.** This is the
+behaviour React-Redux's `useSelector` suite specifies, and it is checked here
+against both a direct test and a React-Redux-shaped harness.
+
 ## Selectors run during render
 
 The selector is called while your component renders, so the props it closes
