@@ -52,16 +52,29 @@ API you used:
 | inside `flushSync` | shown |
 
 An urgent update says *show this now*. If the new state is a promise that has
-not settled there is nothing to show, and React cannot wait — so it commits the
-nearest `<Suspense>` fallback. That is React doing what it was asked.
+not settled there is nothing to show and React cannot wait, so it commits the
+nearest `<Suspense>` fallback.
 
-The middle row is the one that matters, and it is the thing
+For `flushSync` that is not a tradeoff, it is a dead end, and it is worth being
+blunt about. `flushSync` exists so you can read the DOM the moment it returns —
+to measure, to focus, to restore scroll. Dispatch a promise that has not settled
+inside it and what is in the DOM when it returns is the fallback:
+
+```tsx
+flushSync(() => store.dispatch(fetchUser()));
+container.textContent; // "SPINNER" — the old content is there but hidden
+```
+
+You flushed synchronously to a spinner. Nothing you called `flushSync` for is
+possible on that DOM. There is no version of this that works: do not combine
+`flushSync` with promise-valued state. Dispatch the promise in a transition, or
+await it and dispatch the settled value. `flushSync` with a settled value does
+exactly what you expect.
+
+The middle row is the one that matters most, and it is the thing
 `useSyncExternalStore` cannot keep: it de-opts a transition to sync priority, so
 the tree drops to a fallback you explicitly asked it not to show. That is why
 this store is not built on it, and the suite asserts the zero in that row.
-
-If you want to update to unsettled state without a fallback, dispatch it inside
-a transition. If you need it urgently, store a settled value.
 
 ## It is a ponyfill
 

@@ -4687,3 +4687,49 @@ describe("When a pending promise shows the fallback", () => {
     ).toBe(1);
   });
 });
+
+describe("flushSync with promise state is a dead end, not a tradeoff", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * flushSync exists so the caller can read the DOM the moment it returns. If
+   * the dispatched value is a promise that has not settled, what is in the DOM
+   * when it returns is the fallback — so nothing flushSync is for is possible
+   * on that DOM. Recorded so the documentation cannot drift back into calling
+   * it a limitation with a known behaviour.
+   */
+  it("leaves the fallback in the DOM, not the value", async () => {
+    const store = createStore<Promise<string>>(Promise.resolve("a"));
+    function Reader() {
+      return <span>{use(useStore(store))}</span>;
+    }
+    const { container } = await act(async () =>
+      render(
+        <Suspense fallback={<span>SPINNER</span>}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    expect(container.textContent).toBe("a");
+
+    let settle!: (value: string) => void;
+    const pending = new Promise<string>((r) => (settle = r));
+    flushSync(() => store.dispatch(pending));
+
+    // No await: this is the line a measuring caller would run.
+    expect(container.textContent).toContain("SPINNER");
+
+    await act(async () => settle("b"));
+    expect(container.textContent).toBe("b");
+  });
+
+  it("does what you expect with a settled value", async () => {
+    const store = createStore("a");
+    function Reader() {
+      return <span>{useStore(store)}</span>;
+    }
+    const { container } = await act(async () => render(<Reader />));
+    flushSync(() => store.dispatch("b"));
+    expect(container.textContent).toBe("b");
+  });
+});
