@@ -2919,3 +2919,104 @@ describe("Handle is a real Promise", () => {
     expect(unhandled).toEqual([]);
   });
 });
+
+/**
+ * Known bugs, reproduced. Both come from the same wall: userland cannot see
+ * render priority or root identity, so the store infers them from a global
+ * commit pointer. Marked `it.fails` so they are recorded rather than hidden —
+ * a fix flips them to `it`.
+ */
+describe("Known concurrency bugs", () => {
+  type Slice = { count: number; other: number };
+  type SliceAction = { type: "increment" | "double" | "touch" };
+  const sliceReducer = (s: Slice, a: SliceAction): Slice => {
+    switch (a.type) {
+      case "increment":
+        return { ...s, count: s.count + 1 };
+      case "double":
+        return { ...s, count: s.count * 2 };
+      case "touch":
+        return { ...s, other: s.other + 1 };
+    }
+  };
+
+  const readAll = () =>
+    Array.from(document.querySelectorAll("[data-reader]"), (n) => n.textContent);
+
+  afterEach(() => cleanup());
+
+  // The pass slot is module-level, so a render abandoned in one root is
+  // visible to a mount in another. Within one root the parent re-render
+  // overwrites it, which is why this only shows across roots.
+  it.fails("does not mount another root from an abandoned render's handle", async () => {
+    const store = createStore(1);
+    const never = new Promise<void>(() => {});
+
+    function A() {
+      const count = useStore(store);
+      if (count === 2) use(never);
+      return <div data-reader="a">{count}</div>;
+    }
+    function B() {
+      return <div data-reader="b">{useStore(store)}</div>;
+    }
+
+    await act(async () =>
+      render(
+        <Suspense fallback={<div>loading</div>}>
+          <A />
+        </Suspense>,
+      ),
+    );
+    await act(async () => {
+      startTransition(() => store.dispatch(2));
+    });
+    expect(document.querySelector('[data-reader="a"]')?.textContent).toBe("1");
+
+    await act(async () => {
+      render(<B />);
+    });
+    expect(readAll()).toEqual(["1", "1"]);
+  });
+
+  // A selector view that bails out marks the source committed, so `committed`
+  // can name a version no reader ever rendered. A later sync update then folds
+  // onto the pending transition instead of rebasing onto what is on screen.
+  it.fails("rebases a sync update onto what is on screen, not the pending transition", async () => {
+    const store = createStore({ count: 2, other: 0 }, sliceReducer);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+
+    function Suspender() {
+      const count = useStore(store, (s: Slice) => s.count);
+      if (count === 4) use(gate);
+      return <div data-reader="">s{count}</div>;
+    }
+    function Other() {
+      return <div data-reader="">o{useStore(store, (s: Slice) => s.other)}</div>;
+    }
+    function Watcher() {
+      return <div data-reader="">w{useStore(store, (s: Slice) => s.count)}</div>;
+    }
+
+    await act(async () =>
+      render(
+        <Suspense fallback={<div>loading</div>}>
+          <Suspender />
+          <Other />
+          <Watcher />
+        </Suspense>,
+      ),
+    );
+    await act(async () => {
+      startTransition(() => store.dispatch({ type: "double" }));
+    });
+    expect(readAll()).toEqual(["s2", "o0", "w2"]);
+
+    await act(async () => store.dispatch({ type: "increment" }));
+    expect(readAll()).toEqual(["s2", "o0", "w3"]);
+
+    await act(async () => release());
+    expect(readAll()).toEqual(["s5", "o0", "w5"]);
+  });
+});

@@ -3,7 +3,6 @@ import {
   use,
   useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { Reducer } from "./types";
@@ -251,9 +250,6 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
     });
   }, [store]);
 
-  // Intentionally runs on every commit: the catch-up depends on where the
-  // store is *now*, not on a dependency that changed.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const head = store._head;
     if (handle !== head) {
@@ -270,7 +266,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       }
     }
     store._markCommitted(handle);
-  });
+  }, [store, handle]);
 
   return handle;
 }
@@ -396,11 +392,21 @@ export function useStore<S, A, T>(
     [internals, selector],
   );
 
-  const previous = useRef<T | undefined>(undefined);
-  const state = use(useHandle(view));
-  if (selector === undefined) return state;
+  // The selector's previous result lives in closure variables local to this
+  // memoized instance, not a ref: a ref is shared across concurrent copies of
+  // a component, which is the same reason
+  // useSyncExternalStoreWithSelector avoids one.
+  const select = useMemo(() => {
+    let hasPrevious = false;
+    let previous: T;
+    return (state: S, pick: (state: S, previous: T | undefined) => T): T => {
+      const next = pick(state, hasPrevious ? previous : undefined);
+      hasPrevious = true;
+      previous = next;
+      return next;
+    };
+  }, []);
 
-  const value = selector(state, previous.current);
-  previous.current = value;
-  return value;
+  const state = use(useHandle(view));
+  return selector === undefined ? state : select(state, selector);
 }
