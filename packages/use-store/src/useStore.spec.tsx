@@ -4502,3 +4502,79 @@ describe("Other React 19 surfaces at once", () => {
     expect(at("activity")).toBe("5/5");
   });
 });
+
+describe("Why a reader that lands behind cannot simply join the transition", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * This is plain React, no store involved, and it is the constraint the whole
+   * catch-up design rests on. A reader revealed while a transition is blocked
+   * would ideally join that transition and arrive with everyone else. The only
+   * tool userland has is startTransition, and a later startTransition does not
+   * join a pending one — it commits on its own as soon as nothing in it
+   * suspends, which puts that reader ahead of every sibling.
+   *
+   * That leaves three reachable options and no fourth:
+   *
+   *   hold (suspend)        no waterfall, but an urgent reveal shows a
+   *                         fallback and a lone reader freezes
+   *   catch up in our own   no fallback, but it commits early: a tear
+   *     transition
+   *   catch up in a layout  no fallback and no tear, at the price of a second
+   *     effect (what we do) render, so effects keyed on the value fire twice
+   *
+   * React can entangle a new reader with an in-flight transition internally.
+   * Userland cannot, and that is the single reason the waterfall is not
+   * removable from here.
+   */
+  it("a later startTransition commits without waiting for a pending one", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held = true;
+    let bumpBlocked!: (n: number) => void;
+    let bumpFree!: (n: number) => void;
+
+    function Blocked() {
+      const [n, set] = useState(0);
+      bumpBlocked = set;
+      if (held && n === 1) use(gate);
+      return <span data-testid="blocked">{n}</span>;
+    }
+    function Free() {
+      const [n, set] = useState(0);
+      bumpFree = set;
+      return <span data-testid="free">{n}</span>;
+    }
+
+    const { queryAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span data-testid="fb">loading</span>}>
+          <Blocked />
+          <Free />
+        </Suspense>,
+      ),
+    );
+    const at = (id: string) =>
+      queryAllByTestId(id).map((n) => n.textContent)[0];
+
+    await act(async () => {
+      startTransition(() => bumpBlocked(1));
+    });
+    expect(at("blocked")).toBe("0");
+
+    // A separate transition, started while the first is still blocked.
+    await act(async () => {
+      startTransition(() => bumpFree(9));
+    });
+
+    // It did not wait. This is the tear, in its simplest possible form.
+    expect(at("free")).toBe("9");
+    expect(at("blocked")).toBe("0");
+    expect(queryAllByTestId("fb")).toEqual([]);
+
+    held = false;
+    await act(async () => release());
+    expect(at("blocked")).toBe("1");
+    expect(at("free")).toBe("9");
+  });
+});
