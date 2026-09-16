@@ -2844,3 +2844,53 @@ describe("react-redux semantics (MiniRedux)", () => {
     expect(renders).toBeGreaterThan(afterMount);
   });
 });
+
+/**
+ * The handle is a Promise subclass carrying `status`/`value`, the shape React
+ * reads to unwrap `use()` without a microtask — see Sebastian Markbåge,
+ * https://bsky.app/profile/sebmarkbage.calyptus.eu/post/3lku7b7xjmk2w
+ */
+describe("Handle is a real Promise", () => {
+  afterEach(() => cleanup());
+
+  it("is an instance of Promise", () => {
+    const store = createStore(1);
+    expect(internals(store)._head).toBeInstanceOf(Promise);
+  });
+
+  it("carries status and value for a synchronous read", () => {
+    const store = createStore({ n: 1 });
+    const head = internals(store)._head;
+    expect(head.status).toBe("fulfilled");
+    expect(head.value).toEqual({ n: 1 });
+  });
+
+  it("returns a plain Promise from then, not another handle", async () => {
+    const store = createStore(1);
+    const chained = internals(store)._head.then((n) => n + 1);
+    expect(chained).toBeInstanceOf(Promise);
+    expect("version" in chained).toBe(false);
+    await expect(chained).resolves.toBe(2);
+  });
+
+  it("does not report an unhandled rejection when the state is a rejecting promise", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (event: PromiseRejectionEvent) => {
+      unhandled.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onUnhandled);
+
+    const rejecting = Promise.reject(new Error("user failure"));
+    rejecting.catch(() => {});
+    const store = createStore(rejecting);
+
+    // The handle adopts the rejection internally; it must not surface as ours.
+    expect(internals(store)._head.status).toBe("fulfilled");
+    expect(internals(store)._head.value).toBe(rejecting);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    window.removeEventListener("unhandledrejection", onUnhandled);
+    expect(unhandled).toEqual([]);
+  });
+});

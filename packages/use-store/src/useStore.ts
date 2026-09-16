@@ -11,38 +11,38 @@ import { Reducer } from "./types";
 /**
  * A versioned, already-fulfilled handle on store state.
  *
- * Not a Promise: the native resolution procedure adopts thenables, so building
- * one from `value` would swallow a caller's promise when `S` is itself a
- * promise. `use()` unwraps via `status`/`value`, so a tagged box is enough.
+ * A `Promise` subclass carrying `status`/`value`, the shape React reads to
+ * unwrap `use()` synchronously — no microtask, and `flushSync` works. The
+ * version and the handle's identity are what the store orders commits by:
+ * two versions holding equal values stay distinguishable.
  */
-export type StoreHandle<S> = PromiseLike<S> & {
+export type StoreHandle<S> = Promise<S> & {
   status: "fulfilled";
   value: S;
   version: number;
 };
 
-class Handle<S> implements StoreHandle<S> {
-  readonly status = "fulfilled";
+class Handle<S> extends Promise<S> {
+  status: "fulfilled" = "fulfilled";
+  value!: S;
+  version!: number;
 
-  constructor(
-    readonly value: S,
-    readonly version: number,
-  ) {}
+  // `.then()` on a subclass would otherwise construct another Handle, whose
+  // constructor signature is not an executor.
+  static get [Symbol.species](): PromiseConstructor {
+    return Promise;
+  }
 
-  // `then` on the prototype, like a real promise, so handles differ only by
-  // value. React never calls it: `use` unwraps through status/value.
-  then(): PromiseLike<S>;
-  then<TResult>(
-    onfulfilled: (value: S) => TResult | PromiseLike<TResult>,
-  ): PromiseLike<TResult>;
-  then<TResult>(
-    onfulfilled?: (value: S) => TResult | PromiseLike<TResult>,
-  ): PromiseLike<S | TResult> {
-    const { value } = this;
-    // Started empty: resolving *with* `value` would adopt a thenable `S`.
-    return Promise.resolve().then(() =>
-      onfulfilled ? onfulfilled(value) : value,
-    );
+  static of<S>(value: S, version: number): StoreHandle<S> {
+    const handle = new Handle<S>((resolve) => resolve(value));
+    handle.value = value;
+    handle.version = version;
+    // Resolving with a thenable `S` adopts it, so a stored promise that
+    // rejects would reject the handle too. The handle carries a value; it
+    // makes no claim about that value's own settlement, and the consumer's
+    // own `use()` still delivers the rejection.
+    Promise.prototype.catch.call(handle, () => {});
+    return handle as StoreHandle<S>;
   }
 }
 
@@ -114,7 +114,7 @@ export function createStore<S, A>(
   let version = 0;
   // committed: what the tree shows. sync: committed plus sync-only actions.
   // head: every action in order. Equal unless a transition is in flight.
-  let head = new Handle(initialValue, version);
+  let head = Handle.of(initialValue, version);
   let sync = head;
   let committed = head;
   let published = head;
@@ -130,6 +130,8 @@ export function createStore<S, A>(
 
   // Dispatches in one microtask share the caller's priority, so they take the
   // same path; otherwise a sync batch looks like a pending transition.
+  // Not `scheduler`: it schedules on macrotasks, which would hold this flag
+  // across ticks that are genuinely separate.
   let batching = false;
   let batchRebasing = false;
 
@@ -148,7 +150,7 @@ export function createStore<S, A>(
 
       if (!rebasing) {
         if (Object.is(chronological, head.value)) return;
-        head = new Handle(chronological, ++version);
+        head = Handle.of(chronological, ++version);
         sync = head;
         published = head;
         notifyAction(action);
@@ -161,7 +163,7 @@ export function createStore<S, A>(
       // Thenable state replaces rather than folds, so the timelines collapse.
       // Folding twice would also allocate two promises for one dispatch.
       if (isThenable(chronological)) {
-        head = new Handle(chronological, ++version);
+        head = Handle.of(chronological, ++version);
         sync = head;
         published = head;
         notifyAction(action);
@@ -173,8 +175,8 @@ export function createStore<S, A>(
       // caller's priority, so no transition detection is needed. The first
       // sync update rebases onto `committed`, later ones chain along `sync`.
       const base = sync === head ? committed : sync;
-      sync = new Handle(fold(base.value, action), ++version);
-      head = new Handle(chronological, ++version);
+      sync = Handle.of(fold(base.value, action), ++version);
+      head = Handle.of(chronological, ++version);
       published = sync;
       notifyAction(action);
       notify(sync);
