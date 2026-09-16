@@ -166,8 +166,20 @@ export function createStore<S, A>(
         : (action as unknown as S));
 
   let version = 0;
-  // committed: what the tree shows. sync: committed plus sync-only actions.
-  // head: every action in order. Equal unless a transition is in flight.
+
+  /**
+   * Two folds over the same actions, told apart by one thing recorded where it
+   * is known — whether the caller was inside a transition:
+   *
+   *   head  every action, in dispatch order
+   *   sync  only the urgent ones — what the tree may show right now
+   *
+   * Every action enters `head`. An urgent one also enters `sync`; a
+   * transition's does not, and stays out until the tree catches up, however
+   * many ticks that takes. There is no "are we rebasing" question to answer
+   * from the outside and no per-tick batching to make that answer stick, which
+   * is what the two used to be for.
+   */
   let head = makeHandle(initialValue, version);
   const initial = head;
   let settled = false;
@@ -187,73 +199,74 @@ export function createStore<S, A>(
     for (const callback of actionListeners) callback(action);
   };
 
-  // Dispatches in one microtask share the caller's priority, so they take the
-  // same path; otherwise a sync batch looks like a pending transition.
-  // Not `scheduler`: it schedules on macrotasks, which would hold this flag
-  // across ticks that are genuinely separate.
-  let batching = false;
-  let batchRebasing = false;
-  let batchScope: unknown = null;
+  /** The tree has caught up: the two folds are the same again. */
+  const settle = (handle: StoreHandle<S>) => {
+    sync = handle;
+    head = handle;
+    if (handle.version > committed.version) committed = handle;
+  };
 
   const store: ConcurrentStoreInternals<S, A> = {
     dispatch(action) {
-      const chronological = fold(head.value, action);
+      // Recorded where it is known, rather than re-derived later from whether
+      // the pointers happen to differ — which is also true of a sync batch
+      // React has not rendered yet.
+      const urgent = transitionScope() === null;
 
-      // A batch covers dispatches made in one tick *at one priority*. Leaving
-      // the scope out made a flushSync inside a pending transition's tick
-      // inherit that transition's decision, publish the chronological state at
-      // sync priority, and put the pending transition on screen.
-      const scope = transitionScope();
-      const sameBatch = batching && scope === batchScope;
-      const rebasing = sameBatch ? batchRebasing : committed !== head;
-      if (!sameBatch) {
-        batching = true;
-        batchScope = scope;
-        batchRebasing = rebasing;
-        queueMicrotask(() => {
-          batching = false;
-          batchScope = null;
-        });
-      }
+      const headValue = fold(head.value, action);
+      if (Object.is(headValue, head.value)) return;
 
-      if (!rebasing) {
-        if (Object.is(chronological, head.value)) return;
-        head = makeHandle(chronological, ++version);
-        sync = head;
-        notifyAction(action);
-        const taken = notify(head);
-        // Nobody took it: either nothing is mounted, or every reader's slice
-        // is unchanged. No render is coming, so the tree is already showing
-        // everything this state says, and the pointer must move with it.
-        // Leaving it behind makes the next dispatch look like a rebase and
-        // rebuild from a state this action was never applied to.
-        if (taken === 0) committed = head;
-        return;
-      }
+      // Whether the folds had already parted, by handle identity. Not by
+      // comparing the two values: an object state is a fresh object every
+      // fold, so equal states compare unequal and every dispatch would look
+      // like a rebase.
+      const parted = sync !== head;
 
-      // Thenable state replaces rather than folds, so the timelines collapse.
-      // Folding twice would also allocate two promises for one dispatch.
-      if (isThenable(chronological)) {
-        head = makeHandle(chronological, ++version);
-        sync = head;
-        notifyAction(action);
-        notify(head);
-        return;
-      }
+      // A thenable replaces rather than folds, so there is no meaningful
+      // "without the transition" version of it and the folds rejoin.
+      const collapsed = isThenable(headValue);
 
-      // Publish the sync-relative view first: this notification inherits the
-      // caller's priority, so no transition detection is needed. The first
-      // sync update rebases onto `committed`, later ones chain along `sync`.
-      const base = sync === head ? committed : sync;
-      sync = makeHandle(fold(base.value, action), ++version);
-      head = makeHandle(chronological, ++version);
       notifyAction(action);
-      notify(sync);
 
-      // Then the chronological order, so both land when the transition ends.
-      const chronologicalHandle = head;
+      if (collapsed) {
+        head = makeHandle(headValue, ++version);
+        sync = head;
+        const taken = notify(head);
+        if (taken === 0) settle(head);
+        return;
+      }
+
+      if (!urgent) {
+        // Not one the tree may show yet, so only the chronological fold takes
+        // it, and the notification inherits the caller's transition. This is
+        // where the two part.
+        head = makeHandle(headValue, ++version);
+        const taken = notify(head);
+        if (taken === 0) settle(head);
+        return;
+      }
+
+      if (!parted) {
+        // Nothing outstanding: one fold serves both.
+        head = makeHandle(headValue, ++version);
+        sync = head;
+        const taken = notify(head);
+        // Nobody took it: nothing is mounted, or every reader's slice is
+        // unchanged. No render is coming, so the tree already shows everything
+        // this state says and nothing is outstanding.
+        if (taken === 0) settle(head);
+        return;
+      }
+
+      // Outstanding work, and an urgent action. It enters both folds, but from
+      // different places: the tree gets what it can show now at the caller's
+      // priority, and the chronological order follows in a transition.
+      sync = makeHandle(fold(sync.value, action), ++version);
+      head = makeHandle(headValue, ++version);
+      notify(sync);
+      const chronological = head;
       startTransition(() => {
-        notify(chronologicalHandle);
+        notify(chronological);
       });
     },
 
@@ -306,7 +319,10 @@ export function createStore<S, A>(
         // it ignore the call.
         for (const listener of commitListeners) listener(committed);
       }
-      if (committed === head) sync = head;
+      // The tree has reached the chronological end, so the two folds are the
+      // same again. A reader committing only the *sync* view settles nothing:
+      // the transition's action is still outstanding.
+      if (committed === head) settle(head);
     },
   };
 
