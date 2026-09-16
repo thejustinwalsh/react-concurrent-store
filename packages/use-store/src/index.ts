@@ -1,7 +1,12 @@
-export type { ReactStore, ISource, Reducer } from "./types";
+export type { ISource, Reducer } from "./types";
 import * as Experimental from "./experimental";
 
-export { createStore, useStore } from "./useStore";
+export {
+  createStore,
+  useStore,
+  createSelectorStore,
+} from "./useStore";
+export type { Handle, VersionedStore } from "./useStore";
 
-// Until we update the docs, we export the new API under the name `experimental`
+// The prior prototype, kept for comparison. Not the recommended API.
 export const experimental = Experimental;
