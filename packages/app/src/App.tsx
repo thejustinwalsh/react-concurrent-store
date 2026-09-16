@@ -3,6 +3,8 @@ import { Boundary } from "./Boundary";
 import { navigate, pages, usePage } from "./router";
 import { GauntletPage } from "./pages/gauntlet";
 import { RouterPage } from "./pages/router";
+import { AtomPage } from "./pages/atom";
+import { IdentityPage } from "./pages/identity";
 
 function Nav() {
   const here = usePage();
@@ -30,6 +32,10 @@ function Routed() {
       return <GauntletPage />;
     case "router":
       return <RouterPage />;
+    case "atom":
+      return <AtomPage />;
+    case "identity":
+      return <IdentityPage />;
     default:
       return (
         <div className="lede">

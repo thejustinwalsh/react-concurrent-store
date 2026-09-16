@@ -1,11 +1,11 @@
 import {
-  Suspense,
   startTransition,
   use,
   useState,
   useSyncExternalStore,
 } from "react";
 import { createStore, useStore } from "react-concurrent-store";
+import { Blocked, Side } from "../compare";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
 
@@ -186,45 +186,6 @@ function Body({
   );
 }
 
-function Blocked() {
-  return (
-    <div className="mock">
-      <div className="blocked">
-        <span className="big">⏳ loading profile…</span>
-        <span className="why">
-          The transition was flushed synchronously, so the route moved before
-          its data arrived and the boundary took the page.
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function Side({
-  how,
-  tag,
-  kind,
-  note,
-  children,
-}: {
-  how: string;
-  tag: string;
-  kind: "today" | "ours";
-  note: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={`side ${kind}`}>
-      <header>
-        <code className="how">{how}</code>
-        <span className="tag">{tag}</span>
-      </header>
-      <Suspense fallback={<Blocked />}>{children}</Suspense>
-      <p className="note">{note}</p>
-    </section>
-  );
-}
-
 export function RouterPage() {
   const [{ gate, left, right, loaders }, reset] = useReset();
   const held = useSignal(gate.held);
@@ -246,6 +207,13 @@ export function RouterPage() {
     loaders.reset();
     navigate("profile");
   };
+
+  const blocked = (
+    <Blocked
+      what="loading profile…"
+      why="The transition was flushed synchronously, so the route moved before its data arrived and the boundary took the page."
+    />
+  );
 
   return (
     <>
@@ -280,6 +248,7 @@ export function RouterPage() {
             how="useSyncExternalStore"
             tag="today"
             kind="today"
+            fallback={blocked}
             note={
               held ? (
                 <>
@@ -298,6 +267,7 @@ export function RouterPage() {
             how="useStore"
             tag="this package"
             kind="ours"
+            fallback={blocked}
             note={
               held ? (
                 <>
