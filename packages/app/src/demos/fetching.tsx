@@ -1,7 +1,7 @@
 import { use, useDeferredValue, useState, useTransition } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
-import { Lede, Note, TryIt } from "../prose";
+import { Lede, TryIt } from "../prose";
 import { hueFor } from "../palette";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
@@ -205,13 +205,11 @@ export function FetchingPage() {
           applied to the fetch that has not returned, and the deferred value is
           still the untouched old list.
         </p>
-        <Note>
-          <p>
-            A deferred value holds the value that was there before. It cannot
-            hold that value with your change applied, because there is one value
-            and one urgency. Two folds can.
-          </p>
-        </Note>
+        <p>
+          A deferred value holds the value that was there before. It cannot hold
+          that value with your change applied, because there is one value and one
+          urgency. Two folds can.
+        </p>
       </Lede>
       <div className="ab">
         <div className="bar">

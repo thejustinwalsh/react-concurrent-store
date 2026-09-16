@@ -3,7 +3,7 @@ import { createStore } from "react-concurrent-store/store";
 import { RscClient, type Row } from "../../src/demos/rsc";
 import { StreamedClient } from "../../src/demos/streamed";
 import { Code } from "../../src/Code";
-import { Lede, Note, Pitfall } from "../../src/prose";
+import { Lede, Pitfall } from "../../src/prose";
 
 export const dynamic = "force-dynamic";
 
@@ -123,14 +123,12 @@ export default async function Page() {
   for (const row of await fetchAccounts()) totals.dispatch(row);
   // ${summary.accounts} accounts, ${summary.orders} orders
 }`}</Code>
-        <Note>
-          <p>
-            Import it from <code>react-concurrent-store/store</code>. The main
-            entry also exports <code>useStore</code>, which is a Hook, so it
-            carries a <code>&quot;use client&quot;</code> directive and cannot be
-            pulled into a server graph.
-          </p>
-        </Note>
+        <p>
+          Import it from <code>react-concurrent-store/store</code>. The main
+          entry also exports <code>useStore</code>, which is a Hook, so it
+          carries a <code>&quot;use client&quot;</code> directive and cannot be
+          pulled into a server graph.
+        </p>
         <Pitfall>
           <p>
             The store itself does not cross the boundary — it holds functions,

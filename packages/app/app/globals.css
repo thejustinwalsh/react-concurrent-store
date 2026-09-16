@@ -13,6 +13,11 @@
   --accent: #89b4fa;    /* blue */
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
+  /* One column for every page. Bars stay full width and pad their contents in
+     to the same edges, so nothing hugs the left when the window is wide. */
+  --page: 1200px;
+  --gutter: max(20px, calc((100% - var(--page)) / 2));
+
   /* Tints, derived rather than hand-picked, so the palette stays one thing. */
   --tint-ok: color-mix(in srgb, var(--ok) 28%, var(--line));
   --tint-bad: color-mix(in srgb, var(--bad) 28%, var(--line));
@@ -32,6 +37,7 @@ body {
 
 header.top {
   padding: 28px 24px 16px;
+  padding-inline: var(--gutter);
   border-bottom: 1px solid var(--line);
   display: flex;
   gap: 20px;
@@ -42,7 +48,7 @@ header.top h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
 header.top .sub { color: var(--dim); }
 header.top .tally { margin-left: auto; font-family: var(--mono); }
 
-main { padding: 20px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); }
+main { padding: 20px var(--gutter); display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); }
 
 .card {
   background: var(--panel);
@@ -144,6 +150,7 @@ nav.tabs {
   display: flex;
   gap: 2px;
   padding: 0 20px;
+  padding-inline: var(--gutter);
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
@@ -161,14 +168,20 @@ nav.tabs .tab {
 nav.tabs .tab:hover { color: var(--ink); }
 nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
 
-.lede { padding: 22px 20px 4px; max-width: 760px; }
+.lede { padding: 22px var(--gutter) 4px; }
+/* Prose keeps a readable measure while its block aligns with everything else. */
+.lede p,
+.lede .youwill,
+.lede .callout,
+.lede .tryit,
+.lede pre { max-width: 74ch; }
 .lede h2 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
 .lede p { margin: 0 0 12px; color: var(--dim); font-size: 13.5px; line-height: 1.6; }
 .lede code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
 
 /* ---------- side by side ---------- */
 
-.ab { padding: 8px 20px 24px; display: grid; gap: 14px; }
+.ab { padding: 8px var(--gutter) 24px; display: grid; gap: 14px; }
 .ab .pair {
   display: grid;
   gap: 14px;
@@ -435,8 +448,6 @@ pre.terminal code { color: inherit; }
 }
 .callout p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: var(--dim); }
 .callout p:last-child { margin-bottom: 0; }
-.callout.note { border-left-color: var(--accent); }
-.callout.note .k { color: var(--accent); }
 .callout.pitfall { border-left-color: var(--wait); }
 .callout.pitfall .k { color: var(--wait); }
 

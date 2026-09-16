@@ -1,5 +1,5 @@
 import { MeasurePage } from "../../src/demos/measure";
-import { Lede, Note } from "../../src/prose";
+import { Lede } from "../../src/prose";
 
 export default function Page() {
   return (
@@ -11,13 +11,11 @@ export default function Page() {
           "Why a number from jsdom or a development build is not that",
         ]}
       >
-        <Note>
-          <p>
-            Run this on a production build. React&rsquo;s development build does
-            extra work for every <code>use()</code> of a promise that production
-            does not, so a development number is not a performance number.
-          </p>
-        </Note>
+        <p>
+          Run this on a production build. React&rsquo;s development build does
+          extra work that production does not, so a development number is not a
+          performance number.
+        </p>
       </Lede>
       <MeasurePage />
     </>

@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createStore, useStore } from "react-concurrent-store";
-import { Lede, Note } from "../prose";
+import { Lede } from "../prose";
 
 /**
  * What a store has to get right under server rendering, in a real App Router
@@ -69,13 +69,11 @@ export function SsrDemo({ snapshot }: { snapshot: Snapshot }) {
           created with already is the snapshot, and the client store is created
           from the same serialized state.
         </p>
-        <Note>
-          <p>
-            Press <b>Sell one</b> after the page says <i>hydrated</i>. It
-            continues from the server&rsquo;s figures. A mismatch would have been
-            logged by React and this subtree replaced.
-          </p>
-        </Note>
+        <p>
+          Press <b>Sell one</b> once the page says hydrated, and it carries on
+          from the server&rsquo;s figures. A mismatch would have been logged by
+          React and this subtree replaced.
+        </p>
       </Lede>
       <div className="ab">
         <div className="bar">

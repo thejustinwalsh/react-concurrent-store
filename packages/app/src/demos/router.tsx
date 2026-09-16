@@ -1,7 +1,7 @@
 import { use, useState, useSyncExternalStore, useTransition } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
-import { Lede, Note, TryIt } from "../prose";
+import { Lede, TryIt } from "../prose";
 import { hueFor } from "../palette";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
@@ -257,15 +257,13 @@ export function RouterPage() {
           loaded, and both updates are in the order you made them once the
           profile arrives.
         </p>
-        <Note>
-          <p>
-            This is the caveat in the{" "}
-            <code>useSyncExternalStore</code> docs: a store update during a
-            Transition forces React to flush it synchronously. The caller already
-            said what it wanted by calling <code>startTransition</code>. Only the
-            reading Hook discards it.
-          </p>
-        </Note>
+        <p>
+          That first behaviour is a documented caveat of{" "}
+          <code>useSyncExternalStore</code>: a store update during a Transition
+          makes React flush it synchronously. The caller already said what it
+          wanted by calling <code>startTransition</code>. Only the reading Hook
+          discards it.
+        </p>
       </Lede>
       <div className="ab">
         <div className="bar">

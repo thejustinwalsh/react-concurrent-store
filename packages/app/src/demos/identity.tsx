@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { recycleNodesInto } from "../recycle";
 import { Side } from "../compare";
-import { Lede, Note, TryIt } from "../prose";
+import { Lede, TryIt } from "../prose";
 import { hueFor } from "../palette";
 import { createSignal, useSignal, type Signal } from "../ui";
 
@@ -198,12 +198,10 @@ export function IdentityPage() {
           came back as the objects they already were, so their{" "}
           <code>memo</code> held.
         </p>
-        <Note>
-          <p>
-            An equality function cannot do this. It can only answer whether to
-            keep the whole result. Recycling needs the previous value itself.
-          </p>
-        </Note>
+        <p>
+          An equality function cannot do this. It can only answer whether to keep
+          the whole result; recycling needs the previous value itself.
+        </p>
       </Lede>
       <div className="ab">
         <div className="bar">

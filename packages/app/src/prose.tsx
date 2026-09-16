@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /**
  * The teaching furniture from react.dev: a lede that says what the page is
- * about and what you will learn, and the Note / Pitfall callouts.
+ * about and what you will learn, and the Pitfall callout.
  */
 
 export function Lede({
@@ -27,15 +27,6 @@ export function Lede({
       </div>
       {children}
     </div>
-  );
-}
-
-export function Note({ title, children }: { title?: string; children: ReactNode }) {
-  return (
-    <aside className="callout note">
-      <p className="k">{title ?? "Note"}</p>
-      {children}
-    </aside>
   );
 }
 
