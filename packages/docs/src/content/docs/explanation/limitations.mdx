@@ -1,0 +1,51 @@
+---
+title: Limitations
+description: What a userland ponyfill cannot do, and what to expect instead.
+---
+
+React would implement this inside the reconciler, where it knows the priority
+of the render in progress and keeps per-root state. A library cannot see either
+of those. Everything below follows from that.
+
+## Multiple React roots
+
+Sharing one store across two `createRoot` trees works in our tests, but it
+cannot be guaranteed. React would keep per-root bookkeeping; from userland
+there is no way to tell which root is rendering, so two roots rendering
+interleaved share one set of state. If you share a store across roots, treat it
+as unsupported rather than tested.
+
+## An extra render when mounting mid-transition
+
+A component that mounts while a transition is in flight renders once with the
+state its siblings are showing, then again once the transition resolves. React
+would do this in one pass because it knows the render's priority. The
+intermediate render is correct — never torn — but it is a render your effects
+will see.
+
+## `flushSync` with unresolved promise state
+
+If your state is a promise that has not settled and you update inside
+`flushSync`, React cannot wait for it and falls back to the nearest `<Suspense>`
+boundary. Outside `flushSync` this does not happen. Store settled values, or
+avoid `flushSync` for promise-valued state.
+
+## Server rendering has no snapshot check
+
+There is no `getServerSnapshot`. Hydration matches because you construct the
+store with the same initial state on both sides:
+
+```ts
+const store = createStore(stateFromServer, reducer);
+```
+
+If the two ever differ, nothing detects it — you get a hydration mismatch with
+no better diagnostic. `useSyncExternalStore` can compare because it asks for
+both snapshots; this cannot.
+
+## It is a ponyfill
+
+This exists to try the shape of an API React has proposed but not shipped. If
+the feature lands, the real one will be better — it has information this cannot
+reach. Expect this package to be deprecated rather than maintained alongside
+it.

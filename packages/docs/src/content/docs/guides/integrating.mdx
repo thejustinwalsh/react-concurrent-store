@@ -1,0 +1,107 @@
+---
+title: Integrating an existing store
+description: What to do when your store library breaks under startTransition.
+---
+
+Redux, Zustand and TanStack Store all read state through
+`useSyncExternalStore`. That hook is [documented to de-opt](https://react.dev/reference/react/useSyncExternalStore#caveats):
+when the store changes during a non-blocking transition, React redoes the
+update as blocking. Your `startTransition` becomes a synchronous render, and a
+slow tree blocks input — or drops to a Suspense fallback.
+
+This store is the concurrent-safe alternative. How you adopt it depends on
+whether you own the reducer.
+
+## If you own the reducer — Redux
+
+You gave `configureStore` a reducer, so you can hand the same one here and get
+a store that folds the same actions:
+
+```ts
+import { createStore } from "react-concurrent-store";
+
+const store = createStore(preloadedState, rootReducer);
+```
+
+That store is complete: `getState`, `dispatch`, `subscribe`. If you only need
+Redux for middleware and devtools, keep the Redux store and dispatch to both;
+they fold the same actions from the same starting state, so they stay in step.
+
+```ts
+const dispatch = (action) => {
+  redux.dispatch(action);
+  store.dispatch(action);
+};
+```
+
+Two copies of state is a real cost. Prefer one store where you can.
+
+## If the store owns its state — Zustand, TanStack Store
+
+These publish whole snapshots and do not expose a reducer, so from outside the
+library the only option is to mirror each snapshot:
+
+```ts
+const store = createStore(zustand.getState());
+zustand.subscribe((state) => store.dispatch(state));
+```
+
+This works — dispatching a value replaces state when there is no reducer — and
+transitions survive. But it keeps two copies of your state and depends on the
+library's subscribe staying snapshot-shaped.
+
+**The better fix is upstream.** A store library that reads through this instead
+of `useSyncExternalStore` gets transition-safe reads for all of its users, with
+no mirror. That is the conversation in
+[pmndrs/zustand#3125](https://github.com/pmndrs/zustand/discussions/3125) and
+[reduxjs/react-redux#2263](https://github.com/reduxjs/react-redux/pull/2263).
+
+## Reading a slice
+
+```tsx
+const total = useStore(store, (state) => state.cart.total);
+```
+
+A selector that builds an object returns a new reference each call, so compare
+it yourself — the selector receives its own previous result:
+
+```tsx
+const summary = useStore(store, (state, previous) => {
+  const next = { count: state.items.length, total: state.total };
+  return previous && shallowEqual(previous, next) ? previous : next;
+});
+```
+
+Or use the wrapper, which ships from its own entry point:
+
+```tsx
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+
+const summary = useStoreWithEqualityFn(
+  store,
+  (state) => ({ count: state.items.length, total: state.total }),
+  shallowEqual,
+);
+```
+
+Any comparison works — `shallowEqual` from `react-redux`, `shallow` from
+`zustand/shallow`, or your own.
+
+## What you get
+
+A dispatch inside `startTransition` stays a transition. An urgent dispatch that
+lands while a transition is still in flight applies on top of what is on
+screen, and when the transition resolves both are reflected in the order you
+dispatched them. A component mounting mid-transition shows what its siblings
+show rather than tearing.
+
+Selectors run during render, so the props they close over and the state they
+read come from the same moment — the "zombie child" case does not break your
+dispatch.
+
+## What you do not get
+
+See [Limitations](/react-concurrent-store/explanation/limitations/). The ones
+that matter most here: sharing a store across multiple React roots is not
+guaranteed, and mirroring an opaque store means maintaining two copies of
+state.

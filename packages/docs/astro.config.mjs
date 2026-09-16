@@ -34,15 +34,14 @@ export default defineConfig({
         {
           label: "Guides",
           items: [
-            { label: "Use with Redux", slug: "guides/redux" },
-            { label: "Use with Zustand", slug: "guides/zustand" },
-            { label: "Use with TanStack Store", slug: "guides/tanstack-store" },
+            { label: "Integrating an existing store", slug: "guides/integrating" },
           ],
         },
         {
           label: "Explanation",
           items: [
             { label: "Selectors and re-renders", slug: "explanation/selectors" },
+            { label: "Limitations", slug: "explanation/limitations" },
           ],
         },
         {
