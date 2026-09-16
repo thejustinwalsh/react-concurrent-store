@@ -2994,7 +2994,20 @@ describe("Known concurrency bugs", () => {
 
   // A selector view that bails out marks the source committed, so `committed`
   // can name a version no reader ever rendered. A later sync update then folds
-  // onto the pending transition instead of rebasing onto what is on screen.
+  // onto the pending transition instead of rebasing onto what is on screen:
+  // the watcher jumps to 5 without ever showing 3.
+  //
+  // The mark is a symptom. An inline selector has a new identity every render,
+  // so `useStore` rebuilds the view every render, and a rebuilt view cannot
+  // know which slice its readers already show. It guesses from the source, and
+  // the mark exists to stop that guess from sending readers chasing a pending
+  // transition. Separating "last handle forwarded" from "source head" fixes
+  // this case, but a rebuilt view then opens behind a reader that has already
+  // advanced, and the identity-based catch-up drags that reader backwards.
+  // Ordering the catch-up by version fixes that in turn and breaks switching
+  // between stores, whose version counters are independent. The fix is to stop
+  // rebuilding the view: give it a stable identity per store and feed it the
+  // current selector, the way react-redux keeps its subscription stable.
   it.fails("rebases a sync update onto what is on screen, not the pending transition", async () => {
     const store = createStore({ count: 2, other: 0 }, sliceReducer);
     let release!: () => void;
@@ -3026,8 +3039,10 @@ describe("Known concurrency bugs", () => {
     });
     expect(readAll()).toEqual(["s2", "o0", "w2"]);
 
+    // Rebased onto what is on screen: 2 + 1 = 3, not 4 + 1. The suspender
+    // gates on 4 alone, so it renders 3 rather than holding at 2.
     await act(async () => store.dispatch({ type: "increment" }));
-    expect(readAll()).toEqual(["s2", "o0", "w3"]);
+    expect(readAll()).toEqual(["s3", "o0", "w3"]);
 
     await act(async () => release());
     expect(readAll()).toEqual(["s5", "o0", "w5"]);
