@@ -42,7 +42,7 @@ import {
   type ReactConcurrentStore,
 } from "./useStore";
 import { configureStore, createSlice } from "@reduxjs/toolkit";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { type UpdateInfo } from "@welldone-software/why-did-you-render";
 import {
   Activity,
