@@ -9,7 +9,7 @@ _Work In Progress_
 - [x] Align the API with React RFC #35449 (`createStore(initialValue, reducer?)`, `useStore(store, selector?)`)
 - [x] Selector support with a custom equality function
 - [x] SSR and hydration without a `getServerSnapshot` equivalent
-- [ ] Add docs site with interactive examples `(in-progress)`
+- [x] Add a docs site, and a live demo that exercises the concurrent edges
 - [ ] Streaming of promises and store values
 
 ## Why
@@ -149,92 +149,48 @@ Readings come from a probe outside React, written from ref callbacks, layout
 effects and passive effects, so what a reader *committed* is distinguishable
 from what it merely rendered and from what was attached to the DOM.
 
-## How It Works
+## How it works
 
-This ponyfill uses the pattern of caching the initial state in a state initializer and registers
-for an update callback to update the cache within a transition when the state is updated. If the store value is a promise, passing that promise to the `use` hook will return the resolved value and integrate with concurrent react features and suspend.
+Two folds over the same actions, told apart by one thing recorded at dispatch —
+whether the caller was inside a transition:
 
-The implementation ensures that:
+- **head** — every action, in dispatch order
+- **sync** — only the urgent ones: what the tree may show right now
 
-- State updates are concurrent-safe
-- Components re-render when store values change
-- Store values are properly cached and life-cycled by React making it trivial to manage async resources optimally wth suspense.
-- The API matches the planned React concurrent stores feature
-- TypeScript types are properly inferred
+Every action enters `head`. An urgent one also enters `sync`; a transition's
+does not, and stays out until the tree catches up. So an urgent update lands on
+what is on screen rather than on a state the user cannot see yet, and when the
+transition commits the actions are re-ordered into the order they were
+dispatched.
 
-## Docs
+State is carried on a promise with `status`/`value` expandos, the shape React
+reads to unwrap `use()` without a microtask. That is what lets a store hold a
+value that is not ready yet, and lets the same object serve a suspending client
+read and a synchronous server render.
 
-Visit [https://thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store) for comprehensive documentation, API reference, and interactive examples.
+## API
 
-## API Reference
+```ts
+createStore(initialValue)                       // action is a value or an updater
+createStore(initialValue, reducer)              // action is whatever the reducer takes
 
-### `createStore(initialValue, reducer?)`
+useStore(store)                                 // the whole value
+useStore(store, (state, previous) => slice)     // a slice; return `previous` to skip the render
 
-Creates a new store with the given initial value and optional reducer function.
-
-**Parameters:**
-
-- `initialValue: T` - The initial value of the store
-- `reducer?: (currentValue: T, action: Action) => T` - Optional reducer function to handle state updates. For stores without actions, you can provide a reducer that takes only the current value: `(currentValue: T) => T`
-
-**Returns:** `ReactConcurrentStore<T, Action>` - A store object with `getState`, `dispatch` and `subscribe`
-
-### `useStore(store)`
-
-Hook that subscribes to a store and returns its current value. For stores managing async resources (promises), the returned value should be passed to React's `use()` hook within a Suspense boundary.
-
-**Parameters:**
-
-- `store: ReactConcurrentStore<T, Action>` - The store to subscribe to
-
-**Returns:** `T` - The current value of the store (or Promise for async stores)
-
-#### `store.dispatch(action)`
-
-Updates the store with the given action. If a reducer was provided to `createStore`, it will be called with the current value and the action. If no reducer was provided, the action should be the new value. For reducers that don't take actions, you can call `update()` with no arguments.
-
-**Parameters:**
-
-- `action?: Action` - The action to dispatch, new value to set, or omitted for reducers without actions
-
-## Migration Path
-
-When React's concurrent stores feature becomes stable, you can migrate by:
-
-1. Replacing the import:
-
-```jsx
-// Before
-import { createStore, useStore } from "react-concurrent-store";
-
-// After
-import { createStore, use } from "react";
+store.getState()                                // outside React
+store.dispatch(action)
+store.subscribe(action => {})                   // getState() is up to date inside the callback
 ```
 
-2. Replace `useStore` calls with direct `use` calls:
+An equality-function wrapper ships from its own entry point so it costs nothing
+unless imported:
 
-```jsx
-// Before (with this ponyfill)
-const userPromise = useStore(userStore);
-const user = use(userPromise);
-
-// After (with native React concurrent stores)
-const user = use(userStore);
+```ts
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
 ```
 
-3. For synchronous stores, you may need to adjust based on the final React API, currently `use` will support anything that is a Usable, Context, or Store:
-
-```jsx
-// Current ponyfill approach
-const state = useStore(counterStore);
-
-// Future native approach (TBD - API may differ)
-const state = use(counterStore);
-```
-
-The API is designed to be as close as possible to the proposed React concurrent stores feature. The main difference is that this ponyfill provides a `useStore` hook that returns a cached and life-cycled value, which you then pass to React's `use` hook for integration with suspense.
-
-The `use` hook will accept a store directly in the expected final API.
+Full reference, guides, and the one thing a userland version cannot do:
+[thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store)
 
 ## License
 

@@ -4,16 +4,16 @@ description: What a userland ponyfill cannot do, and what to expect instead.
 ---
 
 React would implement this inside the reconciler, where it can add a reader to
-a transition that is already in flight. A library cannot. Almost everything
-below follows from that one thing.
+a transition that is already in flight. A library cannot, and that is the only
+thing on this page.
 
 ## An effect keyed on the value runs twice when a reader lands behind
 
 A reader that appears while a transition is blocked shows what its siblings are
 showing, and corrects itself when the transition commits. The correction is
-made from a layout effect, which flushes before the browser paints — so it
-costs a render pass and not a frame. Nothing torn is ever painted, and the
-demo asserts exactly that by sampling every animation frame.
+made from a layout effect, which flushes before the browser paints, so it costs
+a render pass and not a frame — nothing torn is ever painted, and the demo
+asserts that by sampling every animation frame.
 
 What it does cost is a second run of any effect keyed on the value:
 
@@ -25,60 +25,21 @@ useEffect(() => {
 }, [user]);
 ```
 
-This is not removable from userland. The ideal fix is for that reader to join
-the transition already in flight and arrive with everyone else, and
-`startTransition` cannot do that — a transition started later commits as soon
-as nothing in it suspends, while the first is still blocked, which puts the
-reader *ahead* of its siblings instead. The suite demonstrates that in plain
-React, with no store involved, under "Why a reader that lands behind cannot
-simply join the transition".
+If that matters for a particular effect, key it on the part you care about
+rather than the whole value, or do the work in an event handler instead.
 
-The alternative is to hold the reader until it is correct, which removes the
-double effect but shows a Suspense fallback when the reader is revealed by an
-urgent update, and leaves a reader with no sibling to commit for it stuck on
-the old value. Correcting from a layout effect is the only one of the three
-with no correctness failure.
+It is not removable from here. The fix is for that reader to join the
+transition already in flight and arrive with everyone else, and
+`startTransition` cannot do that: a transition started later commits as soon as
+nothing in it suspends, while the first is still blocked, which puts the reader
+*ahead* of its siblings instead. The suite shows that in plain React, with no
+store involved, under "Why a reader that lands behind cannot simply join the
+transition".
 
-## An urgent update to unsettled promise state shows the fallback
-
-This one is not a limitation of this package at all, and it is filed here only
-because people hit it here first. It is what `use()` does with an urgent update
-to a promise that has not settled, and you get the identical readings from plain
-`useState` with no store anywhere — the suite holds both side by side. Whatever
-ships this API, including React, inherits it.
-
-What decides it is the priority of the update, not which API you used:
-
-| dispatching a promise that has not settled | fallback |
-| --- | --- |
-| plain sync dispatch | shown |
-| inside `startTransition` | **not shown** |
-| inside `flushSync` | shown |
-
-An urgent update says *show this now*. If the new state is a promise that has
-not settled there is nothing to show and React cannot wait, so it commits the
-nearest `<Suspense>` fallback.
-
-For `flushSync` that is not a tradeoff, it is a dead end, and it is worth being
-blunt about. `flushSync` exists so you can read the DOM the moment it returns —
-to measure, to focus, to restore scroll. Dispatch a promise that has not settled
-inside it and what is in the DOM when it returns is the fallback:
-
-```tsx
-flushSync(() => store.dispatch(fetchUser()));
-container.textContent; // "SPINNER" — the old content is there but hidden
-```
-
-You flushed synchronously to a spinner. Nothing you called `flushSync` for is
-possible on that DOM. There is no version of this that works: do not combine
-`flushSync` with promise-valued state. Dispatch the promise in a transition, or
-await it and dispatch the settled value. `flushSync` with a settled value does
-exactly what you expect.
-
-The middle row is the one that matters most, and it is the thing
-`useSyncExternalStore` cannot keep: it de-opts a transition to sync priority, so
-the tree drops to a fallback you explicitly asked it not to show. That is why
-this store is not built on it, and the suite asserts the zero in that row.
+Holding the reader until it is correct removes the double effect, but a reader
+revealed by an urgent update then shows a Suspense fallback, and a reader with
+no sibling to commit for it waits forever. Correcting from a layout effect is
+the only one of the three with no correctness failure.
 
 ## It is a ponyfill
 
@@ -86,21 +47,3 @@ This exists to try the shape of an API React has proposed but not shipped. If
 the feature lands, the real one will be better — it has information this cannot
 reach. Expect this package to be deprecated rather than maintained alongside
 it.
-
-## What is no longer a limitation
-
-Two entries used to live here and have been removed because they are now
-covered by tests rather than caveats.
-
-**Multiple React roots.** Separate `createRoot` trees can share one store, with
-no provider, including while one of them is blocked on a transition and the
-other is not, and with StrictMode double-rendering only one of them. React
-makes no cross-root commit guarantee; the store is what keeps them in step.
-
-**Server rendering.** There is no `getServerSnapshot` and none is needed. The
-client store is built from the same serialized state the server rendered from,
-so it already holds that value — it is the handle it was created with. A reader
-hydrates on that handle and then catches up, even if the store was dispatched
-to before hydration finished. React is asked whether a render is a hydration
-only when the store actually moved first, so an ordinary hydration renders
-once.

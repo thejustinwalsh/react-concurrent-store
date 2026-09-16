@@ -290,74 +290,29 @@ function UserProfile() {
 }
 ```
 
-### Error Boundaries
+### Resetting an error boundary
 
-Stores work seamlessly with Error Boundaries for error handling:
+`use()` throws the same rejection every time it reads it, so resetting a
+boundary on its own puts you straight back in the fallback. What clears it is
+the store moving on — which makes the current value a natural reset key:
 
 ```tsx
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <h1>Something went wrong.</h1>;
-    }
-    return this.props.children;
-  }
-}
-
-function App() {
+function Guarded() {
+  const current = useStore(store);
   return (
-    <ErrorBoundary>
-      <Suspense fallback={<div>Loading...</div>}>
-        <UserProfile />
-      </Suspense>
+    <ErrorBoundary
+      resetKeys={[current]}
+      onReset={() => store.dispatch(retry())}
+    >
+      <Reader />
     </ErrorBoundary>
   );
 }
 ```
 
----
-
-## TypeScript Support
-
-React Concurrent Store is written in TypeScript and provides full type safety:
-
-```tsx
-// Typed store
-type User = { id: number; name: string; email: string };
-const userStore = createStore<Promise<User>>(fetchUser(1));
-
-// Typed actions
-type Action =
-  | { type: "increment" }
-  | { type: "decrement" }
-  | { type: "set"; value: number };
-
-const counterStore = createStore(0, (state: number, action: Action): number => {
-  switch (action.type) {
-    case "increment":
-      return state + 1;
-    case "decrement":
-      return state - 1;
-    case "set":
-      return action.value;
-  }
-});
-```
-
----
+The error-reset panel in the demo shows both halves: resetting alone, with the
+catch count going up, and resetting after a dispatch.
 
 ## Requirements
 
-- **React**: >=19.0.0
-- **TypeScript**: ^4.5.0 (optional, but recommended)
-
-The package is designed specifically for React 19+ and takes advantage of the concurrent features introduced in this version.
+React >=19.0.0.
