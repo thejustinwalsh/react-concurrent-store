@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { createStore } from "react-concurrent-store/store";
 import { RscClient, type Row } from "../../src/demos/rsc";
 import { StreamedClient } from "../../src/demos/streamed";
 import { Code } from "../../src/Code";
@@ -14,6 +15,17 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const rows = await fetchAccounts();
 
+  // A store, created and folded on the server. No Hook, no window, no client.
+  const totals = createStore<
+    { accounts: number; orders: number },
+    Row
+  >({ accounts: 0, orders: 0 }, (state, row) => ({
+    accounts: state.accounts + 1,
+    orders: state.orders + row.orders,
+  }));
+  for (const row of rows) totals.dispatch(row);
+  const summary = totals.getState();
+
   return (
     <>
       <Lede
@@ -21,7 +33,7 @@ export default async function Page() {
         learn={[
           "How a server component hands data to a store on the client",
           "How to stream a promise into a store without awaiting it",
-          "Why createStore belongs on the client",
+          "That createStore itself runs on the server too",
         ]}
       >
         <p>
@@ -92,36 +104,40 @@ const data = use(useStore(store));`}</Code>
       />
 
       <div className="lede">
-        <h3>Where createStore belongs</h3>
+        <h3>Creating a store on the server</h3>
+        <p>
+          <code>createStore</code> is not a Hook. It is a plain factory, and it
+          works in a server component — this summary was folded by a store that
+          was created, dispatched to and read during this render, on the server:
+        </p>
+        <Code>{`import { createStore } from "react-concurrent-store/store";
+
+export default async function Page() {
+  const totals = createStore(
+    { accounts: 0, orders: 0 },
+    (state, row) => ({
+      accounts: state.accounts + 1,
+      orders: state.orders + row.orders,
+    }),
+  );
+  for (const row of await fetchAccounts()) totals.dispatch(row);
+  // ${summary.accounts} accounts, ${summary.orders} orders
+}`}</Code>
         <Note>
           <p>
-            What crosses the boundary is data, never the store. A store is
-            mutable state with subscribers; a server component renders once and
-            has neither, and a store at module scope on a server is shared by
-            every request.
+            Import it from <code>react-concurrent-store/store</code>. The main
+            entry also exports <code>useStore</code>, which is a Hook, so it
+            carries a <code>&quot;use client&quot;</code> directive and cannot be
+            pulled into a server graph.
           </p>
         </Note>
         <Pitfall>
           <p>
-            The package is published with a{" "}
-            <code>&quot;use client&quot;</code> directive, so reaching for{" "}
-            <code>createStore</code> in a server component fails the build
-            instead of failing in front of someone:
+            The store itself does not cross the boundary — it holds functions,
+            so it is not serializable. Its <i>value</i> does, including as a
+            promise the server never awaited. A store created on the server is
+            for this render; one at module scope is shared by every request.
           </p>
-          <Code>{`// app/page.tsx — a server component
-import { createStore } from "react-concurrent-store";
-
-export default function Page() {
-  const store = createStore(0);
-}`}</Code>
-          <pre className="terminal">
-            <code>
-              {`Attempted to call createStore() from the server but createStore is on
-the client. It's not possible to invoke a client function from the server,
-it can only be rendered as a Component or passed to props of a Client
-Component.`}
-            </code>
-          </pre>
         </Pitfall>
       </div>
     </>

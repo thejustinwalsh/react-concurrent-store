@@ -1,7 +1,0 @@
-{
-  "/atom/page": "app/atom/page.js",
-  "/page": "app/page.js",
-  "/router/page": "app/router/page.js",
-  "/rsc/page": "app/rsc/page.js",
-  "/ssr/page": "app/ssr/page.js"
-}

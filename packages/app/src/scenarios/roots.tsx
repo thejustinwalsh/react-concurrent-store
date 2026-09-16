@@ -166,11 +166,12 @@ export function RootsScenario() {
   return (
     <div data-scenario="roots">
       <Card
-        title="Two roots, one store, no provider"
+        title="Sharing one store between two roots"
         proves={
-          "Separate createRoot trees share a store and stay in step, including " +
-          "while one is blocked on a transition and the other is not, and with " +
-          "StrictMode double-rendering only one of them."
+          "Two separate createRoot trees read the same store with no provider " +
+          "between them. They stay in step, including while one is blocked on " +
+          "a Transition and the other is not, and with StrictMode " +
+          "double-rendering only one of them."
         }
         recorder={recorder}
         stage={

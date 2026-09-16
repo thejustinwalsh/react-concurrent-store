@@ -144,13 +144,13 @@ export function RebasingScenario() {
   return (
     <div data-scenario="rebasing">
       <Card
-        title="Rebasing, in the order you can see"
+        title="Applying an update to the screen, not to the store"
         proves={
-          "A sync action applies to the state on screen, not to the state a " +
-          "held transition is waiting on. When the transition commits, the " +
-          "actions are re-ordered into the order they were dispatched — the " +
-          "screen goes from bc to Abc without ever showing a state nobody " +
-          "asked for, and without the fallback ever appearing."
+          "Each letter is an action. The uppercase one is dispatched inside a " +
+          "Transition that is held open, so the tree cannot show it yet. " +
+          "Dispatch lowercase letters while it waits and notice they apply to " +
+          "what is on screen. Release the Transition and the letters reorder " +
+          "into the order you dispatched them."
         }
         recorder={recorder}
         stage={

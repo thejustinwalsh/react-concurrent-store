@@ -113,13 +113,13 @@ export function SuspenseScenario() {
   return (
     <div data-scenario="suspense">
       <Card
-        title="Suspense: the fallback you asked for, and the one you did not"
+        title="Showing a fallback, and not showing one"
         proves={
-          "A sync update to a pending promise shows the fallback. The same " +
-          "update inside a transition keeps the current content and waits. " +
-          "That second half is what useSyncExternalStore gives up: it de-opts " +
-          "the transition to sync and drops to the fallback regardless. The " +
-          "fallback is counted by DOM attach, not by render."
+          "Dispatching a promise that has not settled replaces the state with " +
+          "one that does not exist yet, so the boundary falls back. Dispatch " +
+          "the same promise inside a Transition and the current content " +
+          "stays. The fallback is counted when it reaches the DOM, not when " +
+          "it renders."
         }
         recorder={recorder}
         stage={

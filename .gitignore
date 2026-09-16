@@ -13,3 +13,8 @@ pnpm-debug.log*
 
 # macOS-specific files
 .DS_Store
+
+# next.js
+.next/
+next-env.d.ts
+*.tsbuildinfo

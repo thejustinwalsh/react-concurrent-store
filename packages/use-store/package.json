@@ -24,6 +24,16 @@
         "types": "./dist/withEqualityFn.d.ts",
         "default": "./dist/withEqualityFn.cjs"
       }
+    },
+    "./store": {
+      "import": {
+        "types": "./dist/store.d.ts",
+        "default": "./dist/store.js"
+      },
+      "require": {
+        "types": "./dist/store.d.ts",
+        "default": "./dist/store.cjs"
+      }
     }
   },
   "files": [

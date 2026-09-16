@@ -1,4 +1,4 @@
-import { startTransition, use, useDeferredValue, useState } from "react";
+import { use, useDeferredValue, useState, useTransition } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
 import { Lede, Note, TryIt } from "../prose";
@@ -84,14 +84,60 @@ function List({ messages }: { messages: Message[] }) {
   );
 }
 
-/** Fate's line, verbatim: the previous promise stays while the next one loads. */
+/**
+ * fate's line, verbatim. The previous promise stays while the next one loads,
+ * and comparing the deferred value with the current one is how React suggests
+ * you tell that it is stale.
+ */
 function Deferred({ promise }: { promise: Promise<Message[]> }) {
-  return <List messages={use(useDeferredValue(promise))} />;
+  const deferred = useDeferredValue(promise);
+  const stale = deferred !== promise;
+  return (
+    <Side
+      how="use(useDeferredValue(promise))"
+      tag="fate"
+      kind="today"
+      pending={stale}
+      fallback={<Blocked what="loading…" why="Nothing to show yet." />}
+      note={
+        stale ? (
+          <>
+            <b>Holding the old list, which is right.</b> Now mark it read and
+            watch what the deferred value can and cannot do.
+          </>
+        ) : (
+          <>Holds the previous promise while the next one loads.</>
+        )
+      }
+    >
+      <List messages={use(deferred)} />
+    </Side>
+  );
 }
 
-function Stored({ store }: { store: Store }) {
+function Stored({ store, pending }: { store: Store; pending: boolean }) {
   const state = useStore(store);
-  return <List messages={isPending(state) ? use(state) : state} />;
+  return (
+    <Side
+      how="use(useStore(store))"
+      tag="this package"
+      kind="ours"
+      pending={pending}
+      fallback={<Blocked what="loading…" why="Nothing to show yet." />}
+      note={
+        pending ? (
+          <>
+            <b>Holding the old list too.</b> An edit you make now applies to the
+            inbox you can see, not to the fetch that has not returned.
+          </>
+        ) : (
+          <>Holds the previous value because the caller said it could wait.</>
+        )
+      }
+    >
+      <List messages={isPending(state) ? use(state) : state} />
+    </Side>
+  );
 }
 
 type Store = ReturnType<typeof createStore<State>>;
@@ -100,6 +146,7 @@ export function FetchingPage() {
   const [{ gate, store, initial }, reset] = useReset();
   const [promise, setPromise] = useState(initial);
   const held = useSignal(gate.held);
+  const [transitionPending, startTransition] = useTransition();
 
   const openArchive = () => {
     gate.hold();
@@ -108,6 +155,7 @@ export function FetchingPage() {
     setPromise(next);
     startTransition(() => store.dispatch(next));
   };
+
 
   // The urgent one: patch what is on screen, now. Both columns express it the
   // same way — derive the next value from the current one.
@@ -179,43 +227,8 @@ export function FetchingPage() {
           <button onClick={startOver}>Reset</button>
         </div>
         <div className="pair">
-          <Side
-            how="use(useDeferredValue(promise))"
-            tag="fate · useRequest"
-            kind="today"
-            fallback={<Blocked what="loading…" why="Nothing to show yet." />}
-            note={
-              held ? (
-                <>
-                  <b>Marked read, still showing unread.</b> The edit went to the
-                  fetch that has not returned. The deferred value is still the
-                  old list.
-                </>
-              ) : (
-                <>Holds the previous promise while the next one loads.</>
-              )
-            }
-          >
-            <Deferred promise={promise} />
-          </Side>
-          <Side
-            how="use(useStore(store))"
-            tag="this package"
-            kind="ours"
-            fallback={<Blocked what="loading…" why="Nothing to show yet." />}
-            note={
-              held ? (
-                <>
-                  <b>Marked read on the list you can see.</b> The edit applied
-                  to the inbox on screen, and the archive arrives already read.
-                </>
-              ) : (
-                <>Holds the previous value because the caller said to.</>
-              )
-            }
-          >
-            <Stored store={store} />
-          </Side>
+          <Deferred promise={promise} />
+          <Stored store={store} pending={transitionPending} />
         </div>
       </div>
     </>

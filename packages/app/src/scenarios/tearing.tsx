@@ -167,13 +167,13 @@ export function TearingScenario() {
   return (
     <div data-scenario="tearing">
       <Card
-        title="Nobody arrives early"
+        title="Mounting a component during a Transition"
         proves={
-          "A reader revealed while a transition is blocked — by a sibling " +
-          "appearing, or by an Activity tree being shown — displays what the " +
-          "rest of the page displays. It waits for the tree to commit rather " +
-          "than starting a transition of its own and arriving first. Readings " +
-          "come from layout effects and ref callbacks, never from the DOM."
+          "Reveal a second reader, or show a hidden Activity tree, while a " +
+          "Transition is blocked. Notice that the new one displays what the " +
+          "rest of the page displays rather than the value the Transition is " +
+          "waiting on. Readings are taken in all three phases, so a value " +
+          "that was rendered but never committed is not counted as agreement."
         }
         recorder={recorder}
         stage={

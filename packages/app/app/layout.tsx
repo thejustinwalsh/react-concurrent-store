@@ -20,7 +20,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <header className="top">
           <h1>Concurrent Store</h1>
-          <span className="sub">react 19.3 · next 16 · no test harness</span>
         </header>
         <Nav />
         {children}

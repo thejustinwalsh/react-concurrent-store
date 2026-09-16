@@ -198,6 +198,13 @@ nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
   display: flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
+}
+.side > header .how {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .side > header .how { font-family: var(--mono); font-size: 12px; }
 .side > header .tag {
@@ -209,6 +216,8 @@ nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
   border-radius: 20px;
   border: 1px solid var(--line);
   color: var(--dim);
+  white-space: nowrap;
+  flex: none;
 }
 .side.today > header .how { color: var(--bad); }
 .side.today > header .tag { border-color: var(--tint-bad); color: var(--bad); }
