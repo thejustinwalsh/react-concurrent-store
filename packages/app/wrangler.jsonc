@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "react-concurrent-store",
+  "compatibility_date": "2026-09-16",
+  // nodejs_compat is required by the adapter; the global fetch flag keeps
+  // Next's own fetch on the Workers implementation.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+}

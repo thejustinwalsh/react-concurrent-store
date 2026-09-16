@@ -11,6 +11,8 @@ export default [
       "**/dist/",
       "**/node_modules/",
       "**/.next/",
+      "**/.open-next/",
+      "**/.wrangler/",
       "**/.astro/",
       "packages/use-store/src/experimental/",
     ],

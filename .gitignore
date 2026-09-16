@@ -18,3 +18,7 @@ pnpm-debug.log*
 .next/
 next-env.d.ts
 *.tsbuildinfo
+
+# cloudflare
+.open-next/
+.wrangler/
