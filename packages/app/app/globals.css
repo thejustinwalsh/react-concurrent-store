@@ -193,7 +193,9 @@ nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
 .ab .pair {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* 284px, not 320: the three-column page has 1024 - 40 of padding - 28 of
+     gaps = 956 to share, which is 318 each. A 320 minimum drops it to two. */
+  grid-template-columns: repeat(auto-fit, minmax(284px, 1fr));
   align-items: start;
 }
 .ab .bar {
@@ -218,19 +220,24 @@ nav.tabs .tab.here { border-bottom-color: var(--accent); color: var(--ink); }
   padding: 9px 13px;
   border-bottom: 1px solid var(--line);
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
   min-width: 0;
+}
+.side > header .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .side > header .how {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
-.side > header .how { font-family: var(--mono); font-size: 12px; }
+.side > header .how { font-family: var(--mono); }
 .side > header .tag {
-  margin-left: auto;
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -473,7 +480,6 @@ pre.terminal code { color: inherit; }
 /* ---------- pending state ---------- */
 
 .side > header .pulse {
-  margin-left: 8px;
   font-family: var(--mono);
   font-size: 10.5px;
   text-transform: uppercase;

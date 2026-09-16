@@ -27,9 +27,11 @@ export function Side({
   return (
     <section className={`side ${kind}${pending ? " pending" : ""}`}>
       <header>
+        <span className="row">
+          <span className="tag">{tag}</span>
+          {pending && <span className="pulse">Transition pending</span>}
+        </span>
         <code className="how">{how}</code>
-        {pending && <span className="pulse">Transition pending</span>}
-        <span className="tag">{tag}</span>
       </header>
       <Suspense fallback={fallback}>{children}</Suspense>
       <p className="note">{note}</p>
