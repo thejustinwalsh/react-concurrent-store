@@ -231,6 +231,21 @@ export function createStore<S, A>(
 // Values are `Handle<S>` for that store's own S; the map spans stores, so
 // the read asserts once.
 const renderedThisPass = new WeakMap<object, StoreHandle<unknown>>();
+const expiring = new Set<object>();
+
+// A render pass runs to completion within one task, so a microtask queued
+// during it fires once the pass is over. Without this the slot outlives the
+// pass that wrote it: a render that is abandoned never renders again to
+// overwrite it, and the next root to mount adopts a handle no tree showed.
+function recordRendered(store: object, handle: StoreHandle<unknown>): void {
+  renderedThisPass.set(store, handle);
+  if (expiring.has(store)) return;
+  expiring.add(store);
+  queueMicrotask(() => {
+    expiring.delete(store);
+    renderedThisPass.delete(store);
+  });
+}
 
 /** Concurrent-safe subscription to a store's current version. */
 function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> {
@@ -241,7 +256,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       (renderedThisPass.get(store) as StoreHandle<S> | undefined) ??
       store._committed,
   );
-  renderedThisPass.set(store, handle);
+  recordRendered(store, handle as StoreHandle<unknown>);
 
   useLayoutEffect(() => {
     // No startTransition: the update inherits the dispatching caller's priority.

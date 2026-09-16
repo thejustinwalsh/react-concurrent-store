@@ -2946,12 +2946,14 @@ describe("Known concurrency bugs", () => {
 
   afterEach(() => cleanup());
 
-  // The pass slot is module-level, so a render abandoned in one root is
-  // visible to a mount in another. Within one root the parent re-render
-  // overwrites it, which is why this only shows across roots.
-  it.fails("does not mount another root from an abandoned render's handle", async () => {
+  // The pass slot is module-level, so a render abandoned in one root was
+  // visible to a mount in another: the mounting reader adopted a handle that
+  // no tree had committed. Within one root the parent re-render overwrites the
+  // slot, which is why this only showed across roots.
+  it("does not mount another root from an abandoned render's handle", async () => {
     const store = createStore(1);
     const never = new Promise<void>(() => {});
+    const bRenders: number[] = [];
 
     function A() {
       const count = useStore(store);
@@ -2959,7 +2961,9 @@ describe("Known concurrency bugs", () => {
       return <div data-reader="a">{count}</div>;
     }
     function B() {
-      return <div data-reader="b">{useStore(store)}</div>;
+      const count = useStore(store);
+      bRenders.push(count);
+      return <div data-reader="b">{count}</div>;
     }
 
     await act(async () =>
@@ -2972,12 +2976,20 @@ describe("Known concurrency bugs", () => {
     await act(async () => {
       startTransition(() => store.dispatch(2));
     });
+    // A's render of 2 is abandoned: the transition never finishes.
     expect(document.querySelector('[data-reader="a"]')?.textContent).toBe("1");
 
     await act(async () => {
       render(<B />);
     });
-    expect(readAll()).toEqual(["1", "1"]);
+
+    // B must mount at the committed state, then reach head the way any late
+    // reader does. It must never open on 2, which no tree ever showed.
+    expect(bRenders[0]).toBe(1);
+    expect(bRenders).toEqual([1, 2]);
+    // The roots then diverge only because A is suspended forever; React makes
+    // no cross-root commit guarantee, so this is not a tear.
+    expect(readAll()).toEqual(["1", "2"]);
   });
 
   // A selector view that bails out marks the source committed, so `committed`
