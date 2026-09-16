@@ -6,6 +6,7 @@ import {
 } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { Blocked, Side } from "../compare";
+import { hueFor } from "../palette";
 import { makeGate, type Gate } from "../gate";
 import { useSignal } from "../ui";
 
@@ -34,12 +35,6 @@ const FEED = [
   { id: "grace", name: "Grace Hopper", said: "Found an actual moth" },
   { id: "alan", name: "Alan Turing", said: "Halting, eventually" },
 ];
-
-const HUE: Record<string, string> = {
-  ada: "#7aa2ff",
-  grace: "#37d67a",
-  alan: "#f5b14c",
-};
 
 const initial: State = { route: "home", likes: { ada: 12, grace: 31, alan: 7 } };
 
@@ -112,7 +107,7 @@ function Feed({
     <>
       {FEED.map((post) => (
         <div className="row" key={post.id}>
-          <span className="av" style={{ background: HUE[post.id] }}>
+          <span className="av" style={{ background: hueFor(post.id) }}>
             {post.name[0]}
           </span>
           <span className="who">
@@ -132,7 +127,7 @@ function Profile({ likes }: { likes: Record<string, number> }) {
   const total = Object.values(likes).reduce((a, b) => a + b, 0);
   return (
     <div className="row" style={{ alignItems: "flex-start" }}>
-      <span className="av" style={{ background: HUE.ada }}>
+      <span className="av" style={{ background: hueFor("ada") }}>
         A
       </span>
       <span className="who">

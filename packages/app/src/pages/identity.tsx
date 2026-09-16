@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import { createStore, useStore } from "react-concurrent-store";
 import { recycleNodesInto } from "../recycle";
 import { Side } from "../compare";
+import { hueFor } from "../palette";
 import { createSignal, useSignal, type Signal } from "../ui";
 
 /**
@@ -42,12 +43,6 @@ const initial: Records = {
   ada: { name: "Ada Lovelace", handle: "@ada", posts: 128, followers: 9421 },
   grace: { name: "Grace Hopper", handle: "@grace", posts: 311, followers: 18022 },
   alan: { name: "Alan Turing", handle: "@alan", posts: 74, followers: 12907 },
-};
-
-const HUE: Record<string, string> = {
-  ada: "#7aa2ff",
-  grace: "#37d67a",
-  alan: "#f5b14c",
 };
 
 type Action = { id: string; patch: Partial<Record_> };
@@ -102,7 +97,7 @@ function People({
       <div className="body">
         {Object.entries(view).map(([id, person]) => (
           <div className="row" key={id}>
-            <span className="av" style={{ background: HUE[id] }}>
+            <span className="av" style={{ background: hueFor(id) }}>
               {person.name[0]}
             </span>
             <span className="who">

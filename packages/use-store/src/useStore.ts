@@ -222,9 +222,21 @@ export function createStore<S, A>(
       // like a rebase.
       const parted = sync !== head;
 
-      // A thenable replaces rather than folds, so there is no meaningful
-      // "without the transition" version of it and the folds rejoin.
-      const collapsed = isThenable(headValue);
+      // The fold the tree may show. It differs from head in exactly one case:
+      // an urgent action while a transition is outstanding, which is rebasing.
+      const rebasing = urgent && parted;
+      const syncValue = rebasing ? fold(sync.value, action) : headValue;
+
+      // An urgent thenable replaces rather than folds: the caller asked for a
+      // value that does not exist yet, at a priority that cannot wait, so the
+      // folds rejoin and the boundary takes it.
+      //
+      // Only urgent, and only on the fold the tree would show. A thenable
+      // dispatched inside a transition parts the folds like anything else, so
+      // the tree keeps the value it already has instead of the store handing
+      // it a promise to suspend on — which is what lets an urgent update made
+      // while a fetch is outstanding land on the list that is on screen.
+      const collapsed = urgent && isThenable(syncValue);
 
       if (collapsed) {
         head = makeHandle(headValue, ++version);
@@ -262,7 +274,7 @@ export function createStore<S, A>(
       // Outstanding work, and an urgent action. It enters both folds, but from
       // different places: the tree gets what it can show now at the caller's
       // priority, and the chronological order follows in a transition.
-      sync = makeHandle(fold(sync.value, action), ++version);
+      sync = makeHandle(syncValue, ++version);
       head = makeHandle(headValue, ++version);
       notifyAction(action);
       notify(sync);

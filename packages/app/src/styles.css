@@ -1,15 +1,24 @@
 :root {
-  --bg: #0b0d12;
-  --panel: #12151d;
-  --panel-2: #171b25;
-  --line: #262c3a;
-  --ink: #e6e9f2;
-  --dim: #8a93a8;
-  --ok: #37d67a;
-  --bad: #ff5d5d;
-  --wait: #f5b14c;
-  --accent: #7aa2ff;
+  /* Catppuccin Mocha, so this reads as the same product as the docs site. */
+  --bg: #1e1e2e;        /* base */
+  --panel: #181825;     /* mantle */
+  --panel-2: #313244;   /* surface0 */
+  --line: #313244;      /* surface0 */
+  --ink: #cdd6f4;       /* text */
+  --dim: #a6adc8;       /* subtext0 */
+  --faint: #6c7086;     /* overlay0 */
+  --ok: #a6e3a1;        /* green */
+  --bad: #f38ba8;       /* red */
+  --wait: #f9e2af;      /* yellow */
+  --accent: #89b4fa;    /* blue */
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Tints, derived rather than hand-picked, so the palette stays one thing. */
+  --tint-ok: color-mix(in srgb, var(--ok) 28%, var(--line));
+  --tint-bad: color-mix(in srgb, var(--bad) 28%, var(--line));
+  --tint-wait: color-mix(in srgb, var(--wait) 28%, var(--line));
+  --tint-accent: color-mix(in srgb, var(--accent) 28%, var(--line));
+  --sunken: #11111b;    /* crust */
 }
 
 * { box-sizing: border-box; }
@@ -65,7 +74,7 @@ main { padding: 20px; display: grid; gap: 18px; grid-template-columns: repeat(au
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: #0e111a;
+  background: var(--sunken);
   display: inline-flex;
   gap: 8px;
   align-items: baseline;
@@ -74,8 +83,8 @@ main { padding: 20px; display: grid; gap: 18px; grid-template-columns: repeat(au
 .chip .value { font-size: 15px; font-variant-numeric: tabular-nums; }
 .chip.flash { animation: flash 420ms ease-out; }
 @keyframes flash {
-  0% { background: var(--accent); border-color: var(--accent); color: #0b0d12; }
-  100% { background: #0e111a; border-color: var(--line); }
+  0% { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  100% { background: var(--sunken); border-color: var(--line); }
 }
 .chip.pending { border-color: var(--wait); }
 .chip.torn { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
@@ -86,13 +95,13 @@ main { padding: 20px; display: grid; gap: 18px; grid-template-columns: repeat(au
   font-size: 10.5px;
   padding: 2px 5px;
   border-radius: 4px;
-  background: #0e111a;
+  background: var(--sunken);
   border: 1px solid var(--line);
   color: var(--dim);
 }
-.track .t.render { color: var(--ink); border-color: #33405c; }
-.track .t.dispatch { color: var(--accent); border-color: #2c3a5c; }
-.track .t.note { color: var(--wait); border-color: #4a3a1c; }
+.track .t.render { color: var(--ink); border-color: var(--tint-accent); }
+.track .t.dispatch { color: var(--accent); border-color: var(--tint-accent); }
+.track .t.note { color: var(--wait); border-color: var(--tint-wait); }
 
 .controls { padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); }
 
@@ -100,7 +109,7 @@ button {
   font: inherit;
   font-size: 12.5px;
   color: var(--ink);
-  background: #1b2030;
+  background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 6px 11px;
@@ -108,7 +117,7 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.4; cursor: default; }
-button.run { background: #1d2b4a; border-color: #2c3a5c; }
+button.run { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--tint-accent); }
 
 .verdict { padding: 11px 16px; display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
 .light { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
@@ -149,7 +158,7 @@ nav.tabs .tab {
   cursor: pointer;
 }
 nav.tabs .tab .t { font-size: 13px; color: var(--dim); }
-nav.tabs .tab .b { font-size: 11px; color: #5c6479; }
+nav.tabs .tab .b { font-size: 11px; color: var(--faint); }
 nav.tabs .tab:hover .t { color: var(--ink); }
 nav.tabs .tab.here { border-bottom-color: var(--accent); }
 nav.tabs .tab.here .t { color: var(--ink); }
@@ -206,9 +215,9 @@ nav.tabs .tab.here .b { color: var(--accent); }
   color: var(--dim);
 }
 .side.today > header .how { color: var(--bad); }
-.side.today > header .tag { border-color: #45272d; color: var(--bad); }
+.side.today > header .tag { border-color: var(--tint-bad); color: var(--bad); }
 .side.ours > header .how { color: var(--ok); }
-.side.ours > header .tag { border-color: #1f4433; color: var(--ok); }
+.side.ours > header .tag { border-color: var(--tint-ok); color: var(--ok); }
 
 /* ---------- the little app being demoed ---------- */
 
@@ -247,7 +256,7 @@ nav.tabs .tab.here .b { color: var(--accent); }
   place-items: center;
   font-size: 12px;
   font-weight: 600;
-  color: #0b0d12;
+  color: var(--bg);
 }
 .row .who { display: grid; gap: 2px; min-width: 0; }
 .row .who b { font-size: 12.5px; font-weight: 600; }
@@ -260,7 +269,7 @@ nav.tabs .tab.here .b { color: var(--accent); }
   min-width: 52px;
   text-align: center;
 }
-.row .like.on { color: var(--bad); border-color: #45272d; }
+.row .like.on { color: var(--bad); border-color: var(--tint-bad); }
 .row.ghost { opacity: 0.45; }
 
 .blocked {
@@ -288,7 +297,7 @@ nav.tabs .tab.here .b { color: var(--accent); }
 .side.ours .note b { color: var(--ok); }
 
 .side.naive > header .how { color: var(--wait); }
-.side.naive > header .tag { border-color: #4a3a1c; color: var(--wait); }
+.side.naive > header .tag { border-color: var(--tint-wait); color: var(--wait); }
 .side.naive .note b { color: var(--wait); }
 
 .field {

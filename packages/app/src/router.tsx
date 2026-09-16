@@ -14,6 +14,7 @@ export const pages = [
   { id: "router", title: "Router", blurb: "TanStack Router + Query" },
   { id: "atom", title: "One atom", blurb: "Redux" },
   { id: "identity", title: "Identity", blurb: "Relay" },
+  { id: "fetching", title: "Fetching", blurb: "Fate · TanStack Query" },
 ] as const;
 
 export type Page = (typeof pages)[number]["id"];

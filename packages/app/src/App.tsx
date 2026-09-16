@@ -5,6 +5,7 @@ import { GauntletPage } from "./pages/gauntlet";
 import { RouterPage } from "./pages/router";
 import { AtomPage } from "./pages/atom";
 import { IdentityPage } from "./pages/identity";
+import { FetchingPage } from "./pages/fetching";
 
 function Nav() {
   const here = usePage();
@@ -36,6 +37,8 @@ function Routed() {
       return <AtomPage />;
     case "identity":
       return <IdentityPage />;
+    case "fetching":
+      return <FetchingPage />;
     default:
       return (
         <div className="lede">

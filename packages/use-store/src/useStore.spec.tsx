@@ -5317,3 +5317,68 @@ describe("A stable selector is re-run, never replayed from a cache", () => {
     expect(getByTestId("v")).toHaveTextContent("beet");
   });
 });
+
+const isPromise = (value: unknown): value is Promise<string[]> =>
+  value instanceof Promise;
+
+describe("An urgent update while a fetch is outstanding", () => {
+  /**
+   * The case every data-fetching library hits. Fate reads
+   * `use(useDeferredValue(promise))`; TanStack Query spells it
+   * `placeholderData: keepPreviousData`. Both hold the value that was there
+   * before, which is the right answer for a plain refetch and the whole answer
+   * they can give: there is one value and one urgency, so an optimistic patch
+   * made while the refetch is in flight cannot also be shown.
+   *
+   * It is showable here, because the two folds are separate. The patch applied
+   * to the list on screen is a list; only the patch applied to the fetch is a
+   * promise. Deciding by the fetch is deciding by the fold nobody is looking
+   * at.
+   */
+  type Items = string[];
+  type State = Items | Promise<Items>;
+
+  afterEach(() => cleanup());
+
+  const shout = (items: Items) => items.map((item) => `${item}!`);
+
+  it("shows the patch on the list already on screen", async () => {
+    const store = createStore<State>(["a", "b"]);
+    let arrive!: (items: Items) => void;
+    const fetching = new Promise<Items>((resolve) => (arrive = resolve));
+
+    function Reader() {
+      const value = useStore(store);
+      const items = isPromise(value) ? use(value) : value;
+      return <span data-testid="v">{items.join(",")}</span>;
+    }
+
+    const { queryByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<span>loading</span>}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    const onScreen = () => queryByTestId("v")?.textContent ?? "fallback";
+    expect(onScreen()).toBe("a,b");
+
+    // The refetch. In a transition, so the old list stays up.
+    await act(async () => {
+      startTransition(() => store.dispatch(fetching));
+    });
+    expect(onScreen()).toBe("a,b");
+
+    // Urgent, and expressed against whatever the fold it lands on holds.
+    await act(async () => {
+      store.dispatch((current: State) =>
+        isPromise(current) ? current.then(shout) : shout(current),
+      );
+    });
+    expect(onScreen()).toBe("a!,b!");
+
+    // And it is still in the fetched data when that arrives.
+    await act(async () => arrive(["x", "y"]));
+    expect(onScreen()).toBe("x!,y!");
+  });
+});
