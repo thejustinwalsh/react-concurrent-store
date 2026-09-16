@@ -15,7 +15,7 @@
 
   /* One column for every page. Bars stay full width and pad their contents in
      to the same edges, so nothing hugs the left when the window is wide. */
-  --page: 1200px;
+  --page: 1024px;
   --gutter: max(20px, calc((100% - var(--page)) / 2));
 
   /* Tints, derived rather than hand-picked, so the palette stays one thing. */
