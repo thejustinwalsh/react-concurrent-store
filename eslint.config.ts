@@ -77,9 +77,11 @@ export default [
       // accepts — react-compiler-healthcheck compiles this file 1 out of 1.
       //
       // immutability: the selector's previous result is held in closure
-      // variables local to one memoized instance. A ref would be shared across
-      // concurrent copies of a component, which is the same reason
-      // useSyncExternalStoreWithSelector avoids one.
+      // variables written during render. This is the structure React's own
+      // useSyncExternalStoreWithSelector uses for the same job, down to the
+      // ref it writes during render. A render that is abandoned can write it,
+      // and the next render overwrites it from its own state, which is what
+      // "Selector memory across an abandoned render" asserts.
       //
       // set-state-in-effect: a reader that mounts behind the tree corrects
       // itself from a layout effect, which flushes before the commit returns,

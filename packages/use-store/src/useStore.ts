@@ -444,10 +444,12 @@ export function useStore<S, A, T>(
     if (view !== null && selector !== undefined) view._setSelector(selector);
   });
 
-  // The selector's previous result lives in closure variables local to this
-  // memoized instance, not a ref: a ref is shared across concurrent copies of
-  // a component, which is the same reason
-  // useSyncExternalStoreWithSelector avoids one.
+  // The selector's previous result lives in closure variables written during
+  // render, which is the structure React's own useSyncExternalStoreWithSelector
+  // uses for the same job. A useMemo closure is per-fiber, so a render that is
+  // abandoned can still write it; the next render runs the selector against its
+  // own state and overwrites, so the value corrects itself rather than being
+  // handed back.
   const select = useMemo(() => {
     let hasPrevious = false;
     let previous: T;

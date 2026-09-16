@@ -3492,3 +3492,61 @@ describe("Multiple roots committing at different rates", () => {
     expect(a.textContent).toBe("1");
   });
 });
+
+describe("Selector memory across an abandoned render", () => {
+  afterEach(() => cleanup());
+
+  it("does not hand back a previous result written by a render that never committed", async () => {
+    type Slice = { n: number; label: string };
+    const store = createStore({ n: 1 });
+    const never = new Promise<void>(() => {});
+    const seen: string[] = [];
+
+    function Reader({ label }: { label: string }) {
+      const slice = useStore(
+        store,
+        (state: { n: number }, previous: Slice | undefined): Slice =>
+          // Stable on n alone, so a `previous` left behind by a render with
+          // different props would be returned unchanged.
+          previous !== undefined && previous.n === state.n
+            ? previous
+            : { n: state.n, label },
+      );
+      seen.push(`${slice.label}#${slice.n}`);
+      if (label === "B") use(never);
+      return (
+        <div>
+          {slice.label}#{slice.n}
+        </div>
+      );
+    }
+
+    let setLabel!: (l: string) => void;
+    function App() {
+      const [label, _set] = useState("A");
+      setLabel = _set;
+      return (
+        <Suspense fallback={<div>loading</div>}>
+          <Reader label={label} />
+        </Suspense>
+      );
+    }
+
+    await act(async () => render(<App />));
+    expect(seen).toEqual(["A#1"]);
+
+    // This render suspends forever and is abandoned, after the selector has
+    // already run and written its memory.
+    await act(async () => {
+      startTransition(() => setLabel("B"));
+    });
+    seen.length = 0;
+
+    await act(async () => store.dispatch({ n: 2 }));
+    await act(async () => store.dispatch({ n: 1 }));
+
+    // Every reading belongs to the committed tree, which is still label A.
+    expect(seen.every((s) => s.startsWith("A"))).toBe(true);
+    expect(document.body.textContent).toContain("A#1");
+  });
+});
