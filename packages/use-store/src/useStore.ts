@@ -386,6 +386,6 @@ export function useStore<S, A, T>(
     };
   }, []);
 
-  const state = use(useHandle(view ?? internals));
+  const state = useHandle(view ?? internals).value;
   return selector === undefined ? state : select(state, selector);
 }

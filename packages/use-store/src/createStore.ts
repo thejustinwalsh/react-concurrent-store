@@ -10,7 +10,7 @@ import { Reducer } from "./types";
  * unwrap `use()` without a microtask. Version and identity order commits, so
  * two versions holding equal values stay distinguishable.
  */
-export type StoreHandle<S> = Promise<S> & {
+export type StoreHandle<S> = {
   status: "fulfilled";
   value: S;
   version: number;
@@ -18,15 +18,9 @@ export type StoreHandle<S> = Promise<S> & {
 
 
 function makeHandle<S>(value: S, version: number): StoreHandle<S> {
-  const handle = new Promise<S>((resolve) => resolve(value)) as StoreHandle<S>;
-  handle.status = "fulfilled";
-  handle.value = value;
-  handle.version = version;
-  // A stored promise that rejects would reject the handle too. The consumer's
-  // own `use()` still delivers the rejection.
-  handle.catch(() => {});
-  return handle;
+  return { status: "fulfilled", value, version };
 }
+
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (

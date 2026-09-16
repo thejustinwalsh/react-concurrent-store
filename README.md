@@ -114,12 +114,22 @@ Effect keeps it in step:
 Step 4 runs in a layout Effect, before the browser paints, so a reader that
 lands behind costs a render pass and not a frame.
 
-### Why the state is carried on a promise
+### What a handle is
 
-State lives on a promise carrying `status` and `value`, the shape React reads
-to unwrap `use()` without a microtask. That is what lets a store hold a value
-that has not arrived, and lets one object serve both a suspending client read
-and a synchronous server render.
+A handle is a plain record — `{ status, value, version }`. Version and identity
+are how commits are ordered, so two versions holding equal values stay
+distinguishable.
+
+It used to be a fulfilled promise, so that `use()` could unwrap it. That was
+never load-bearing: the handle resolves the moment it is made and so can never
+suspend, and the reader reads `value` directly. Dropping it removed a promise
+allocation per dispatch, and a much larger cost — React does per-call
+bookkeeping for every thenable `use()` has not seen before, and a fresh handle
+per dispatch met that on every reader on every update. In a development build
+that was 500x the cost of an equivalent `useSyncExternalStore` read.
+
+A store can still hold a promise. That promise is the *value*; you unwrap it
+yourself with `use(useStore(store))`.
 
 ## What it reads from React
 

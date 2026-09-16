@@ -227,32 +227,32 @@ describe("Handles and tearing", () => {
   });
 
   describe("Handle unwrapping", () => {
-    it("never calls then on the handle while reading the store", async () => {
-      // Load-bearing invariant: React unwraps a fulfilled thenable through
-      // `status`/`value` alone. The moment it falls back to `then`, we lose
-      // synchronous unwrapping and a blocking-lane read hits the fallback.
+    it("is not a thenable, so React never tracks it as one", async () => {
+      // The handle is a plain record. It used to be a fulfilled promise so
+      // that `use()` could unwrap it, but it always resolved immediately and
+      // so could never suspend — the reader reads `value` directly now.
+      //
+      // Worth keeping: React does per-call bookkeeping for every thenable
+      // `use()` has not seen, and a fresh handle per dispatch met that on
+      // every reader on every update. It cost 500x an equivalent
+      // useSyncExternalStore read in a development build.
       const store = createStore(1, reducer);
       const head = internals(store)._head;
-      let thenCalls = 0;
-      const originalThen = head.then.bind(head);
-      head.then = ((onfulfilled) => {
-        thenCalls++;
-        return originalThen(onfulfilled);
-      }) as typeof head.then;
+
+      expect("then" in head).toBe(false);
+      expect(head).not.toBeInstanceOf(Promise);
 
       function Reader() {
         return <div>{useStore(store)}</div>;
       }
-
-      await act(async () =>
+      const { asFragment } = await act(async () =>
         render(
           <Suspense fallback={<div>Loading...</div>}>
             <Reader />
           </Suspense>,
         ),
       );
-
-      expect(thenCalls).toBe(0);
+      expect(asFragment().textContent).toBe("1");
     });
   });
 
@@ -370,8 +370,6 @@ describe("Rebasing", () => {
         return state * 2;
     }
   }
-
-  afterEach(() => cleanup());
 
   it("applies a sync update on top of committed state, then rebases chronologically", async () => {
     const store = createStore(2, reducer);
@@ -661,7 +659,6 @@ describe("Selector composition", () => {
     logger = new Logger();
   });
   afterEach(() => {
-    cleanup();
     logger.assertLog([]);
   });
 
@@ -717,8 +714,6 @@ describe("Subscription cleanup", () => {
   type State = number;
   type Action = { type: "INCREMENT" };
   const reducer = (state: State): State => state + 1;
-
-  afterEach(() => cleanup());
 
   /** Wraps a store to count live subscriptions without adding public API. */
   function counting<S, A>(inner: ConcurrentStoreInternals<S, A>) {
@@ -831,8 +826,6 @@ describe("Data-level tearing", () => {
   type Action = { type: "DOUBLE" };
   const reducer = (state: State): State => state * 2;
 
-  afterEach(() => cleanup());
-
   it("never commits two readers holding different versions", async () => {
     const store = createStore<State, Action>(1, reducer);
     // Values as the readers actually hold them, not as rendered to the DOM.
@@ -903,8 +896,6 @@ describe("Dynamic stores", () => {
   type State = number;
   type Action = { type: "INCREMENT" };
   const reducer = (state: State): State => state + 1;
-
-  afterEach(() => cleanup());
 
   it("switches to the new store when the store prop changes", async () => {
     const left = createStore<State, Action>(1, reducer);
@@ -984,8 +975,6 @@ describe("StrictMode", () => {
   type State = number;
   type Action = { type: "DOUBLE" };
   const reducer = (state: State): State => state * 2;
-
-  afterEach(() => cleanup());
 
   it("does not tear under double-rendering", async () => {
     const store = createStore<State, Action>(1, reducer);
@@ -1249,8 +1238,6 @@ describe("Redux integration", () => {
   type State = { count: number };
   type Action = { type: string };
 
-  afterEach(() => cleanup());
-
   function connect() {
     const redux = configureStore({ reducer: counter.reducer });
     const store = createStore<State, Action>(
@@ -1346,8 +1333,6 @@ describe("Selector error policy", () => {
     },
   ];
 
-  afterEach(() => cleanup());
-
   describe.each(implementations)("$name", ({ createStore, useSelector, Wrapper }) => {
     it("ignores transient errors in selector (e.g. due to stale props)", async () => {
       const spy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -1435,8 +1420,6 @@ describe("Suspend on mount", () => {
     },
   ];
 
-  afterEach(() => cleanup());
-
   describe.each(implementations)(
     "$name",
     ({ createStore, useStore, Wrapper }) => {
@@ -1500,9 +1483,7 @@ describe("Store API, updates and promise state", () => {
   });
 
   describe("createStore", () => {
-    afterEach(() => cleanup());
-
-    it("should create a store with initial value", () => {
+      it("should create a store with initial value", () => {
       const initialValue = { count: 0 };
       const store = createStore(initialValue);
 
@@ -1557,9 +1538,7 @@ describe("Store API, updates and promise state", () => {
   });
 
   describe("useStore", () => {
-    afterEach(() => cleanup());
-
-    it("should return initial store value", async () => {
+      it("should return initial store value", async () => {
       const initialValue = { count: 0 };
       const store = createStore(initialValue);
       let result: typeof initialValue | undefined;
@@ -1950,9 +1929,7 @@ describe("Store API, updates and promise state", () => {
   });
 
   describe("useStore(suspense)", () => {
-    afterEach(() => cleanup());
-
-    it("should suspend while loading", async () => {
+      it("should suspend while loading", async () => {
       let count: number | undefined = undefined;
       let resolve = () => {};
 
@@ -2217,8 +2194,6 @@ describe("RFC #35449 scenarios", () => {
   beforeEach(() => {
     log = [];
   });
-  afterEach(() => cleanup());
-
   const kinds = (kind: string) =>
     log.filter((entry) => (entry as { kind: string }).kind === kind);
 
@@ -2417,8 +2392,6 @@ describe("subscribe (action form)", () => {
   const reducer = (state: Count, action: CountAction): Count =>
     action.type === "increment" ? state + 1 : state * 2;
 
-  afterEach(() => cleanup());
-
   it("delivers the dispatched action to subscribers", () => {
     const store = createStore(1, reducer);
     const seen: CountAction[] = [];
@@ -2516,7 +2489,6 @@ describe("Relay-like normalized store (MiniRelay)", () => {
     logger = new Logger();
   });
   afterEach(() => {
-    cleanup();
     logger.assertLog([]);
   });
 
@@ -2834,8 +2806,6 @@ describe("react-redux semantics (MiniRedux)", () => {
       ? { ...state, count: state.count + 1 }
       : { ...state, other: state.other + 1 };
 
-  afterEach(() => cleanup());
-
   it("uses the latest selector", async () => {
     const store = createReduxStore(reducer, { count: 0, other: 0 });
     let setMultiplier!: (n: number) => void;
@@ -2956,14 +2926,7 @@ describe("react-redux semantics (MiniRedux)", () => {
  * reads to unwrap `use()` without a microtask — see Sebastian Markbåge,
  * https://bsky.app/profile/sebmarkbage.calyptus.eu/post/3lku7b7xjmk2w
  */
-describe("Handle is a real Promise", () => {
-  afterEach(() => cleanup());
-
-  it("is an instance of Promise", () => {
-    const store = createStore(1);
-    expect(internals(store)._head).toBeInstanceOf(Promise);
-  });
-
+describe("The handle is a plain record", () => {
   it("carries status and value for a synchronous read", () => {
     const store = createStore({ n: 1 });
     const head = internals(store)._head;
@@ -2971,15 +2934,7 @@ describe("Handle is a real Promise", () => {
     expect(head.value).toEqual({ n: 1 });
   });
 
-  it("returns a plain Promise from then, not another handle", async () => {
-    const store = createStore(1);
-    const chained = internals(store)._head.then((n) => n + 1);
-    expect(chained).toBeInstanceOf(Promise);
-    expect("version" in chained).toBe(false);
-    await expect(chained).resolves.toBe(2);
-  });
-
-  it("does not report an unhandled rejection when the state is a rejecting promise", async () => {
+  it("does not adopt a rejecting value", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (event: PromiseRejectionEvent) => {
       unhandled.push(event.reason);
@@ -2987,12 +2942,13 @@ describe("Handle is a real Promise", () => {
     };
     window.addEventListener("unhandledrejection", onUnhandled);
 
+    // A promise resolved with a rejecting promise adopts the rejection, which
+    // is a hazard a record does not have: it carries the value without making
+    // any claim about how that value settles.
     const rejecting = Promise.reject(new Error("user failure"));
     rejecting.catch(() => {});
     const store = createStore(rejecting);
 
-    // The handle adopts the rejection internally; it must not surface as ours.
-    expect(internals(store)._head.status).toBe("fulfilled");
     expect(internals(store)._head.value).toBe(rejecting);
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -3023,8 +2979,6 @@ describe("Inferred priority and identity", () => {
 
   const readAll = () =>
     Array.from(document.querySelectorAll("[data-reader]"), (n) => n.textContent);
-
-  afterEach(() => cleanup());
 
   // Two leaks met here. The pass slot is module-level, so a render abandoned
   // in one root was visible to a mount in another, and the mounting reader
@@ -3141,8 +3095,6 @@ describe("No useSyncExternalStore de-opt", () => {
   const reducer = (n: Count, a: CountAction): Count =>
     a.type === "increment" ? n + 1 : n * 2;
 
-  afterEach(() => cleanup());
-
 
   it("a transition update stays a transition instead of flushing synchronously", async () => {
     const store = createStore(1, reducer);
@@ -3253,8 +3205,6 @@ describe("Other concurrency surfaces", () => {
   const reducer = (n: Count, a: CountAction): Count =>
     a.type === "increment" ? n + 1 : n * 2;
 
-  afterEach(() => cleanup());
-
 
   it("works through useDeferredValue", async () => {
     const store = createStore(1, reducer);
@@ -3360,8 +3310,6 @@ describe("Other concurrency surfaces", () => {
 });
 
 describe("Commit tracking under a stalled render", () => {
-  afterEach(() => cleanup());
-
   it("does not drop an action when a reader suspends between two sync dispatches", async () => {
     const store = versioned.createStore<number, number>(0, (s, a) => s + a);
     let release: () => void;
@@ -3409,8 +3357,6 @@ describe("Commit tracking under a stalled render", () => {
 });
 
 describe("Commit tracking with a stalled sibling", () => {
-  afterEach(() => cleanup());
-
   it("never shows a state that skips an action when a sibling is suspended", async () => {
     const store = versioned.createStore<number, number>(0, (s, a) => s + a);
     let release: () => void;
@@ -3574,8 +3520,6 @@ describe("Multiple roots committing at different rates", () => {
 });
 
 describe("Selector memory across an abandoned render", () => {
-  afterEach(() => cleanup());
-
   it("does not hand back a previous result written by a render that never committed", async () => {
     type Slice = { n: number; label: string };
     const store = createStore({ n: 1 });
@@ -3632,8 +3576,6 @@ describe("Selector memory across an abandoned render", () => {
 });
 
 describe("Activity", () => {
-  afterEach(() => cleanup());
-
   it("a hidden reader agrees with a visible one when it is revealed", async () => {
     const store = createStore(0, (n: number, step: number) => n + step);
 
@@ -3758,8 +3700,6 @@ describe("Activity", () => {
 });
 
 describe("Promise identity", () => {
-  afterEach(() => cleanup());
-
   /**
    * React's own rule: a promise passed to use() must have a stable identity
    * across renders, and React warns when it does not ("a component was
@@ -3842,8 +3782,6 @@ describe("Promise identity", () => {
 });
 
 describe("A sync update that does not suspend, over a transition that does", () => {
-  afterEach(() => cleanup());
-
   it("never commits the fallback for the sync value", async () => {
     // Letters: uppercase suspends while the gate is held, lowercase never does.
     const store = createStore("");
@@ -3909,8 +3847,6 @@ describe("A sync update that does not suspend, over a transition that does", () 
 
 describe("Reordering keys", () => {
   type Rows = { order: string[]; value: Record<string, number> };
-
-  afterEach(() => cleanup());
 
   const reducer = (state: Rows, action: Partial<Rows>): Rows => ({
     ...state,
@@ -4018,8 +3954,6 @@ describe("Reordering keys", () => {
 describe("A publish nobody takes", () => {
   type Pair = { a: number; b: number };
 
-  afterEach(() => cleanup());
-
   /**
    * Ordinary selector use, no transition anywhere. When every reader's slice
    * is unchanged, nothing re-renders, so nothing reports a commit. If the
@@ -4069,8 +4003,6 @@ describe("A publish nobody takes", () => {
 });
 
 describe("A batch is one tick at one priority", () => {
-  afterEach(() => cleanup());
-
   /**
    * Dispatches in one tick share a rebasing decision, because the commit
    * pointer cannot move until React renders and a second sync dispatch would
@@ -4125,8 +4057,6 @@ describe("A batch is one tick at one priority", () => {
 
 describe("A selector reader that mounts during a pending transition", () => {
   type Slice = { n: number };
-
-  afterEach(() => cleanup());
 
   /**
    * Its view's slice memory has to be seeded from the handle the reader is
@@ -4190,8 +4120,6 @@ describe("A selector reader that mounts during a pending transition", () => {
 
 describe("A selector that changes in the same commit as a dispatch", () => {
   type Pair = { a: number; b: number };
-
-  afterEach(() => cleanup());
 
   /**
    * The new selector applies to the render immediately, but the view holding
@@ -4303,8 +4231,6 @@ describe("Router-shaped navigation", () => {
   type Nav =
     | { type: "navigate"; route: string }
     | { type: "prefetch"; route: string };
-
-  afterEach(() => cleanup());
 
   /**
    * The shape a router actually has: navigation is a transition that suspends
@@ -4441,8 +4367,6 @@ describe("Crossing a server/client boundary", () => {
 });
 
 describe("Other React 19 surfaces at once", () => {
-  afterEach(() => cleanup());
-
   /**
    * ViewTransition around a tree that contains an Activity boundary, a reader
    * feeding useDeferredValue and useOptimistic, a transition that suspends,
@@ -4517,8 +4441,6 @@ describe("Other React 19 surfaces at once", () => {
 });
 
 describe("Why a reader that lands behind cannot simply join the transition", () => {
-  afterEach(() => cleanup());
-
   /**
    * This is plain React, no store involved, and it is the constraint the whole
    * catch-up design rests on. A reader revealed while a transition is blocked
@@ -4593,8 +4515,6 @@ describe("Why a reader that lands behind cannot simply join the transition", () 
 });
 
 describe("subscribe reports state, not just the action", () => {
-  afterEach(() => cleanup());
-
   /**
    * `subscribe` is documented as called after each update. A subscriber that
    * reads getState in the callback is the whole point of it — devtools,
@@ -4635,8 +4555,6 @@ describe("subscribe reports state, not just the action", () => {
 });
 
 describe("When a pending promise shows the fallback", () => {
-  afterEach(() => cleanup());
-
   /**
    * Priority decides this, not which API was used. An urgent update says show
    * this now; if the new state has not settled there is nothing to show and
@@ -4701,8 +4619,6 @@ describe("When a pending promise shows the fallback", () => {
 });
 
 describe("flushSync with promise state is a dead end, not a tradeoff", () => {
-  afterEach(() => cleanup());
-
   /**
    * flushSync exists so the caller can read the DOM the moment it returns. If
    * the dispatched value is a promise that has not settled, what is in the DOM
@@ -4747,8 +4663,6 @@ describe("flushSync with promise state is a dead end, not a tradeoff", () => {
 });
 
 describe("The promise rules are React's, not this store's", () => {
-  afterEach(() => cleanup());
-
   /**
    * The same readings, with plain useState and use() and no store anywhere.
    * An urgent update to a promise that has not settled commits the fallback;
@@ -4796,8 +4710,6 @@ describe("The promise rules are React's, not this store's", () => {
 });
 
 describe("React rebases its own queue", () => {
-  afterEach(() => cleanup());
-
   /**
    * With state held in React and updates expressed as updater functions, React
    * already does what this store does: an urgent update renders against the
@@ -4858,8 +4770,6 @@ describe("React rebases its own queue", () => {
 });
 
 describe("The one limitation, pinned", () => {
-  afterEach(() => cleanup());
-
   /**
    * A reader that lands behind shows what its siblings show and corrects
    * itself when the transition commits, so an effect keyed on the value runs
@@ -4933,8 +4843,6 @@ describe("The one limitation, pinned", () => {
 });
 
 describe("Router-shaped navigation (MiniRouter)", () => {
-  afterEach(() => cleanup());
-
   type Path = "/feed" | "/profile" | "/settings";
 
   /** A loader you can settle by hand, per route. */
@@ -5203,8 +5111,6 @@ describe("How many times a selector runs", () => {
    */
   type Both = { a: number; b: number };
 
-  afterEach(() => cleanup());
-
   const countCalls = async (wrap: (tree: React.ReactNode) => React.ReactNode) => {
     const store = createStore<Both, Partial<Both>>(
       { a: 0, b: 0 },
@@ -5279,8 +5185,6 @@ describe("A stable selector is re-run, never replayed from a cache", () => {
    * already computed, because it schedules that render. A library can only ask
    * for a render, never put a value inside one.
    */
-  afterEach(() => cleanup());
-
   type Items = { items: Record<string, string> };
 
   it("sees a prop that changed after the last dispatch", async () => {
@@ -5338,8 +5242,6 @@ describe("An urgent update while a fetch is outstanding", () => {
   type Items = string[];
   type State = Items | Promise<Items>;
 
-  afterEach(() => cleanup());
-
   const shout = (items: Items) => items.map((item) => `${item}!`);
 
   it("shows the patch on the list already on screen", async () => {
@@ -5395,8 +5297,6 @@ describe("Warning when there is nothing to rebase onto", () => {
    * the urgent update quietly waits for the transition instead of landing.
    * Correct, and impossible to guess from the outside, so it says so.
    */
-  afterEach(() => cleanup());
-
   it("says so when an urgent dispatch lands on promise state mid-transition", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = createStore<Promise<number>>(Promise.resolve(1));
@@ -5463,8 +5363,6 @@ describe("Swapping the store a reader is pointed at", () => {
    * Real: a store per tenant or per document, and every Reset button that
    * builds a fresh one rather than dispatching its way back to the start.
    */
-  afterEach(() => cleanup());
-
   it("shows the new store's value, not the old one's", async () => {
     const first = createStore("first");
     const second = createStore("second");
@@ -5552,8 +5450,6 @@ describe("The dispatch decision table", () => {
    * So rather than more assertions, one assertion that prints the whole table.
    * A failure diffs the row that moved against the row that should not have.
    */
-  afterEach(() => cleanup());
-
   type Reading = {
     /** What the component is allowed to show: the sync fold. */
     screen: string;
