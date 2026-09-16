@@ -24,28 +24,24 @@ export type StoreHandle<S> = Promise<S> & {
   version: number;
 };
 
-class Handle<S> extends Promise<S> {
-  status: "fulfilled" = "fulfilled";
-  value!: S;
-  version!: number;
-
-  // `.then()` on a subclass would otherwise construct another Handle, whose
-  // constructor signature is not an executor.
-  static get [Symbol.species](): PromiseConstructor {
-    return Promise;
-  }
-
-  static of<S>(value: S, version: number): StoreHandle<S> {
-    const handle = new Handle<S>((resolve) => resolve(value));
-    handle.value = value;
-    handle.version = version;
-    // Resolving with a thenable `S` adopts it, so a stored promise that
-    // rejects would reject the handle too. The handle carries a value; it
-    // makes no claim about that value's own settlement, and the consumer's
-    // own `use()` still delivers the rejection.
-    Promise.prototype.catch.call(handle, () => {});
-    return handle as StoreHandle<S>;
-  }
+/**
+ * A fulfilled handle. Not a Promise subclass: subclassing bought nothing here
+ * — it carried no behaviour of its own, and it needed Symbol.species so that
+ * `.then()` would stop constructing more of them. A native promise takes the
+ * three own properties just as well and returns a plain promise from `.then`
+ * because that is all it ever was.
+ */
+function makeHandle<S>(value: S, version: number): StoreHandle<S> {
+  const handle = new Promise<S>((resolve) => resolve(value)) as StoreHandle<S>;
+  handle.status = "fulfilled";
+  handle.value = value;
+  handle.version = version;
+  // Resolving with a thenable `S` adopts it, so a stored promise that rejects
+  // would reject the handle too. The handle carries a value; it makes no claim
+  // about that value's own settlement, and the consumer's `use()` still
+  // delivers the rejection.
+  handle.catch(() => {});
+  return handle;
 }
 
 /**
@@ -125,8 +121,6 @@ export interface ConcurrentStoreInternals<S, A>
   _onCommit(listener: (handle: StoreHandle<S>) => void): () => void;
   readonly _head: StoreHandle<S>;
   readonly _committed: StoreHandle<S>;
-  /** Last handle published at the caller's priority; a late subscriber's target. */
-  readonly _published: StoreHandle<S>;
   /** How many readers are subscribed; one reader has nothing to tear against. */
   readonly _readers: number;
   /** The handle this store was created with. */
@@ -174,12 +168,11 @@ export function createStore<S, A>(
   let version = 0;
   // committed: what the tree shows. sync: committed plus sync-only actions.
   // head: every action in order. Equal unless a transition is in flight.
-  let head = Handle.of(initialValue, version);
+  let head = makeHandle(initialValue, version);
   const initial = head;
   let settled = false;
   let sync = head;
   let committed = head;
-  let published = head;
 
   const listeners = new Set<(handle: StoreHandle<S>) => boolean>();
   const commitListeners = new Set<(handle: StoreHandle<S>) => void>();
@@ -225,9 +218,8 @@ export function createStore<S, A>(
 
       if (!rebasing) {
         if (Object.is(chronological, head.value)) return;
-        head = Handle.of(chronological, ++version);
+        head = makeHandle(chronological, ++version);
         sync = head;
-        published = head;
         notifyAction(action);
         const taken = notify(head);
         // Nobody took it: either nothing is mounted, or every reader's slice
@@ -242,9 +234,8 @@ export function createStore<S, A>(
       // Thenable state replaces rather than folds, so the timelines collapse.
       // Folding twice would also allocate two promises for one dispatch.
       if (isThenable(chronological)) {
-        head = Handle.of(chronological, ++version);
+        head = makeHandle(chronological, ++version);
         sync = head;
-        published = head;
         notifyAction(action);
         notify(head);
         return;
@@ -254,9 +245,8 @@ export function createStore<S, A>(
       // caller's priority, so no transition detection is needed. The first
       // sync update rebases onto `committed`, later ones chain along `sync`.
       const base = sync === head ? committed : sync;
-      sync = Handle.of(fold(base.value, action), ++version);
-      head = Handle.of(chronological, ++version);
-      published = sync;
+      sync = makeHandle(fold(base.value, action), ++version);
+      head = makeHandle(chronological, ++version);
       notifyAction(action);
       notify(sync);
 
@@ -292,9 +282,6 @@ export function createStore<S, A>(
     },
     get _committed() {
       return committed;
-    },
-    get _published() {
-      return published;
     },
     get _readers() {
       return listeners.size;
@@ -390,11 +377,15 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
   );
   recordRendered(source, handle as StoreHandle<unknown>);
 
+  // One effect, in three parts and in this order: take publishes, settle where
+  // this reader belongs and say so, then listen for the tree moving past it.
+  // Both halves were already keyed on the same pair, and splitting them only
+  // added a hook boundary to step over.
   useLayoutEffect(() => {
-    // No startTransition: the update inherits the dispatching caller's priority.
-    // Keyed on the handle as well, so the decision can be made here and
+    // No startTransition: the update inherits the dispatching caller's
+    // priority. Keyed on the handle as well, so the decision is made here and
     // reported, rather than inside setHandle where the answer is not visible.
-    return store._subscribe((next) => {
+    const release = store._subscribe((next) => {
       // Never backwards: versions rise with every handle a store makes,
       // including the rebased one, so an older handle is one this reader has
       // already moved past.
@@ -404,9 +395,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
       setHandle(next);
       return true;
     }, handle);
-  }, [store, handle]);
 
-  useLayoutEffect(() => {
     const head = store._head;
     const committed = store._committed;
     if (handle !== head) {
@@ -440,7 +429,7 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
     // reader that waited, rather than starting a transition of its own,
     // catches up. Compared here rather than inside setHandle, because calling
     // setHandle with an unchanged value still costs a render pass.
-    return store._onCommit((next) => {
+    const releaseCommit = store._onCommit((next) => {
       if (
         handle.version < next.version &&
         !Object.is(handle.value, next.value)
@@ -448,6 +437,11 @@ function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> 
         setHandle(next);
       }
     });
+
+    return () => {
+      release();
+      releaseCommit();
+    };
   }, [store, handle]);
 
   return handle;
@@ -565,9 +559,6 @@ export function createSelectorStore<S, A, T>(
     },
     get _committed() {
       return source._committed;
-    },
-    get _published() {
-      return source._published;
     },
     // The source's, not this view's: every reader holds its own view, so the
     // source's subscriber count is the reader count.
