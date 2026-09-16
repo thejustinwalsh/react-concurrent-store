@@ -21,34 +21,38 @@ export type StoreHandle<S> = PromiseLike<S> & {
   version: number;
 };
 
-/** On a prototype, like a real promise, so handles differ only by value. */
-const storeHandlePrototype = {
-  then<S, TResult1 = S, TResult2 = never>(
-    this: StoreHandle<S>,
-    onfulfilled?: ((value: S) => TResult1 | PromiseLike<TResult1>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    const value = this.value;
+class Handle<S> implements StoreHandle<S> {
+  readonly status = "fulfilled";
+
+  constructor(
+    readonly value: S,
+    readonly version: number,
+  ) {}
+
+  // `then` on the prototype, like a real promise, so handles differ only by
+  // value. React never calls it: `use` unwraps through status/value.
+  then(): PromiseLike<S>;
+  then<TResult>(
+    onfulfilled: (value: S) => TResult | PromiseLike<TResult>,
+  ): PromiseLike<TResult>;
+  then<TResult>(
+    onfulfilled?: (value: S) => TResult | PromiseLike<TResult>,
+  ): PromiseLike<S | TResult> {
+    const { value } = this;
     // Started empty: resolving *with* `value` would adopt a thenable `S`.
     return Promise.resolve().then(() =>
-      onfulfilled ? onfulfilled(value) : (value as unknown as TResult1),
+      onfulfilled ? onfulfilled(value) : value,
     );
-  },
-};
-
-function isThenable(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
+  }
 }
 
-function createStoreHandle<S>(value: S, version: number): StoreHandle<S> {
-  const handle = Object.create(storeHandlePrototype) as StoreHandle<S>;
-  handle.status = "fulfilled";
-  handle.value = value;
-  handle.version = version;
-  return handle;
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof value.then === "function"
+  );
 }
 
 /**
@@ -110,7 +114,7 @@ export function createStore<S, A>(
   let version = 0;
   // committed: what the tree shows. sync: committed plus sync-only actions.
   // head: every action in order. Equal unless a transition is in flight.
-  let head = createStoreHandle(initialValue, version);
+  let head = new Handle(initialValue, version);
   let sync = head;
   let committed = head;
   let published = head;
@@ -144,7 +148,7 @@ export function createStore<S, A>(
 
       if (!rebasing) {
         if (Object.is(chronological, head.value)) return;
-        head = createStoreHandle(chronological, ++version);
+        head = new Handle(chronological, ++version);
         sync = head;
         published = head;
         notifyAction(action);
@@ -157,7 +161,7 @@ export function createStore<S, A>(
       // Thenable state replaces rather than folds, so the timelines collapse.
       // Folding twice would also allocate two promises for one dispatch.
       if (isThenable(chronological)) {
-        head = createStoreHandle(chronological, ++version);
+        head = new Handle(chronological, ++version);
         sync = head;
         published = head;
         notifyAction(action);
@@ -169,8 +173,8 @@ export function createStore<S, A>(
       // caller's priority, so no transition detection is needed. The first
       // sync update rebases onto `committed`, later ones chain along `sync`.
       const base = sync === head ? committed : sync;
-      sync = createStoreHandle(fold(base.value, action), ++version);
-      head = createStoreHandle(chronological, ++version);
+      sync = new Handle(fold(base.value, action), ++version);
+      head = new Handle(chronological, ++version);
       published = sync;
       notifyAction(action);
       notify(sync);
@@ -223,21 +227,20 @@ export function createStore<S, A>(
  * render and therefore impure; a discarded pass is overwritten by the next one
  * before any mounting reader reads it, since earlier readers render first.
  */
-const renderedThisPass = new WeakMap<object, unknown>();
+// Values are `Handle<S>` for that store's own S; the map spans stores, so
+// the read asserts once.
+const renderedThisPass = new WeakMap<object, StoreHandle<unknown>>();
 
 /** Concurrent-safe subscription to a store's current version. */
-function useHandle<S, A>(
-  publicStore: ReactConcurrentStore<S, A>,
-): StoreHandle<S> {
-  const store = publicStore as ConcurrentStoreInternals<S, A>;
+function useHandle<S, A>(store: ConcurrentStoreInternals<S, A>): StoreHandle<S> {
 
   // Mount at what this pass is committing, or at committed if we are first.
   const [handle, setHandle] = useState(
     () =>
-      (renderedThisPass.get(store as object) as StoreHandle<S> | undefined) ??
+      (renderedThisPass.get(store) as StoreHandle<S> | undefined) ??
       store._committed,
   );
-  renderedThisPass.set(store as object, handle);
+  renderedThisPass.set(store, handle);
 
   useLayoutEffect(() => {
     // No startTransition: the update inherits the dispatching caller's priority.
@@ -282,7 +285,7 @@ function useHandle<S, A>(
 export function createSelectorStore<S, A, T>(
   source: ConcurrentStoreInternals<S, A>,
   selector: (state: S, previous: T | undefined) => T,
-): ConcurrentStoreInternals<S, never> {
+): ConcurrentStoreInternals<S, A> {
   let head = source._head;
   let last: { value: T } | null = null;
   let release: (() => void) | null = null;
@@ -337,10 +340,9 @@ export function createSelectorStore<S, A, T>(
       throw new Error("A selector view is read-only; dispatch to its source.");
     },
     getState: () => head.value,
-    subscribe: source.subscribe as ConcurrentStoreInternals<
-      S,
-      never
-    >["subscribe"],
+    // Read-only: dispatch throws, but subscribers still see the source's
+    // actions.
+    subscribe: source.subscribe,
 
     _subscribe(listener) {
       listeners.add(listener);
@@ -383,15 +385,13 @@ export function useStore<S, A, T>(
   store: ReactConcurrentStore<S, A>,
   selector?: (state: S, previous: T | undefined) => T,
 ): S | T {
+  const internals = store as ConcurrentStoreInternals<S, A>;
   const view = useMemo(
     () =>
       selector === undefined
-        ? store
-        : (createSelectorStore(
-            store as ConcurrentStoreInternals<S, A>,
-            selector,
-          ) as ReactConcurrentStore<S, A>),
-    [store, selector],
+        ? internals
+        : createSelectorStore(internals, selector),
+    [internals, selector],
   );
 
   const previous = useRef<T | undefined>(undefined);
