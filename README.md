@@ -1,220 +1,142 @@
 # react-concurrent-store
 
-A userland implementation of the `createStore` / `useStore` API proposed in
-[React RFC #35449](https://github.com/facebook/react/issues/35449), for React
-19 and up. No experimental React build required.
-
-## Why
-
-An external store read with `useSyncExternalStore` cannot take part in a
-transition: a store update during one
-[opts the transition out](https://react.dev/reference/react/useSyncExternalStore#caveats)
-and React flushes it synchronously. So a navigation that should have kept the
-old screen up drops to a fallback instead, and the caller's
-`startTransition` — which said exactly what it wanted — is discarded by the
-hook doing the reading.
-
-`useStore` honours it. It does that by reading one field out of React —
-[see below](#what-it-reads-from-react).
-
-```tsx
-// Navigate to a page whose data has not arrived. The screen keeps what it has.
-startTransition(() => store.dispatch({ type: "navigate", to: "/profile" }));
-
-// The user likes something while they wait. This has to be visible now, and it
-// lands on the page they are actually looking at — not on the one still loading.
-store.dispatch({ type: "like" });
-```
-
-| | screen | store |
-| --- | --- | --- |
-| navigating | `home/0` | `profile/0` |
-| after the like | `home/1` | `profile/1` |
-| after the page loads | `profile/1` | `profile/1` |
-
-The like is visible immediately, no half-loaded profile is ever shown, and the
-final state has both actions in the order they were dispatched.
-
-## Install
+A store for React 19 that works with Transitions, implementing the
+`createStore` / `useStore` API proposed in
+[React RFC #35449](https://github.com/facebook/react/issues/35449). No
+experimental React build.
 
 ```bash
 npm install react-concurrent-store
 ```
 
-## API
+## The problem
 
-```ts
-createStore(initialValue)                       // action is a value or an updater
-createStore(initialValue, reducer)              // action is whatever the reducer takes
+React lets you mark an update as a Transition, so the current screen stays up
+while the next one gets ready. That works for state held in components. It does
+not work for state held in a store.
 
-useStore(store)                                 // the whole value
-useStore(store, (state, previous) => slice)     // a slice; return `previous` to skip the render
+React's own documentation says why. A store changed during a Transition makes
+React [redo that update as a blocking one](https://react.dev/reference/react/useSyncExternalStore#caveats),
+and suspending on a value read through `useSyncExternalStore` replaces what is
+on screen with a fallback.
 
-store.getState()                                // outside React
-store.dispatch(action)
-store.subscribe(action => {})                   // getState() is up to date inside the callback
-```
-
-`useStore` is a Hook, so the main entry carries a `"use client"` directive.
-`createStore` is not, and ships separately so it can be used in a React Server
-Component:
-
-```ts
-import { createStore } from "react-concurrent-store/store";
-```
-
-An equality-function wrapper ships from its own entry point too, so it costs
-nothing unless imported:
-
-```ts
-import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
-```
+So a navigation that should have kept the current page up shows a spinner
+instead — and any update the user makes while waiting is stuck behind it.
 
 ## How it works
 
-A store keeps two folds over the same actions:
+The store keeps two versions of its state:
 
-- **head** — every action, in dispatch order.
-- **sync** — only the urgent ones. What the tree is allowed to show now.
+- **everything** — every action applied, in the order you dispatched them.
+- **on screen** — only the ones a component is allowed to show right now.
 
-Every action enters head. An action dispatched inside `startTransition` does
-not enter sync, and stays out until the tree catches up.
+They are usually the same object. They come apart only while a Transition is in
+flight, and they rejoin when it commits.
 
-### What a dispatch does
+What tells them apart is one thing, recorded when you dispatch: whether the
+caller was inside `startTransition`.
 
-A dispatch reads whether its caller was inside a Transition, folds the action
-over head, and takes one of four paths:
+```tsx
+// Goes into "everything". Not shown until its data is ready.
+startTransition(() => store.dispatch({ type: "navigate", to: "/profile" }));
 
-| when | head | sync | published |
-| --- | --- | --- | --- |
-| nothing outstanding | moves | moves | once |
-| inside a Transition | moves | held | once, at Transition priority |
-| urgent, while a Transition is outstanding | moves | folds over what is on screen | twice: sync now, head in a Transition |
-| urgent, and the new value is a promise | moves | joins head | once — the boundary falls back |
+// Goes into both — and into "on screen" applied to the feed, not to the
+// profile that has not loaded.
+store.dispatch({ type: "like" });
+```
 
-The third row is rebasing, and the reason the two folds exist. The fourth is
-why an urgent dispatch of a promise still shows a fallback: there is no version
-of a value that has not arrived.
+A dispatch takes one of four paths:
 
-When a single publish reaches no reader — nothing is mounted, or no selected
-slice moved — the folds rejoin, because nothing is outstanding any more.
+| when | what happens |
+| --- | --- |
+| nothing is in flight | both versions take it, one notification |
+| inside a Transition | only *everything* takes it, at Transition priority |
+| a blocking update while a Transition is in flight | *on screen* applies it to what is on screen; *everything* applies it in order. Two notifications: the first now, the second in a Transition |
+| a blocking update whose new value is a promise | the versions rejoin and the boundary shows a fallback — there is no version of a value that has not arrived |
 
-### What a reader does
+The third row is the whole point. The user's like is applied to the feed they
+are looking at rather than to the profile that is still loading, and when the
+profile arrives both actions are there in the order they were made.
 
-A reader holds one handle. It renders what that handle carries, and a layout
-Effect keeps it in step:
+A component reads *on screen*. `getState()` returns *everything*. While a
+Transition is in flight those differ, deliberately.
 
-1. **Render.** Unwrap the handle, run the selector.
-2. **Layout Effect.** Take any publish that arrived, record what this reader
-   committed, and listen for the tree moving past it.
-3. **On a publish.** If the value differs, set the handle and render again.
-4. **On a commit.** A reader left behind follows the tree to what its siblings
-   already show.
+## How React would implement it
 
-Step 4 runs in a layout Effect, before the browser paints, so a reader that
-lands behind costs a render pass and not a frame.
+Most of this package exists to reconstruct things the reconciler already knows.
+A version inside React keeps the idea and deletes the scaffolding.
 
-### What a handle is
+**It would read the Transition directly.** Knowing whether the caller was inside
+`startTransition` is the one thing this package cannot get from a public API —
+it reads an internal field, which is the only unsupported thing it does. React
+has that for free.
 
-A handle is a plain record — `{ status, value, version }`. Version and identity
-are how commits are ordered, so two versions holding equal values stay
-distinguishable.
+**It would not need two versions of the state.** React already rebases its own
+update queue by lane: a `useState` update made during a Transition is replayed
+on top of whatever committed first. The two versions here are a hand-rolled
+copy of machinery React has.
 
-It used to be a fulfilled promise, so that `use()` could unwrap it. That was
-never load-bearing: the handle resolves the moment it is made and so can never
-suspend, and the reader reads `value` directly. Dropping it removed a promise
-allocation per dispatch, and a much larger cost — React does per-call
-bookkeeping for every thenable `use()` has not seen before, and a fresh handle
-per dispatch met that on every reader on every update. In a development build
-that was 500x the cost of an equivalent `useSyncExternalStore` read.
+**It would let a component join a Transition already in flight.** This is the
+one behaviour userland cannot reproduce. `startTransition` can start a
+Transition but never join one, so a component that mounts while a Transition is
+blocked has to show what its siblings show and correct itself afterwards — which
+costs a second run of any Effect keyed on the value. React can add a fiber to a
+lane that already exists, and the problem disappears.
 
-A store can still hold a promise. That promise is the *value*; you unwrap it
-yourself with `use(useStore(store))`.
+**It would hand the render its value.** When a store changes, this package runs
+the selector once to decide whether to re-render and the component runs it again
+to produce the value. React schedules the render itself, so it can carry the
+value with it — one call instead of two.
+
+What is left is small: the decision above, which is about fifty lines.
 
 ## What it reads from React
-
-`useStore` needs one thing React does not expose: whether the caller was inside
-`startTransition` when they dispatched.
 
 ```ts
 const clientInternals = (React as …).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
 const transitionScope = (): unknown => clientInternals?.T ?? null;
 ```
 
-Read, never written, and the only unsupported thing this package does. No
-experimental React build is needed — but that is why.
+Read, never written, and the only unsupported thing here. React's own proof of
+concept ([facebook/react#33215](https://github.com/facebook/react/pull/33215))
+reads the same field for the same reason.
 
-It is not incidental. Make that read answer "never in a transition" and 43 of
-154 tests fail, including every transition case, and what is left behaves like
-`useSyncExternalStore`.
+It is not incidental. Make that read answer "never in a Transition" and 44 of
+157 tests fail, including every Transition case, and what is left behaves like
+`useSyncExternalStore`. If React ever stops exposing it, the first dispatch
+throws rather than quietly losing every Transition.
 
-So it does not degrade quietly: if React ever stops exposing the field, the
-first dispatch throws with a message pointing at this. The field's own name is
-the contract — a package that touches it warns its users they cannot upgrade
-freely — and silently losing every transition is a worse way to find out than a
-stack trace.
+## API
 
-There is no public replacement. A library can only be told by its caller, and
-being told misses every transition started on your behalf — which is most of
-them, because a router starts navigations inside itself. Which makes this the
-clearest case for the feature landing in React rather than an argument against
-it: the reconciler has this information for free.
+```ts
+createStore(initialValue)                    // an action is a value or an updater
+createStore(initialValue, reducer)           // an action is whatever the reducer takes
+
+useStore(store)                              // the whole value
+useStore(store, (state, previous) => slice)  // a slice; return `previous` to skip the render
+
+store.getState()
+store.dispatch(action)
+store.subscribe(action => {})
+```
+
+`useStore` is a Hook, so the main entry carries `"use client"`. `createStore` is
+not, and ships separately for use in a Server Component:
+
+```ts
+import { createStore } from "react-concurrent-store/store";
+```
+
+[Full reference and guides](https://thejustinwalsh.com/react-concurrent-store)
 
 ## The demo
 
-`packages/app` runs the cases in a real browser, with real React and no test
-harness.
+Eight pages, each one live, covering navigation, mixed updates, selectors,
+refetching, server rendering and Server Components.
 
 ```bash
 pnpm --filter @react-concurrent-store/app dev
 ```
-
-| Page | What you can watch |
-| --- | --- |
-| **Gauntlet** | Six live panels — rebasing, tearing, Suspense, error reset, selectors, two roots — each with a **Run** that plays a scripted sequence slowly and ends in a verdict showing every reading it took |
-| **Router** | The same navigation in two columns that differ only in the hook reading the route. One loses the page to its own fallback; the other stays interactive and takes a like |
-| **One atom** | A slow query and a keystroke, three ways. `useSyncExternalStore` loses the dashboard; making every dispatch a transition keeps the dashboard but queues the keystroke; urgency per dispatch keeps both |
-| **Identity** | A normalized read builds a fresh tree every time. Relay's `recycleNodesInto`, which is what the `(state, previous)` selector signature is for, takes twelve stats renders down to six |
-| **Fetching** | An optimistic update made while a refetch is in flight. A deferred value can hold the list that was there before; it cannot hold that list with your change applied |
-
-Readings come from a probe outside React, written from ref callbacks, layout
-effects and passive effects, so what a reader *committed* is distinguishable
-from what it merely rendered and from what was attached to the DOM.
-
-## When a selector throws
-
-A speculative throw is a question the store cannot answer, so it asks render
-instead. A throw in render is an error.
-
-The store calls your selector in two situations. **During render** it is
-producing the value a component is about to show, so a throw there is left
-alone and reaches your error boundary. **Speculatively** — when an update is
-published, when a view attaches, and when the tree commits past a reader — it is
-only deciding whether that reader needs to re-render, and a throw is usually the
-zombie-child case: the selector asked about a state its component will not be
-rendered with, because a parent already removed it. Those are swallowed and the
-update is forwarded, so the selector throws again during render if the component
-really is about to use it, and only then does it surface.
-
-```tsx
-// Throws harmlessly while the store is only asking whether this reader is
-// affected. Throws for real, to the boundary, if this component still renders it.
-const item = useStore(store, (state) => {
-  const found = state.items[id];
-  if (found === undefined) throw new Error(`missing ${id}`);
-  return found;
-});
-```
-
-This is the behaviour react-redux's `useSelector` suite specifies, checked here
-both directly and through a react-redux-shaped harness.
-
-## Still to do
-
-- Streaming of promises and store values
-
-Full reference and guides:
-[thejustinwalsh.com/react-concurrent-store](https://thejustinwalsh.com/react-concurrent-store)
 
 ## License
 
