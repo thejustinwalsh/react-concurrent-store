@@ -3,45 +3,65 @@ title: Limitations
 description: What a userland ponyfill cannot do, and what to expect instead.
 ---
 
-React would implement this inside the reconciler, where it knows the priority
-of the render in progress and keeps per-root state. A library cannot see either
-of those. Everything below follows from that.
+React would implement this inside the reconciler, where it can add a reader to
+a transition that is already in flight. A library cannot. Almost everything
+below follows from that one thing.
 
-## Multiple React roots
+## An effect keyed on the value runs twice when a reader lands behind
 
-Sharing one store across two `createRoot` trees works in our tests, but it
-cannot be guaranteed. React would keep per-root bookkeeping; from userland
-there is no way to tell which root is rendering, so two roots rendering
-interleaved share one set of state. If you share a store across roots, treat it
-as unsupported rather than tested.
+A reader that appears while a transition is blocked shows what its siblings are
+showing, and corrects itself when the transition commits. The correction is
+made from a layout effect, which flushes before the browser paints — so it
+costs a render pass and not a frame. Nothing torn is ever painted, and the
+demo asserts exactly that by sampling every animation frame.
 
-## An extra render when mounting mid-transition
+What it does cost is a second run of any effect keyed on the value:
 
-A component that mounts while a transition is in flight renders once with the
-state its siblings are showing, then again once the transition resolves. React
-would do this in one pass because it knows the render's priority. The
-intermediate render is correct — never torn — but it is a render your effects
-will see.
-
-## `flushSync` with unresolved promise state
-
-If your state is a promise that has not settled and you update inside
-`flushSync`, React cannot wait for it and falls back to the nearest `<Suspense>`
-boundary. Outside `flushSync` this does not happen. Store settled values, or
-avoid `flushSync` for promise-valued state.
-
-## Server rendering has no snapshot check
-
-There is no `getServerSnapshot`. Hydration matches because you construct the
-store with the same initial state on both sides:
-
-```ts
-const store = createStore(stateFromServer, reducer);
+```tsx
+const user = useStore(store);
+useEffect(() => {
+  // Runs for the value the tree was showing, then again for the final one.
+  track(user.id);
+}, [user]);
 ```
 
-If the two ever differ, nothing detects it — you get a hydration mismatch with
-no better diagnostic. `useSyncExternalStore` can compare because it asks for
-both snapshots; this cannot.
+This is not removable from userland. The ideal fix is for that reader to join
+the transition already in flight and arrive with everyone else, and
+`startTransition` cannot do that — a transition started later commits as soon
+as nothing in it suspends, while the first is still blocked, which puts the
+reader *ahead* of its siblings instead. The suite demonstrates that in plain
+React, with no store involved, under "Why a reader that lands behind cannot
+simply join the transition".
+
+The alternative is to hold the reader until it is correct, which removes the
+double effect but shows a Suspense fallback when the reader is revealed by an
+urgent update, and leaves a reader with no sibling to commit for it stuck on
+the old value. Correcting from a layout effect is the only one of the three
+with no correctness failure.
+
+## An urgent update to unsettled promise state shows the fallback
+
+This one is correct rather than a defect, but it surprises people, so it is
+worth stating plainly. What decides it is the priority of the update, not which
+API you used:
+
+| dispatching a promise that has not settled | fallback |
+| --- | --- |
+| plain sync dispatch | shown |
+| inside `startTransition` | **not shown** |
+| inside `flushSync` | shown |
+
+An urgent update says *show this now*. If the new state is a promise that has
+not settled there is nothing to show, and React cannot wait — so it commits the
+nearest `<Suspense>` fallback. That is React doing what it was asked.
+
+The middle row is the one that matters, and it is the thing
+`useSyncExternalStore` cannot keep: it de-opts a transition to sync priority, so
+the tree drops to a fallback you explicitly asked it not to show. That is why
+this store is not built on it, and the suite asserts the zero in that row.
+
+If you want to update to unsettled state without a fallback, dispatch it inside
+a transition. If you need it urgently, store a settled value.
 
 ## It is a ponyfill
 
@@ -49,3 +69,21 @@ This exists to try the shape of an API React has proposed but not shipped. If
 the feature lands, the real one will be better — it has information this cannot
 reach. Expect this package to be deprecated rather than maintained alongside
 it.
+
+## What is no longer a limitation
+
+Two entries used to live here and have been removed because they are now
+covered by tests rather than caveats.
+
+**Multiple React roots.** Separate `createRoot` trees can share one store, with
+no provider, including while one of them is blocked on a transition and the
+other is not, and with StrictMode double-rendering only one of them. React
+makes no cross-root commit guarantee; the store is what keeps them in step.
+
+**Server rendering.** There is no `getServerSnapshot` and none is needed. The
+client store is built from the same serialized state the server rendered from,
+so it already holds that value — it is the handle it was created with. A reader
+hydrates on that handle and then catches up, even if the store was dispatched
+to before hydration finished. React is asked whether a render is a hydration
+only when the store actually moved first, so an ordinary hydration renders
+once.

@@ -4621,3 +4621,69 @@ describe("subscribe reports state, not just the action", () => {
     expect(getByTestId("bridged").textContent).toBe("3");
   });
 });
+
+describe("When a pending promise shows the fallback", () => {
+  afterEach(() => cleanup());
+
+  /**
+   * Priority decides this, not which API was used. An urgent update says show
+   * this now; if the new state has not settled there is nothing to show and
+   * React cannot wait, so it commits the fallback. A transition says the
+   * opposite, and must not.
+   *
+   * The middle case is the one useSyncExternalStore cannot keep — it de-opts
+   * the transition to sync, and the tree drops to a fallback nobody asked for.
+   */
+  const fallbacksFor = async (
+    dispatch: (
+      store: ReturnType<typeof createStore<Promise<string>>>,
+      pending: Promise<string>,
+    ) => void,
+  ) => {
+    const store = createStore<Promise<string>>(Promise.resolve("a"));
+    let committed = 0;
+    function Reader() {
+      return <span data-testid="out">{use(useStore(store))}</span>;
+    }
+    function Fallback() {
+      useEffect(() => {
+        committed += 1;
+      }, []);
+      return <span>loading</span>;
+    }
+    const { getAllByTestId } = await act(async () =>
+      render(
+        <Suspense fallback={<Fallback />}>
+          <Reader />
+        </Suspense>,
+      ),
+    );
+    committed = 0;
+    let settle!: (value: string) => void;
+    const pending = new Promise<string>((r) => (settle = r));
+    await act(async () => dispatch(store, pending));
+    await act(async () => settle("b"));
+    expect(getAllByTestId("out").map((n) => n.textContent)).toEqual(["b"]);
+    return committed;
+  };
+
+  it("shows it for a plain sync dispatch", async () => {
+    expect(await fallbacksFor((store, pending) => store.dispatch(pending))).toBe(1);
+  });
+
+  it("does not show it for a dispatch inside a transition", async () => {
+    expect(
+      await fallbacksFor((store, pending) => {
+        startTransition(() => store.dispatch(pending));
+      }),
+    ).toBe(0);
+  });
+
+  it("shows it for a dispatch inside flushSync", async () => {
+    expect(
+      await fallbacksFor((store, pending) => {
+        flushSync(() => store.dispatch(pending));
+      }),
+    ).toBe(1);
+  });
+});

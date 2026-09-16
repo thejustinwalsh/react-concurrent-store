@@ -174,6 +174,31 @@ Calls `callback` after each update with the action that caused it, and returns
 an unsubscribe function. This is what lets an external store stay in step
 without exposing its reducer.
 
+The store has applied the action by the time the callback runs, so `getState()`
+inside it reports the state that action produced:
+
+```tsx
+store.subscribe(() => {
+  persist(store.getState()); // the state including the action just dispatched
+});
+```
+
+That guarantee is what lets this pair drive `useSyncExternalStore` directly,
+which is the way to read a store urgently while everything else is waiting on a
+transition:
+
+```tsx
+// Updates at the caller's priority rather than waiting for a pending
+// transition. That is a deliberate divergence from the rest of the tree —
+// this reader has opted out of the transition, the way useDeferredValue opts
+// into lagging behind one.
+const value = useSyncExternalStore(store.subscribe, store.getState);
+```
+
+Note that `getState()` reports the chronological state — every action in
+dispatch order — not what the tree is currently showing. Inside components,
+`useStore` is what shows what the tree shows.
+
 **Parameters:**
 
 - **`action`**: The new value or action to apply to the store
@@ -332,7 +357,7 @@ const counterStore = createStore(0, (state: number, action: Action): number => {
 
 ## Requirements
 
-- **React**: ^19.0.0
+- **React**: >=19.0.0
 - **TypeScript**: ^4.5.0 (optional, but recommended)
 
 The package is designed specifically for React 19+ and takes advantage of the concurrent features introduced in this version.
