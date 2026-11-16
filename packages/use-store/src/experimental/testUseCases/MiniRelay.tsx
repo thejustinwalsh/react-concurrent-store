@@ -68,6 +68,12 @@ export type FragmentAstNode =
       selections: FragmentAstNode[];
     }
   | {
+      // A field containing a list of record IDs.
+      kind: "plural";
+      fieldName: string;
+      selections: FragmentAstNode[];
+    }
+  | {
       kind: "spread";
       alias: string;
     };
@@ -137,6 +143,24 @@ function readNode(
         readNode(source, newRecord, selection, newData, seenIds);
       }
       data[node.fieldName] = newData;
+      return;
+    }
+    case "plural": {
+      const ids = record[node.fieldName];
+      if (!Array.isArray(ids)) {
+        throw new Error("No id list found for field: " + node.fieldName);
+      }
+      data[node.fieldName] = ids.map((id: string) => {
+        const itemRecord = source.get(id);
+        if (itemRecord == null) {
+          throw new Error("No record found for id: " + id);
+        }
+        const itemData: { [key: string]: unknown } = {};
+        for (const selection of node.selections) {
+          readNode(source, itemRecord, selection, itemData, seenIds);
+        }
+        return itemData;
+      });
       return;
     }
     case "spread":
