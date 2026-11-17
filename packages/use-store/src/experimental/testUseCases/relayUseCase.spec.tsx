@@ -480,8 +480,8 @@ describe("createStore for a Relay-like state solution", () => {
 
     const ref = { startingID: "ROOT" };
     function Mailbox() {
-      logger.log({ type: "render" });
       const data = useFragment<FragmentType>(FRAGMENT, ref);
+      logger.log({ type: "render" });
       return (
         <>
           <ul>
