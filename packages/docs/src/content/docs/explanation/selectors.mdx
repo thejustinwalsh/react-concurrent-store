@@ -1,0 +1,105 @@
+---
+title: Selectors and re-renders
+description: What the second argument to a selector is for, and why there is no equality option.
+---
+
+A selector narrows a store to the part a component needs. The component
+re-renders when that part changes, and "changes" means the selector returned a
+different reference.
+
+```tsx
+const name = useStore(store, (state) => state.user.name);
+```
+
+That works for anything already stable in your state. It stops working the
+moment a selector builds something:
+
+```tsx
+// A new object every call, so this re-renders on every action.
+const user = useStore(store, (state) => ({
+  name: state.user.name,
+  email: state.user.email,
+}));
+```
+
+## The previous result
+
+A selector receives the current state and **its own previous result**. Return
+that previous value to say nothing happened:
+
+```tsx
+const visible = useStore(store, (state, previous) => {
+  const next = state.todos.filter((todo) => !todo.done);
+  const same =
+    previous?.length === next.length &&
+    previous.every((todo, i) => todo === next[i]);
+  return same ? previous : next;
+});
+```
+
+Identity is the signal, and you decide when to preserve it.
+
+This is also what structural sharing needs. Relay's `recycleNodesInto` and
+TanStack Query's `replaceEqualDeep` both walk a freshly built tree against the
+previous one and put the old subtree back wherever they are equal — which they
+cannot do without the previous one:
+
+```tsx
+const view = useStore(store, (state, previous) =>
+  previous === undefined ? project(state) : recycleNodesInto(previous, project(state)),
+);
+```
+
+## Why there is no equality option
+
+Comparison is a policy question. Shallow, deep, structural sharing and
+"recycle unchanged subtrees" are all valid, they cost very different amounts,
+and a Hook that picks one makes the other three awkward. React draws the same
+line: `useSyncExternalStore` has no equality argument, and
+`useSyncExternalStoreWithSelector` is a separate module.
+
+When you want shallow and nothing more, the wrapper ships from its own entry
+point, so it costs nothing unless you import it:
+
+```tsx
+import { useStoreWithEqualityFn } from "react-concurrent-store/with-equality-fn";
+import { shallowEqual } from "react-redux";
+
+const user = useStoreWithEqualityFn(
+  store,
+  (state) => ({ name: state.user.name, email: state.user.email }),
+  shallowEqual,
+);
+```
+
+## When a selector throws
+
+Your selector is called in two situations, and a throw means something
+different in each.
+
+**During render**, it is producing the value the component is about to show. A
+throw is a real error and reaches your error boundary, exactly as it would from
+anywhere else in the component body.
+
+**Speculatively**, the store calls it to decide whether a component needs to
+re-render at all — when an update is published, when a view attaches, and when
+a commit moves past that component. A throw here is usually the zombie-child
+case: the selector is being asked about a state its component will never render
+with, because a parent already removed it. The store swallows it and forwards
+the update, so render decides.
+
+```tsx
+// Throws harmlessly while the store is only asking whether this component is
+// affected. Throws to the boundary if the component really does render it.
+const item = useStore(store, (state) => {
+  const found = state.items[id];
+  if (found === undefined) throw new Error(`missing ${id}`);
+  return found;
+});
+```
+
+In one line: a speculative throw is a question the store cannot answer, so it
+asks render instead. A throw in render is an error.
+
+This is the behaviour react-redux's `useSelector` suite specifies, checked here
+directly and through a react-redux-shaped harness.

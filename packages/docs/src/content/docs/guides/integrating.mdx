@@ -1,0 +1,82 @@
+---
+title: Integrating an existing store
+description: Adopting this from Redux, Zustand or TanStack Store.
+---
+
+Redux, Zustand and TanStack Store all read through `useSyncExternalStore`,
+which is [documented to de-opt](https://react.dev/reference/react/useSyncExternalStore#caveats):
+a store mutated during a Transition makes React redo that update as a blocking
+one. Your `startTransition` becomes a synchronous render, and the screen drops
+to a Suspense fallback rather than waiting.
+
+How you adopt this depends on whether you own the reducer.
+
+## If you own the reducer
+
+You already gave `configureStore` a reducer. Hand the same one here:
+
+```ts
+import { createStore } from "react-concurrent-store";
+
+const store = createStore(preloadedState, rootReducer);
+```
+
+That store is complete — `getState`, `dispatch`, `subscribe`. If you keep Redux
+for middleware and devtools, dispatch to both. They apply the same actions from
+the same starting state, so they stay in step:
+
+```ts
+const dispatch = (action) => {
+  redux.dispatch(action);
+  store.dispatch(action);
+};
+```
+
+Two copies of state is a real cost. Prefer one store where you can.
+
+## If the store owns its state
+
+Zustand and TanStack Store publish whole snapshots and do not expose a reducer,
+so from outside the library the only option is to mirror each snapshot:
+
+```ts
+const store = createStore(zustand.getState());
+zustand.subscribe((state) => store.dispatch(state));
+```
+
+Dispatching a value replaces state when there is no reducer, so this works and
+Transitions survive. It also keeps two copies of your state and depends on that
+`subscribe` staying snapshot-shaped.
+
+:::note
+The better fix is upstream. A library that reads through this instead of
+`useSyncExternalStore` gets Transition-safe reads for all of its users with no
+mirror — the conversation in
+[pmndrs/zustand#3125](https://github.com/pmndrs/zustand/discussions/3125) and
+[reduxjs/react-redux#2263](https://github.com/reduxjs/react-redux/pull/2263).
+:::
+
+## Reading a slice
+
+```tsx
+const total = useStore(store, (state) => state.cart.total);
+```
+
+A selector that builds an object returns a new reference every call. The
+selector receives its own previous result so you can say nothing changed — see
+[Selectors and re-renders](/react-concurrent-store/explanation/selectors/),
+which also covers the shallow-equality wrapper and structural sharing.
+
+## What changes
+
+- A dispatch inside `startTransition` stays a Transition.
+- A blocking dispatch made while a Transition is in flight applies to what is
+  on screen, and both land in order once the Transition commits.
+- A component mounting mid-Transition shows what its siblings show.
+- Several `createRoot` trees can read one store, with no provider.
+- Server rendering needs no `getServerSnapshot`.
+
+## What to know first
+
+One Effect behaves differently, and one line reaches into React. Both are in
+[Limitations](/react-concurrent-store/explanation/limitations/).

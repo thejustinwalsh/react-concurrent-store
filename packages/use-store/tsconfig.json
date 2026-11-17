@@ -7,10 +7,20 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "lib": ["esnext", "dom"],
+    "lib": [
+      "esnext",
+      "dom"
+    ],
     "declaration": true,
     "outDir": "dist",
     "noEmit": false
   },
-  "include": ["src", "types", "test"]
+  "include": [
+    "src",
+    "types",
+    "test"
+  ],
+  "exclude": [
+    "src/experimental/**/*.spec.tsx"
+  ]
 }

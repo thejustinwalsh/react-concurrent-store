@@ -1,0 +1,31 @@
+{
+  "name": "@react-concurrent-store/app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && wrangler deploy"
+  },
+  "dependencies": {
+    "next": "^16.3.5",
+    "prism-react-renderer": "^2.4.1",
+    "react": "^19.3.0",
+    "react-concurrent-store": "workspace:*",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.6",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.132.0"
+  }
+}

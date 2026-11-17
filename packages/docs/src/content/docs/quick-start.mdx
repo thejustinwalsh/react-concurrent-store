@@ -12,8 +12,9 @@ import {
   TabItem,
 } from "@astrojs/starlight/components";
 
-React Concurrent Store is a ponyfill that brings the experimental React concurrent store API to React 19+.
-It allows you to manage async resources with proper handling for non-blocking updates.
+A userland implementation of the `createStore` / `useStore` API proposed in
+[React RFC #35449](https://github.com/facebook/react/issues/35449). Works on
+React 19 and up, with no experimental React build.
 
 ## Installation
 
@@ -80,7 +81,7 @@ It allows you to manage async resources with proper handling for non-blocking up
      return (
        <div>
          <p>Count: {count}</p>
-         <button onClick={() => counterStore.update(count + 1)}>
+         <button onClick={() => counterStore.dispatch(count + 1)}>
            Increment
          </button>
        </div>
@@ -113,41 +114,19 @@ It allows you to manage async resources with proper handling for non-blocking up
 
 </Steps>
 
-## Key Concepts
+## Urgency is per dispatch
 
-### Stores
-
-Stores are containers that hold values or promises. They can be updated reactively and integrate seamlessly with React's concurrent features.
-
-### Updates
-
-Use `useTransition` to wrap the update action in a transition and track the action's isPending state.
-The store will always execute the update in an action, even if the update is not wrapped in a transition.
+A dispatch inside `startTransition` is one no component has to show yet. A
+dispatch outside one has to be visible now, so it applies to what is on screen
+rather than to the state the Transition is still waiting for.
 
 ```tsx
-import { useTransition } from "react";
+// Slow: the old screen stays up until this is ready.
+startTransition(() => store.dispatch({ type: "navigate", to: "/profile" }));
 
-function UserProfile() {
-  const userPromise = useStore(userStore);
-  const user = use(userPromise);
-  const [isPending, startTransition] = useTransition();
-
-  const loadNextUser = () => {
-    startTransition(() => {
-      userStore.update(fetchUser(user.id + 1));
-    });
-  };
-
-  return (
-    <div style={{ opacity: isPending ? 0.5 : 1 }}>
-      <h1>{user.name}</h1>
-      <button onClick={loadNextUser}>Next User</button>
-    </div>
-  );
-}
+// Blocking: visible immediately, on the page they are still looking at.
+store.dispatch({ type: "like" });
 ```
 
-### Suspense Integration
-
-Stores containing promises automatically integrate with React Suspense by passing the store result to the `use` hook.
-When the store is updated as an Action within a [non-blocking Transition](https://react.dev/reference/react/useTransition), the store will properly update the state without de-opting to a synchronous update.
+Nothing else tells the store which is which — see
+[Rebasing](/react-concurrent-store/explanation/rebasing/).

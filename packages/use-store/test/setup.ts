@@ -1,7 +1,8 @@
 import React from "react";
 import "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, expect, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 import wdyr, {
   HookDifference,
   type UpdateInfo,
@@ -133,4 +134,10 @@ expect.extend({
 
 beforeEach(() => {
   globalThis.WDYR.notifications = [];
+});
+
+// Every test that renders needs this, so it is here rather than repeated in
+// every describe.
+afterEach(() => {
+  cleanup();
 });

@@ -14,13 +14,33 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./with-equality-fn": {
+      "import": {
+        "types": "./dist/withEqualityFn.d.ts",
+        "default": "./dist/withEqualityFn.js"
+      },
+      "require": {
+        "types": "./dist/withEqualityFn.d.ts",
+        "default": "./dist/withEqualityFn.cjs"
+      }
+    },
+    "./store": {
+      "import": {
+        "types": "./dist/store.d.ts",
+        "default": "./dist/store.js"
+      },
+      "require": {
+        "types": "./dist/store.d.ts",
+        "default": "./dist/store.cjs"
+      }
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/use-client.mjs",
     "prepublishOnly": "pnpm run build",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
@@ -44,15 +64,15 @@
   "author": "Justin Walsh",
   "license": "MIT",
   "peerDependencies": {
-    "react": "^19.0.0"
+    "react": ">=19.0.0"
   },
   "devDependencies": {
     "@reduxjs/toolkit": "^2.9.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.8",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.35.1",
     "@typescript-eslint/parser": "^8.35.1",
     "@vitest/coverage-v8": "3.2.4",
@@ -60,11 +80,11 @@
     "@welldone-software/why-did-you-render": "^10.0.1",
     "eslint": "^9.30.0",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jiti": "^2.4.2",
     "jsdom": "^26.1.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "react-error-boundary": "^6.0.0",
     "redux": "^5.0.1",
     "tsup": "^8.5.0",
