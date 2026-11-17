@@ -15,7 +15,7 @@ import {
   RelayStore,
   useFragment,
 } from "./MiniRelay";
-import { memo } from "react";
+import { memo, startTransition } from "react";
 
 const { StoreProvider } = experimental;
 
@@ -322,6 +322,345 @@ describe("createStore for a Relay-like state solution", () => {
         <div>
           My friend's name is Bob
         </div>
+      </DocumentFragment>
+    `);
+
+    unmount();
+  });
+
+  it("Supports updaters which read one record to decide how to update others (Gmail-style labels)", async () => {
+    // Emails can have multiple labels (like tags). Each label tracks how many
+    // unread emails it contains.
+    //
+    // Note that we can't derive a label's unread count on the client by
+    // counting its unread emails, since the client can't reasonably have every
+    // email in the mailbox loaded. Instead, the count is a field on the label
+    // that comes from the server, and updaters must keep it in sync by hand.
+    function initializeMailbox(_prev: RecordSource): RecordSource {
+      const next = new RecordSource();
+      next.set("ROOT", { id: "ROOT", me: "user:1" });
+      next.set("user:1", {
+        id: "user:1",
+        labels: ["label:foo", "label:bar", "label:baz"],
+        emails: ["email:1", "email:2", "email:3"],
+      });
+      next.set("label:foo", { id: "label:foo", name: "Foo", unreadCount: 2 });
+      next.set("label:bar", { id: "label:bar", name: "Bar", unreadCount: 1 });
+      next.set("label:baz", { id: "label:baz", name: "Baz", unreadCount: 1 });
+      next.set("email:1", {
+        id: "email:1",
+        subject: "Lunch?",
+        isRead: false,
+        labels: ["label:foo", "label:bar"],
+      });
+      next.set("email:2", {
+        id: "email:2",
+        subject: "Quarterly report",
+        isRead: false,
+        labels: ["label:foo"],
+      });
+      next.set("email:3", {
+        id: "email:3",
+        subject: "Weekend plans",
+        isRead: false,
+        labels: ["label:baz"],
+      });
+      return next;
+    }
+
+    // Marking an email as read must also decrement the unread count of every
+    // label on that email. To do that, the updater has to *read* the email
+    // record (its `isRead` and `labels` fields) from the source it is applied
+    // to, and use those values to decide which other records (the labels) to
+    // update and how.
+    function markEmailAsRead(emailId: string) {
+      return (source: RecordSource): RecordSource => {
+        const next = new RecordSource();
+        const email = source.get(emailId);
+        if (email == null) {
+          throw new Error("No record found for id: " + emailId);
+        }
+        // Already read: nothing to update, and label counts must not be
+        // decremented a second time.
+        if (email.isRead) {
+          return next;
+        }
+        next.set(emailId, { ...email, isRead: true });
+        for (const labelId of email.labels as string[]) {
+          const label = source.get(labelId);
+          if (label == null) {
+            throw new Error("No record found for id: " + labelId);
+          }
+          next.set(labelId, {
+            ...label,
+            unreadCount: (label.unreadCount as number) - 1,
+          });
+        }
+        return next;
+      };
+    }
+
+    // Removing a label from an email must decrement that label's unread count,
+    // but only if the email is still unread. Again, the updater reads the
+    // email's `isRead` from the source it is applied to in order to decide
+    // whether to touch the label.
+    function removeLabelFromEmail(emailId: string, labelId: string) {
+      return (source: RecordSource): RecordSource => {
+        const next = new RecordSource();
+        const email = source.get(emailId);
+        if (email == null) {
+          throw new Error("No record found for id: " + emailId);
+        }
+        const labels = email.labels as string[];
+        if (!labels.includes(labelId)) {
+          return next;
+        }
+        next.set(emailId, {
+          ...email,
+          labels: labels.filter((id) => id !== labelId),
+        });
+        if (!email.isRead) {
+          const label = source.get(labelId);
+          if (label == null) {
+            throw new Error("No record found for id: " + labelId);
+          }
+          next.set(labelId, {
+            ...label,
+            unreadCount: (label.unreadCount as number) - 1,
+          });
+        }
+        return next;
+      };
+    }
+
+    const store = new RelayStore();
+    store.publishAndNotify(initializeMailbox);
+
+    const FRAGMENT: FragmentAstNode = {
+      kind: "object",
+      fieldName: "me",
+      selections: [
+        {
+          kind: "plural",
+          fieldName: "labels",
+          selections: [
+            { kind: "scalar", fieldName: "id" },
+            { kind: "scalar", fieldName: "name" },
+            { kind: "scalar", fieldName: "unreadCount" },
+          ],
+        },
+        {
+          kind: "plural",
+          fieldName: "emails",
+          selections: [
+            { kind: "scalar", fieldName: "id" },
+            { kind: "scalar", fieldName: "subject" },
+            { kind: "scalar", fieldName: "isRead" },
+            {
+              kind: "plural",
+              fieldName: "labels",
+              selections: [{ kind: "scalar", fieldName: "name" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    type FragmentType = {
+      me: {
+        labels: Array<{ id: string; name: string; unreadCount: number }>;
+        emails: Array<{
+          id: string;
+          subject: string;
+          isRead: boolean;
+          labels: Array<{ name: string }>;
+        }>;
+      };
+    };
+
+    const ref = { startingID: "ROOT" };
+    function Mailbox() {
+      const data = useFragment<FragmentType>(FRAGMENT, ref);
+      logger.log({ type: "render" });
+      return (
+        <>
+          <ul>
+            {data.me.labels.map((label) => (
+              <li key={label.id}>{`${label.name} (${label.unreadCount})`}</li>
+            ))}
+          </ul>
+          <ul>
+            {data.me.emails.map((email) => (
+              <li key={email.id}>
+                {`${email.subject} [${email.labels
+                  .map((label) => label.name)
+                  .join(", ")}]${email.isRead ? "" : " (unread)"}`}
+              </li>
+            ))}
+          </ul>
+        </>
+      );
+    }
+
+    function App() {
+      return (
+        <StoreProvider>
+          <RelayProvider store={store}>
+            <Mailbox />
+          </RelayProvider>
+        </StoreProvider>
+      );
+    }
+
+    const { asFragment, unmount } = await act(async () => {
+      return render(<App />);
+    });
+
+    logger.assertLog([{ type: "render" }]);
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <ul>
+          <li>
+            Foo (2)
+          </li>
+          <li>
+            Bar (1)
+          </li>
+          <li>
+            Baz (1)
+          </li>
+        </ul>
+        <ul>
+          <li>
+            Lunch? [Foo, Bar] (unread)
+          </li>
+          <li>
+            Quarterly report [Foo] (unread)
+          </li>
+          <li>
+            Weekend plans [Baz] (unread)
+          </li>
+        </ul>
+      </DocumentFragment>
+    `);
+
+    let resolve: () => void;
+
+    // Start, but don't complete, a transition which marks "Lunch?" as read.
+    await act(async () => {
+      startTransition(async () => {
+        store.publishAndNotify(markEmailAsRead("email:1"));
+        await new Promise<void>((_resolve) => {
+          resolve = _resolve;
+        });
+      });
+    });
+
+    logger.assertLog([]);
+
+    // The transition is still pending, so nothing has changed yet.
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <ul>
+          <li>
+            Foo (2)
+          </li>
+          <li>
+            Bar (1)
+          </li>
+          <li>
+            Baz (1)
+          </li>
+        </ul>
+        <ul>
+          <li>
+            Lunch? [Foo, Bar] (unread)
+          </li>
+          <li>
+            Quarterly report [Foo] (unread)
+          </li>
+          <li>
+            Weekend plans [Baz] (unread)
+          </li>
+        </ul>
+      </DocumentFragment>
+    `);
+
+    // Interrupt with a sync update which removes the Bar label from "Lunch?".
+    await act(() => {
+      store.publishAndNotify(removeLabelFromEmail("email:1", "label:bar"));
+    });
+
+    logger.assertLog([{ type: "render" }]);
+
+    // The sync update is applied on top of the committed state, where "Lunch?"
+    // is still unread. So removing Bar from it decrements Bar's unread count.
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <ul>
+          <li>
+            Foo (2)
+          </li>
+          <li>
+            Bar (0)
+          </li>
+          <li>
+            Baz (1)
+          </li>
+        </ul>
+        <ul>
+          <li>
+            Lunch? [Foo] (unread)
+          </li>
+          <li>
+            Quarterly report [Foo] (unread)
+          </li>
+          <li>
+            Weekend plans [Baz] (unread)
+          </li>
+        </ul>
+      </DocumentFragment>
+    `);
+
+    // Complete the transition.
+    await act(async () => {
+      resolve();
+    });
+
+    logger.assertLog([{ type: "render" }]);
+
+    // The final state reflects the rebased update order:
+    //   1. markEmailAsRead (transition): "Lunch?" is unread with labels
+    //      [Foo, Bar], so both Foo and Bar are decremented.
+    //   2. removeLabelFromEmail (sync): "Lunch?" is now read, so removing Bar
+    //      does not decrement Bar a second time.
+    // Each label ends up decremented exactly once. This only works because
+    // each updater reads the email from the state it is applied to, rather
+    // than deciding up front which labels to change.
+    expect(asFragment()).toMatchInlineSnapshot(`
+      <DocumentFragment>
+        <ul>
+          <li>
+            Foo (1)
+          </li>
+          <li>
+            Bar (0)
+          </li>
+          <li>
+            Baz (1)
+          </li>
+        </ul>
+        <ul>
+          <li>
+            Lunch? [Foo]
+          </li>
+          <li>
+            Quarterly report [Foo] (unread)
+          </li>
+          <li>
+            Weekend plans [Baz] (unread)
+          </li>
+        </ul>
       </DocumentFragment>
     `);
 
